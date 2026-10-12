@@ -61,12 +61,8 @@ export function visibleMenus(menus: MenuItem[], registeredPaths: string[]): Menu
         if (children.length > 0) visible.push({ ...item, children })
         continue
       }
-      if (item.path && registered.has(item.path)) {
-        visible.push(item)
-        continue
-      }
-      // 真实 /me 目前只回名称和 type，没有 path。MENU/DIR 仍显示名称；有 path 但未登记的继续隐藏。
-      if (!item.path && (item.type === 'MENU' || item.type === 'DIR')) visible.push(item)
+      // 没有 path 的目录、按钮，以及 path 未登记的叶子，都不能成为可点项。
+      if (item.path && registered.has(item.path)) visible.push(item)
     }
     return visible
   }

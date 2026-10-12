@@ -105,6 +105,7 @@ async function handleMenuSelect(path: string) {
       return
     }
   }
+  // 目录用 id 作 index，没有 path，不能当成路由跳转。
   if (!path.startsWith('/')) return
   router.push(path)
 }

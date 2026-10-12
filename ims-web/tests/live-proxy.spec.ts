@@ -8,8 +8,8 @@
  * 1. GET /health 的 data.db 为 UP
  * 2. 种子账号经登录页真实登录并拿到访问令牌
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
- * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏菜单项大于 0，
- *    每一项都来自 /me，且至少有一个是 /me 里的真实菜单名。
+ * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏至少有一项可点叶子，
+ *    点击后地址变为该项在 /me 里的 path。
  * 5. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
  * 6. 登录后把 access token 换成用 IMS_JWT_SECRET 签的过期令牌，刷新令牌仍是登录拿到的。
  *    打开页面后经 Vite 调 /me：刷新接口只出现 1 次，最终 /me 为 200，地址不回登录页。
@@ -27,6 +27,7 @@ if (!username || !password) {
 
 interface MenuNode {
   name?: string
+  path?: string
   children?: MenuNode[]
 }
 
@@ -37,6 +38,20 @@ function collectMenuNames(menus: MenuNode[] | undefined): string[] {
     names.push(...collectMenuNames(item.children))
   }
   return names
+}
+
+function collectLeafPaths(menus: MenuNode[] | undefined): Array<{ name: string; path: string }> {
+  const leaves: Array<{ name: string; path: string }> = []
+  for (const item of menus || []) {
+    if (item.children && item.children.length > 0) {
+      leaves.push(...collectLeafPaths(item.children))
+      continue
+    }
+    if (item.name && item.path?.startsWith('/')) {
+      leaves.push({ name: item.name, path: item.path.split('?')[0] || item.path })
+    }
+  }
+  return leaves
 }
 
 test.describe('Vite 代理联通真实后端', () => {
@@ -94,13 +109,14 @@ test.describe('Vite 代理联通真实后端', () => {
     await page.waitForURL((url) => url.pathname !== '/login')
     const sidebar = page.locator('[data-testid="app-sidebar"]')
     await expect(sidebar).toBeVisible()
-    const sidebarEntries = sidebar.locator('.el-menu-item, .el-sub-menu__title')
-    const shown = (await sidebarEntries.allTextContents()).map((text) => text.trim()).filter(Boolean)
-    expect(shown.length).toBeGreaterThan(0)
-    for (const text of shown) {
-      expect(menuNames.some((name) => text.includes(name))).toBe(true)
-    }
-    expect(menuNames.some((name) => shown.some((text) => text.includes(name)))).toBe(true)
+    const clickable = sidebar.locator('.el-menu-item')
+    expect(await clickable.count(), '侧栏至少要有一项已登记且带 path 的可点叶子').toBeGreaterThan(0)
+    const first = clickable.first()
+    const label = (await first.innerText()).trim()
+    const target = collectLeafPaths(me.body.data?.menus).find((item) => label.includes(item.name))
+    expect(target?.path, `可点项「${label}」必须对应 /me 里带 path 的叶子`).toBeTruthy()
+    await first.click()
+    await expect(page).toHaveURL((url) => url.pathname === target?.path)
   })
 
   test('不带令牌经 Vite 调用 /me 返回 401 与 1002', async ({ page }) => {
