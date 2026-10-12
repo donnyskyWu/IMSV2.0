@@ -269,6 +269,7 @@ class TestMemoryCacheDirectly:
     def test_memory_cache_ttl_expiry(self):
         """UT-C03-07b: Test memory cache TTL expiry."""
         import time
+
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client
