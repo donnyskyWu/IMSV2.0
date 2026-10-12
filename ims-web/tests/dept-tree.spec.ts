@@ -184,24 +184,19 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-15: 无权限用户无操作菜单', async ({ page }) => {
-    // 重新设置为只读用户
+    // 后注册的只读 /me 要盖住 beforeEach 里的管理员 mock
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
     await setupApiMocks(page, { userType: 'readonly' })
     await page.reload()
     await page.waitForSelector('.dept-tree-demo, .app-layout')
 
     const treeNode = page.locator('.el-tree-node__content').first()
-    if (await treeNode.isVisible()) {
-      await treeNode.hover()
-      await page.waitForTimeout(300)
+    await expect(treeNode).toBeVisible()
 
-      // 验证无更多菜单按钮
-      const moreBtn = treeNode.locator('.el-dropdown, .more-btn, :text("⋯")')
-      expect(await moreBtn.count()).toBe(0)
-    }
-
-    // 验证无同步按钮
-    const syncBtn = page.locator('button:has-text("同步钉钉"), button:has-text("同步组织")')
-    expect(await syncBtn.count()).toBe(0)
+    await expect(treeNode.locator('.el-dropdown, .more-btn')).toHaveCount(0)
+    await expect(page.locator('button:has-text("新增")')).toHaveCount(0)
+    await expect(page.locator('button:has-text("同步")')).toHaveCount(0)
+    await expect(page.locator('button:has-text("删除")')).toHaveCount(0)
   })
 
   test('VC-C42-16: 停用部门无新增有启用', async ({ page }) => {

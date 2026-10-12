@@ -116,6 +116,22 @@ function emptyValue(val?: string | number | null): string {
   display: grid;
   grid-template-columns: repeat(var(--columns), 1fr);
   gap: 16px;
+
+  // 视口断点强制单列，不依赖 JS 首次测量
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: 12px;
+
+    .desc-item {
+      flex-direction: column;
+      gap: 4px;
+      grid-column: span 1;
+    }
+
+    .desc-label {
+      padding-right: 0;
+    }
+  }
 }
 
 .desc-item {
@@ -172,17 +188,4 @@ function emptyValue(val?: string | number | null): string {
   }
 }
 
-// 移动端
-.description-list--mobile {
-  gap: 12px;
-
-  .desc-item {
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .desc-label {
-    padding-right: 0;
-  }
-}
 </style>

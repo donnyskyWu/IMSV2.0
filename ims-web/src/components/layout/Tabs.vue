@@ -14,7 +14,7 @@ interface TabItem {
 }
 
 interface Props {
-  items: TabItem[]
+  items?: TabItem[]
   active?: string
   type?: 'line' | 'pill'
   syncQuery?: string
@@ -22,6 +22,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   type: 'line',
+  items: () => [],
 })
 
 const emit = defineEmits<{
@@ -38,7 +39,7 @@ const activeKey = computed({
     if (props.syncQuery && route.query[props.syncQuery]) {
       return route.query[props.syncQuery] as string
     }
-    return props.active || props.items[0]?.key || ''
+    return props.active || props.items?.[0]?.key || ''
   },
   set: (val) => {
     emit('update:active', val)

@@ -233,6 +233,7 @@ function handleCommand(command: string, node: DeptNode) {
       <div class="toolbar-actions">
         <el-button
           v-if="allowEdit"
+          v-perm="'ims:system:dept:create'"
           size="small"
           type="primary"
           @click="handleAdd()"
@@ -241,6 +242,7 @@ function handleCommand(command: string, node: DeptNode) {
           新增
         </el-button>
         <el-button
+          v-perm="'ims:system:org-sync:run'"
           size="small"
           :loading="syncing"
           @click="handleSync"
@@ -291,6 +293,7 @@ function handleCommand(command: string, node: DeptNode) {
             <!-- 操作按钮 -->
             <el-dropdown
               v-if="allowEdit"
+              v-perm="'ims:system:dept:update'"
               trigger="click"
               @command="(cmd: string) => handleCommand(cmd, data)"
               @click.stop

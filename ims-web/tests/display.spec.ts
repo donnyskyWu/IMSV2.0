@@ -104,6 +104,9 @@ test.describe('C37～C41. 展示组件', () => {
   })
 
   test('VC-C41-01: 流程画布缩放拖动点击', async ({ page }) => {
+    // §2.3 U5：手机视口豁免画布缩放；移动 WebKit 也不支持 mouse.wheel
+    test.skip((page.viewportSize()?.width ?? 0) < 768, '手机视口豁免画布缩放')
+
     const canvas = page.locator('.trace-graph, .flow-canvas, canvas').first()
     if (await canvas.isVisible()) {
       await expect(canvas).toBeVisible()
