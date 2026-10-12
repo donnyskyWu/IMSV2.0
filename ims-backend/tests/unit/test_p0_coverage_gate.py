@@ -148,6 +148,30 @@ def test_script_fails_when_lines_are_complete_but_branches_are_short(monkeypatch
     assert main() == 2
 
 
+def test_no_branch_data_fails():
+    """coverage JSON 没有打开分支测量时，门禁直接失败。"""
+    assert evaluate_report({}, ["app/services/auth.py"]) == 1
+    assert evaluate_report(
+        {"meta": {"branch_coverage": False}, "files": {}},
+        ["app/services/auth.py"],
+    ) == 1
+
+
+def test_missing_branch_field_fails():
+    """summary 缺 num_branches 或 covered_branches 时失败，不拿合计列凑数。"""
+    target = str((ROOT / "app/services/auth.py").resolve())
+    without_num = {
+        "meta": {"branch_coverage": True},
+        "files": {target: {"summary": {"covered_branches": 1}}},
+    }
+    without_covered = {
+        "meta": {"branch_coverage": True},
+        "files": {target: {"summary": {"num_branches": 4}}},
+    }
+    assert evaluate_report(without_num, ["app/services/auth.py"]) == 1
+    assert evaluate_report(without_covered, ["app/services/auth.py"]) == 1
+
+
 def test_gate_reads_public_json_and_not_private_analyze():
     """门禁源码走 coverage json，不再调用私有分析接口。"""
     source = (ROOT / "scripts" / "check_p0_branch_coverage.py").read_text(encoding="utf-8")

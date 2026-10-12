@@ -72,6 +72,16 @@ def _strip_package_grants(url: str) -> None:
         engine.dispose()
 
 
+def _menu_leaf_paths(nodes: list) -> dict[str, str]:
+    """收集种子里 type=MENU 的 perm_code → path。目录和按钮不算叶子。"""
+    found: dict[str, str] = {}
+    for node in nodes:
+        if node.get("type") == "MENU":
+            found[node["perm_code"]] = node["path"]
+        found.update(_menu_leaf_paths(node.get("children") or []))
+    return found
+
+
 def _assert_package_grants(session) -> None:
     """套餐、套餐菜单、R1 角色菜单必须和当前菜单数一致。"""
     from app.domains.sys.models import (
@@ -186,6 +196,15 @@ def test_real_login_me_and_health(tmp_path):
             assert isinstance(menus, list)
             assert len(menus) > 0
             assert any(item["name"] == "部门管理" for item in menus)
+            # 叶子 path 来自主干 tools/seed/menus.py，不在这里另造工作台或 B1 路由。
+            from tools.seed.menus import MENUS
+
+            expected = _menu_leaf_paths(MENUS)
+            leaves = [item for item in menus if item.get("type") == "MENU"]
+            got = {item["permCode"]: item["path"] for item in leaves}
+            assert got == expected
+            assert all(isinstance(path, str) and path.strip() for path in got.values())
+            assert "/ims/workbench" not in got.values()
 
         check_engine, check = _connect(db_url)
         try:

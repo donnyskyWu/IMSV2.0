@@ -20,6 +20,43 @@ _redis_client: Optional[Any] = None
 _memory_cache: dict[str, tuple[Any, Optional[float]]] = {}
 _cache_mode: str = "MEMORY"  # MEMORY or REDIS
 
+# 刷新令牌一次领走：加锁、GETDEL 索引、查看已轮换标记在同一条 Lua 里完成。
+# Redis 单线程执行脚本，并发的第二个调用只能得到 concurrent，不会双发。
+CLAIM_REFRESH_LUA = """
+local locked = redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[1])
+if not locked then
+  return {'', 'concurrent'}
+end
+local sid = redis.call('GETDEL', KEYS[2])
+if sid and sid ~= '' then
+  return {sid, 'ok'}
+end
+local used = redis.call('GET', KEYS[3])
+if used and used ~= '' then
+  return {used, 'reuse'}
+end
+return {'', 'missing'}
+"""
+
+
+def _claim_text(value: Any) -> str:
+    """把 Redis 返回值收成字符串。空值保持空串，避免把 None 收成 'None'。"""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode()
+    return str(value)
+
+
+def _parse_claim(raw: Any) -> tuple[str, str]:
+    """解析 Lua 返回的 {session_id, status}。格式不对视为没领到。"""
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        status = _claim_text(raw[1])
+        if not status:
+            status = "missing"
+        return _claim_text(raw[0]), status
+    return "", "missing"
+
 
 def init_cache() -> None:
     """Initialize cache backend."""
@@ -112,7 +149,8 @@ class Cache:
         if _redis_client is not None:
             try:
                 if ttl:
-                    _redis_client.setex(key, ttl, value)
+                    # redis-py 8 起 setex 已弃用，改用 set(..., ex=)。
+                    _redis_client.set(key, value, ex=ttl)
                 else:
                     _redis_client.set(key, value)
                 return True
@@ -208,6 +246,45 @@ class Cache:
             if item is None:
                 return None
             return item[0]
+
+    @staticmethod
+    def claim_refresh(
+        lock_key: str,
+        index_key: str,
+        used_key: str,
+        lock_ttl: int,
+    ) -> tuple[str, str]:
+        """原子领取刷新令牌。
+
+        Redis 走 CLAIM_REFRESH_LUA（SET NX + GETDEL）。
+        返回 (session_id, status)，status 为 ok / concurrent / reuse / missing。
+        missing 表示 GETDEL 为空，且没有已轮换记录。
+        """
+        if _redis_client is not None:
+            try:
+                raw = _redis_client.eval(
+                    CLAIM_REFRESH_LUA,
+                    3,
+                    lock_key,
+                    index_key,
+                    used_key,
+                    int(lock_ttl),
+                )
+            except Exception as e:
+                logger.error(f"Redis claim refresh error: {e}")
+                return "", "missing"
+            return _parse_claim(raw)
+
+        # 内存后端只给单测兜底。并发正确性以真实 Redis 的 Lua 为准。
+        if not Cache.setnx(lock_key, "1", lock_ttl):
+            return "", "concurrent"
+        session_id = Cache.getdel(index_key)
+        if session_id:
+            return str(session_id), "ok"
+        used = Cache.get(used_key)
+        if used:
+            return str(used), "reuse"
+        return "", "missing"
 
     @staticmethod
     def sadd(key: str, *members: str) -> int:
