@@ -349,6 +349,76 @@ def test_r1_r2_r4_me_auth_leaves_follow_feature_list(tmp_path):
         _release_real_db(original_url, context_token)
 
 
+def test_me_menu_parent_points_at_directory(tmp_path):
+    """种子 parent_id 为目录→菜单→按钮。/me 中菜单 parentId 指向目录，按钮只在 permCodes。"""
+    from app.domains.sys.models import Menu
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        engine, session = _connect(db_url)
+        try:
+            rows = session.query(Menu).filter(Menu.deleted == 0).all()
+            by_id = {row.id: row for row in rows}
+            auth = next(row for row in rows if row.type == "DIR" and row.name == "权限管理")
+            auth_menus = [row for row in rows if row.parent_id == auth.id]
+            assert [row.name for row in sorted(auth_menus, key=lambda item: item.sort)] == [
+                "组织架构同步",
+                "岗位-角色供给规则",
+            ]
+            assert {row.type for row in auth_menus} == {"MENU"}
+            for row in rows:
+                if row.type == "DIR":
+                    assert (row.parent_id or 0) == 0, row.name
+                elif row.type == "MENU" and row.path == "/ims/workbench":
+                    # 工作台是顶层菜单，不挂目录。
+                    assert (row.parent_id or 0) == 0
+                elif row.type == "MENU":
+                    parent = by_id[row.parent_id]
+                    assert parent.type == "DIR", row.name
+                elif row.type == "BUTTON":
+                    parent = by_id[row.parent_id]
+                    assert parent.type == "MENU", row.name
+            button_codes = {
+                row.perm_code for row in rows if row.type == "BUTTON" and row.perm_code
+            }
+            button_names = {row.name for row in rows if row.type == "BUTTON"}
+        finally:
+            session.close()
+            engine.dispose()
+
+        with TestClient(app) as client:
+            me_body = _login_me(client, "test_admin", E2E_PASSWORD)
+            menus = me_body["data"]["menus"]
+            root_names = [item["name"] for item in menus]
+            assert "组织架构同步" not in root_names
+            assert "岗位-角色供给规则" not in root_names
+            assert all(item.get("parentId") is None for item in menus)
+
+            auth_node = next(item for item in menus if item["name"] == "权限管理")
+            assert auth_node["type"] == "DIR"
+            assert [item["name"] for item in auth_node["children"]] == [
+                "组织架构同步",
+                "岗位-角色供给规则",
+            ]
+            for directory in menus:
+                if directory["type"] != "DIR":
+                    continue
+                assert directory["children"], directory["name"]
+                for child in directory["children"]:
+                    assert child["type"] == "MENU"
+                    assert child["parentId"] == directory["id"]
+                    assert not child.get("children")
+
+            nodes = _walk_menus(menus)
+            assert "BUTTON" not in {item["type"] for item in nodes}
+            assert button_names.isdisjoint({item["name"] for item in nodes})
+            assert button_codes <= set(me_body["data"]["permCodes"])
+    finally:
+        _release_real_db(original_url, context_token)
+
+
 def test_r10_me_only_workbench_and_other_api_forbidden(tmp_path):
     """test_r10 真实登录后 /me 只有工作台，其它受保护接口返回 1008。"""
     from app.main import app
