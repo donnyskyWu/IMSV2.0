@@ -1,0 +1,2962 @@
+{
+  "components": {
+    "schemas": {
+      "CommonResult": {
+        "description": "Unified API response format.\n\nAll API responses follow this structure:\n- code: 0 for success, non-zero for errors\n- msg: Human-readable message in Chinese\n- data: Response payload (can be any type)",
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data",
+            "title": "Data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult",
+        "type": "object"
+      },
+      "CommonResult_DeptResponse_": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeptResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[DeptResponse]",
+        "type": "object"
+      },
+      "CommonResult_HealthData_": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HealthData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[HealthData]",
+        "type": "object"
+      },
+      "CommonResult_LoginResponse_": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoginResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[LoginResponse]",
+        "type": "object"
+      },
+      "CommonResult_MeResponse_": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[MeResponse]",
+        "type": "object"
+      },
+      "CommonResult_OrgSyncBatchItem_": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrgSyncBatchItem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[OrgSyncBatchItem]",
+        "type": "object"
+      },
+      "CommonResult_PageResult_UserListItem__": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageResult_UserListItem_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[PageResult[UserListItem]]",
+        "type": "object"
+      },
+      "CommonResult_PageResult_UserSimpleItem__": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageResult_UserSimpleItem_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[PageResult[UserSimpleItem]]",
+        "type": "object"
+      },
+      "CommonResult_UserListItem_": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserListItem"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[UserListItem]",
+        "type": "object"
+      },
+      "CommonResult_list_DeptTreeNode__": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeptTreeNode"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data",
+            "title": "Data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[list[DeptTreeNode]]",
+        "type": "object"
+      },
+      "CommonResult_list_DictDataItem__": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DictDataItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data",
+            "title": "Data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[list[DictDataItem]]",
+        "type": "object"
+      },
+      "CommonResult_list_DictTypeItem__": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DictTypeItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data",
+            "title": "Data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[list[DictTypeItem]]",
+        "type": "object"
+      },
+      "CommonResult_list_RoleSimpleItem__": {
+        "examples": [
+          {
+            "code": 0,
+            "data": {},
+            "msg": "成功"
+          }
+        ],
+        "properties": {
+          "code": {
+            "default": 0,
+            "description": "Response code, 0 = success",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RoleSimpleItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data",
+            "title": "Data"
+          },
+          "msg": {
+            "default": "成功",
+            "description": "Response message",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "CommonResult[list[RoleSimpleItem]]",
+        "type": "object"
+      },
+      "DeptCreateRequest": {
+        "description": "Create department request.",
+        "properties": {
+          "leaderUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaderuserid"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parentId": {
+            "title": "Parentid",
+            "type": "string"
+          },
+          "sort": {
+            "default": 0,
+            "title": "Sort",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "parentId",
+          "name"
+        ],
+        "title": "DeptCreateRequest",
+        "type": "object"
+      },
+      "DeptMoveRequest": {
+        "description": "Move department request.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "newParentId": {
+            "title": "Newparentid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "newParentId"
+        ],
+        "title": "DeptMoveRequest",
+        "type": "object"
+      },
+      "DeptResponse": {
+        "description": "Department response.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "leaderUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaderuserid"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentid"
+          },
+          "sort": {
+            "default": 0,
+            "title": "Sort",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "syncOverrideHint": {
+            "default": false,
+            "title": "Syncoverridehint",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source",
+          "status"
+        ],
+        "title": "DeptResponse",
+        "type": "object"
+      },
+      "DeptTreeNode": {
+        "description": "Department tree node.",
+        "properties": {
+          "children": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DeptTreeNode"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "directMemberCount": {
+            "default": 0,
+            "title": "Directmembercount",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "leaderName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leadername"
+          },
+          "localOrphan": {
+            "default": false,
+            "title": "Localorphan",
+            "type": "boolean"
+          },
+          "memberCount": {
+            "default": 0,
+            "title": "Membercount",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentid"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source",
+          "status"
+        ],
+        "title": "DeptTreeNode",
+        "type": "object"
+      },
+      "DeptUpdateRequest": {
+        "description": "Update department request.",
+        "properties": {
+          "leaderUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaderuserid"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sort": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort"
+          }
+        },
+        "title": "DeptUpdateRequest",
+        "type": "object"
+      },
+      "DictDataItem": {
+        "description": "Dictionary data item.",
+        "properties": {
+          "colorType": {
+            "default": "neutral",
+            "title": "Colortype",
+            "type": "string"
+          },
+          "dictLabel": {
+            "title": "Dictlabel",
+            "type": "string"
+          },
+          "dictValue": {
+            "title": "Dictvalue",
+            "type": "string"
+          },
+          "sort": {
+            "default": 0,
+            "title": "Sort",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dictValue",
+          "dictLabel"
+        ],
+        "title": "DictDataItem",
+        "type": "object"
+      },
+      "DictTypeItem": {
+        "description": "Dictionary type item.",
+        "properties": {
+          "dictType": {
+            "title": "Dicttype",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dictType",
+          "name"
+        ],
+        "title": "DictTypeItem",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthData": {
+        "description": "Health check response data.",
+        "properties": {
+          "db": {
+            "title": "Db",
+            "type": "string"
+          },
+          "football_live": {
+            "title": "Football Live",
+            "type": "string"
+          },
+          "redis": {
+            "title": "Redis",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "db",
+          "redis",
+          "football_live",
+          "version"
+        ],
+        "title": "HealthData",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "description": "Login request.",
+        "properties": {
+          "captcha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha"
+          },
+          "password": {
+            "maxLength": 32,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 30,
+            "minLength": 4,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "LoginResponse": {
+        "description": "Login response.",
+        "properties": {
+          "accessToken": {
+            "title": "Accesstoken",
+            "type": "string"
+          },
+          "expiresIn": {
+            "default": 7200,
+            "title": "Expiresin",
+            "type": "integer"
+          },
+          "pwdResetRequired": {
+            "default": false,
+            "title": "Pwdresetrequired",
+            "type": "boolean"
+          },
+          "refreshToken": {
+            "title": "Refreshtoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "refreshToken"
+        ],
+        "title": "LoginResponse",
+        "type": "object"
+      },
+      "MeResponse": {
+        "description": "GET /me response.",
+        "properties": {
+          "dataScopeText": {
+            "title": "Datascopetext",
+            "type": "string"
+          },
+          "menus": {
+            "items": {
+              "$ref": "#/components/schemas/MenuItem"
+            },
+            "title": "Menus",
+            "type": "array"
+          },
+          "permCodes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permcodes",
+            "type": "array"
+          },
+          "permDetails": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PermDetail"
+            },
+            "title": "Permdetails",
+            "type": "object"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserInfo"
+          }
+        },
+        "required": [
+          "user",
+          "menus",
+          "permCodes",
+          "permDetails",
+          "dataScopeText"
+        ],
+        "title": "MeResponse",
+        "type": "object"
+      },
+      "MenuItem": {
+        "description": "Menu tree item.",
+        "properties": {
+          "children": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MenuItem"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "component": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentid"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "permCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permcode"
+          },
+          "sort": {
+            "default": 0,
+            "title": "Sort",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "visible": {
+            "default": true,
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "MenuItem",
+        "type": "object"
+      },
+      "OrgSyncBatchItem": {
+        "description": "Org sync batch item.",
+        "properties": {
+          "addedDepts": {
+            "default": 0,
+            "title": "Addeddepts",
+            "type": "integer"
+          },
+          "addedUsers": {
+            "default": 0,
+            "title": "Addedusers",
+            "type": "integer"
+          },
+          "batchId": {
+            "title": "Batchid",
+            "type": "string"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completedat"
+          },
+          "errorMsg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errormsg"
+          },
+          "removedDepts": {
+            "default": 0,
+            "title": "Removeddepts",
+            "type": "integer"
+          },
+          "removedUsers": {
+            "default": 0,
+            "title": "Removedusers",
+            "type": "integer"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startedat"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedDepts": {
+            "default": 0,
+            "title": "Updateddepts",
+            "type": "integer"
+          },
+          "updatedUsers": {
+            "default": 0,
+            "title": "Updatedusers",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "batchId",
+          "status"
+        ],
+        "title": "OrgSyncBatchItem",
+        "type": "object"
+      },
+      "PageResult_UserListItem_": {
+        "properties": {
+          "list": {
+            "items": {
+              "$ref": "#/components/schemas/UserListItem"
+            },
+            "title": "List",
+            "type": "array"
+          },
+          "pageNo": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Pageno",
+            "type": "integer"
+          },
+          "pageSize": {
+            "default": 10,
+            "minimum": 1.0,
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "PageResult[UserListItem]",
+        "type": "object"
+      },
+      "PageResult_UserSimpleItem_": {
+        "properties": {
+          "list": {
+            "items": {
+              "$ref": "#/components/schemas/UserSimpleItem"
+            },
+            "title": "List",
+            "type": "array"
+          },
+          "pageNo": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Pageno",
+            "type": "integer"
+          },
+          "pageSize": {
+            "default": 10,
+            "minimum": 1.0,
+            "title": "Pagesize",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "PageResult[UserSimpleItem]",
+        "type": "object"
+      },
+      "PermDetail": {
+        "description": "Permission detail (R/W/D).",
+        "properties": {
+          "d": {
+            "default": false,
+            "title": "D",
+            "type": "boolean"
+          },
+          "r": {
+            "default": false,
+            "title": "R",
+            "type": "boolean"
+          },
+          "w": {
+            "default": false,
+            "title": "W",
+            "type": "boolean"
+          }
+        },
+        "title": "PermDetail",
+        "type": "object"
+      },
+      "RefreshTokenRequest": {
+        "description": "Token refresh request.",
+        "properties": {
+          "refreshToken": {
+            "title": "Refreshtoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ],
+        "title": "RefreshTokenRequest",
+        "type": "object"
+      },
+      "RoleSimpleItem": {
+        "description": "Simple role item for selectors.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source"
+        ],
+        "title": "RoleSimpleItem",
+        "type": "object"
+      },
+      "UserCreateRequest": {
+        "description": "Create user request - minimal fields.",
+        "properties": {
+          "deptIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deptids",
+            "type": "array"
+          },
+          "mainDeptId": {
+            "title": "Maindeptid",
+            "type": "string"
+          },
+          "mobile": {
+            "title": "Mobile",
+            "type": "string"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "nickname",
+          "mobile",
+          "deptIds",
+          "mainDeptId",
+          "password"
+        ],
+        "title": "UserCreateRequest",
+        "type": "object"
+      },
+      "UserInfo": {
+        "description": "Current user info.",
+        "properties": {
+          "avatar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar"
+          },
+          "deptNames": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Deptnames",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mainDeptName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maindeptname"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "positionLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Positionlabel"
+          },
+          "pwdResetRequired": {
+            "default": false,
+            "title": "Pwdresetrequired",
+            "type": "boolean"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "nickname"
+        ],
+        "title": "UserInfo",
+        "type": "object"
+      },
+      "UserListItem": {
+        "description": "User list item.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lastLoginTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastlogintime"
+          },
+          "mainDeptId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maindeptid"
+          },
+          "mainDeptName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maindeptname"
+          },
+          "mobile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mobile"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "positionLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Positionlabel"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "nickname",
+          "status"
+        ],
+        "title": "UserListItem",
+        "type": "object"
+      },
+      "UserSimpleItem": {
+        "description": "Simple user item for selectors.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mainDeptName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maindeptname"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nickname",
+          "status"
+        ],
+        "title": "UserSimpleItem",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "IMS Backend",
+    "version": "2.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/admin-api/ims/auth/login": {
+      "post": {
+        "description": "Local username/password login.\n\nRules per FP-D01-01:\n- User not exist or wrong password -> 1214 (same message)\n- 5 consecutive failures -> lock 15 minutes, return 1215\n- FROZEN/RESIGNED -> 1216 (after password check)\n- Tenant disabled/expired -> 1008\n- Success: clear count, write last_login_time/ip, create session, write login log\n- Non-existent username also counts failures (prevent enumeration)",
+        "operationId": "login_admin_api_ims_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_LoginResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "账号密码登录",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/admin-api/ims/auth/logout": {
+      "post": {
+        "description": "Logout current session.\n\nRules per FP-D01-04:\n- Delete current session\n- Add access token sid to blacklist (TTL = remaining time)",
+        "operationId": "logout_admin_api_ims_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "登出",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/admin-api/ims/auth/me": {
+      "get": {
+        "description": "Get current user's info, menus, and permissions.\n\nRules per FP-D06-01:\n- Menu tree = tenant package menus ∩ enabled role menus\n- permCodes from all enabled roles\n- dataScopeText in Chinese (e.g., \"本部门（市场一部、市场二部）\")\n- PENDING_CONFIG or empty permissions -> empty menus with prompt",
+        "operationId": "get_current_user_info_admin_api_ims_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_MeResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "获取当前用户信息",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/admin-api/ims/auth/refresh-token": {
+      "post": {
+        "description": "Refresh access token.\n\nRules per FP-D01-03:\n- Valid refresh -> new access + new refresh (old refresh invalidated)\n- Invalid/expired/reused refresh -> 1002 (HTTP 401)",
+        "operationId": "refresh_token_admin_api_ims_auth_refresh_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_LoginResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "刷新令牌",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/admin-api/ims/auth/sso/dingtalk/callback": {
+      "get": {
+        "description": "DingTalk SSO callback.\n\nRules per FP-D02-02:\n- state not exist/expired/used -> 1002 (GETDEL atomic)\n- Use authCode to get DingTalk userid + phone\n- Match: ims_auth_user_mapping.dingtalk_user_id -> mobile_hash\n- No match -> 1217, no token issued\n- FROZEN/RESIGNED -> 1216\n- Success: issue tokens, 302 to /sso-callback#accessToken=...&refreshToken=...&redirect=...",
+        "operationId": "dingtalk_sso_callback_admin_api_ims_auth_sso_dingtalk_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "auth_code",
+            "required": true,
+            "schema": {
+              "title": "Auth Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "钉钉SSO回调",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/admin-api/ims/auth/sso/dingtalk/redirect": {
+      "get": {
+        "description": "DingTalk SSO redirect.\n\nRules per FP-D02-01:\n- Generate 32-char random state, store in Redis 5 min (with redirect)\n- redirect must be site-relative path, otherwise replace with /\n- DingTalk not configured -> 1008",
+        "operationId": "dingtalk_sso_redirect_admin_api_ims_auth_sso_dingtalk_redirect_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "redirect",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "title": "Redirect",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "钉钉SSO跳转",
+        "tags": [
+          "认证"
+        ]
+      }
+    },
+    "/admin-api/ims/demo/error": {
+      "get": {
+        "description": "Return specified error code for testing.\n\nLOGIN_ONLY - for B0b request layer example page to verify error handling.\nOnly available in test environment.",
+        "operationId": "demo_error_admin_api_ims_demo_error_get",
+        "parameters": [
+          {
+            "description": "错误码",
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "description": "错误码",
+              "title": "Code",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "测试错误码响应",
+        "tags": [
+          "演示"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/confirm-orphan": {
+      "put": {
+        "description": "Confirm keeping a local orphan department.\n\nRules per FP-D07-02 item 7:\n- Sets local_orphan=0, marking dept as confirmed to keep\n- Only applicable to departments with local_orphan=1",
+        "operationId": "confirm_orphan_dept_admin_api_ims_system_dept_confirm_orphan_put",
+        "parameters": [
+          {
+            "description": "部门ID",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "部门ID",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "确认保留待确认部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/create": {
+      "post": {
+        "description": "Create a local department.\n\nRules per FP-B08-04:\n- source=LOCAL\n- Parent not exist -> 1500, disabled -> 1501\n- Same-parent duplicate name -> 1219\n- Under \"待分配\" -> 1220",
+        "operationId": "create_dept_admin_api_ims_system_dept_create_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeptCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_DeptResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "新建部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/delete": {
+      "delete": {
+        "description": "Delete department.\n\nRules per FP-B08-07:\n- Has children or users (any status including resigned) -> 1502\n- SYSTEM dept -> 1220",
+        "operationId": "delete_dept_admin_api_ims_system_dept_delete_delete",
+        "parameters": [
+          {
+            "description": "部门ID",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "部门ID",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/move": {
+      "put": {
+        "description": "Move department to new parent.\n\nRules per FP-B08-06:\n- Move to self or descendant -> 1218\n- DINGTALK to LOCAL parent -> 1220\n- SYSTEM dept cannot move or be target -> 1220\n- Same-parent duplicate name -> 1219\n- Same transaction update all descendant paths",
+        "operationId": "move_dept_admin_api_ims_system_dept_move_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeptMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_DeptResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "移动部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/tree": {
+      "get": {
+        "description": "Get department tree.\n\nRules per FP-B08-02:\n- memberCount: dedup count of active+frozen users in dept and all descendants\n- directMemberCount: users directly in this dept\n- keyword match: return matched node and ancestor path\n- Default excludes disabled depts, status=ALL includes them\n- Tree itself not filtered by data scope (org structure is public)\n- Performance: 2000 depts, 20k users -> <= 500ms",
+        "operationId": "get_dept_tree_admin_api_ims_system_dept_tree_get",
+        "parameters": [
+          {
+            "description": "状态筛选: ALL 返回停用部门",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "状态筛选: ALL 返回停用部门",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "部门名称关键词",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部门名称关键词",
+              "title": "Keyword"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_list_DeptTreeNode__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "获取部门树",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/update": {
+      "put": {
+        "description": "Update department (name, leader, sort).\n\nRules per FP-B08-05:\n- SYSTEM dept -> 1220\n- Same-parent duplicate name -> 1219\n- DINGTALK dept: success with syncOverrideHint=true",
+        "operationId": "update_dept_admin_api_ims_system_dept_update_put",
+        "parameters": [
+          {
+            "description": "部门ID",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "部门ID",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeptUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_DeptResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "更新部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dept/update-status": {
+      "put": {
+        "description": "Enable or disable department.\n\nRules per FP-B08-07:\n- Has enabled children -> 1502\n- SYSTEM dept -> 1220\n- DINGTALK dept: local disable allowed, next sync may re-enable",
+        "operationId": "update_dept_status_admin_api_ims_system_dept_update_status_put",
+        "parameters": [
+          {
+            "description": "部门ID",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "部门ID",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "状态: ENABLED/DISABLED",
+            "in": "query",
+            "name": "status",
+            "required": true,
+            "schema": {
+              "description": "状态: ENABLED/DISABLED",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "停用/启用部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dict-data/simple-list": {
+      "get": {
+        "description": "Get enabled dictionary values for a type.\n\nRules per FP-B07-03:\n- Returns enabled values only\n- Includes colorType\n- Cached in Redis (ims:dict:<type>), TTL 60s local cache",
+        "operationId": "get_dict_data_simple_list_admin_api_ims_system_dict_data_simple_list_get",
+        "parameters": [
+          {
+            "description": "字典类型",
+            "in": "query",
+            "name": "dict_type",
+            "required": true,
+            "schema": {
+              "description": "字典类型",
+              "title": "Dict Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_list_DictDataItem__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "获取字典值列表",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/dict-type/list": {
+      "get": {
+        "description": "Get all dictionary types.",
+        "operationId": "get_dict_type_list_admin_api_ims_system_dict_type_list_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_list_DictTypeItem__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "获取字典类型列表",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/org-sync/latest-batch": {
+      "get": {
+        "description": "Get the latest org sync batch status.\n\nRules per FP-D07-04:\n- Returns the most recent sync batch\n- Includes counts for dept/user changes",
+        "operationId": "get_latest_org_sync_batch_admin_api_ims_system_org_sync_latest_batch_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_OrgSyncBatchItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "获取最新同步批次",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/org-sync/reconcile": {
+      "post": {
+        "description": "Trigger organization structure reconciliation with DingTalk.\n\nRules per FP-D07-04:\n- Compares IMS org structure with DingTalk\n- Creates sync batch record\n- Returns immediately with batch info (async execution)",
+        "operationId": "trigger_org_sync_reconcile_admin_api_ims_system_org_sync_reconcile_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_OrgSyncBatchItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "触发组织架构同步",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/role/simple-list": {
+      "get": {
+        "description": "Get enabled roles for selectors.\n\nLOGIN_ONLY - returns id, name, source only.",
+        "operationId": "get_role_simple_list_admin_api_ims_system_role_simple_list_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_list_RoleSimpleItem__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "角色选择器列表",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/user/create": {
+      "post": {
+        "description": "Create a new user.\n\nMinimal fields: username, nickname, mobile, depts, mainDeptId, password.\nFull user management is in M02 module.",
+        "operationId": "create_user_admin_api_ims_system_user_create_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_UserListItem_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "创建用户",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/user/delete": {
+      "delete": {
+        "description": "Delete user.\n\nRules per FP-B03-01 item 3:\n- Only users who never logged in AND have no business references can be deleted\n- RESIGNED users cannot be deleted -> 1502",
+        "operationId": "delete_user_admin_api_ims_system_user_delete_delete",
+        "parameters": [
+          {
+            "description": "用户ID",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "用户ID",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "删除用户",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/user/page": {
+      "get": {
+        "description": "Get paginated user list.\n\nRules per FP-B08-03:\n- includeChildren=true: filter by path LIKE '/…/deptId/%'\n- includeChildren=false: only direct members\n- Data scope filtering applied",
+        "operationId": "get_user_page_admin_api_ims_system_user_page_get",
+        "parameters": [
+          {
+            "description": "部门ID",
+            "in": "query",
+            "name": "dept_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "部门ID",
+              "title": "Dept Id"
+            }
+          },
+          {
+            "description": "是否包含下级部门",
+            "in": "query",
+            "name": "include_children",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "是否包含下级部门",
+              "title": "Include Children",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "用户名/姓名关键词",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "用户名/姓名关键词",
+              "title": "Keyword"
+            }
+          },
+          {
+            "description": "状态",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "状态",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageNo",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Pageno",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Pagesize",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_PageResult_UserListItem__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "用户分页列表",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/user/simple-page": {
+      "get": {
+        "description": "Get simple user list for selectors.\n\nLOGIN_ONLY - returns id, nickname, mainDeptName, status only.",
+        "operationId": "get_user_simple_page_admin_api_ims_system_user_simple_page_get",
+        "parameters": [
+          {
+            "description": "姓名关键词",
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "姓名关键词",
+              "title": "Keyword"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageNo",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Pageno",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Pagesize",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_PageResult_UserSimpleItem__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "用户选择器列表",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/admin-api/ims/system/user/update-depts": {
+      "put": {
+        "description": "Update user's department assignments.\n\nRules per FP-B03-02:\n- User can belong to multiple departments\n- Must have exactly one main department\n- Removing main dept requires specifying another main first\n- Removing all depts auto-assigns to \"待分配\" dept",
+        "operationId": "update_user_depts_admin_api_ims_system_user_update_depts_put",
+        "parameters": [
+          {
+            "description": "用户ID",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "用户ID",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "部门ID列表",
+            "in": "query",
+            "name": "dept_ids",
+            "required": true,
+            "schema": {
+              "description": "部门ID列表",
+              "items": {
+                "type": "string"
+              },
+              "title": "Dept Ids",
+              "type": "array"
+            }
+          },
+          {
+            "description": "主部门ID",
+            "in": "query",
+            "name": "main_dept_id",
+            "required": true,
+            "schema": {
+              "description": "主部门ID",
+              "title": "Main Dept Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "调整用户部门",
+        "tags": [
+          "系统管理"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["健康检查"],
+        "description": "Health check endpoint.\n\nReturns system health status. Does not expose any connection strings.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonResult_HealthData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "健康检查"
+      }
+    }
+  }
+}

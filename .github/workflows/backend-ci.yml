@@ -1,0 +1,172 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'cursor/**'
+    paths:
+      - 'ims-backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ims-backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+env:
+  PYTHON_VERSION: '3.11'
+  IMS_ENV: test
+  IMS_JWT_SECRET: test-jwt-secret-for-ci
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd ims-backend
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+          pip install -e .
+      
+      - name: Run ruff
+        run: |
+          cd ims-backend
+          ruff check app/ tests/
+      
+      - name: Run mypy
+        run: |
+          cd ims-backend
+          mypy app/ --ignore-missing-imports || true
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: testpass
+          MYSQL_DATABASE: ims_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      IMS_DB_URL: mysql+pymysql://root:testpass@127.0.0.1:3306/ims_test?charset=utf8mb4
+      IMS_REDIS_URL: redis://127.0.0.1:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd ims-backend
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pymysql cryptography
+      
+      - name: Run tests with coverage
+        run: |
+          cd ims-backend
+          pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+      
+      - name: Check coverage threshold
+        run: |
+          cd ims-backend
+          # 80% overall per team rules (pyproject.toml fail_under=80)
+          coverage report --fail-under=80
+
+  static-checks:
+    name: Static Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for datetime.now() usage
+        run: |
+          cd ims-backend
+          if grep -rn "datetime\.now()" app/ --include="*.py" | grep -v "clock.py"; then
+            echo "ERROR: Direct datetime.now() found. Use get_now() from app/core/clock.py"
+            exit 1
+          fi
+      
+      - name: Check for tenant_id conditions in business code
+        run: |
+          cd ims-backend
+          if grep -rn "tenant_id ==" app/domains/ app/services/ --include="*.py" | grep -v "# noqa"; then
+            echo "WARNING: Direct tenant_id comparison found in business code"
+          fi
+      
+      - name: Check for route layer commit
+        run: |
+          cd ims-backend
+          if grep -rn "\.commit()" app/api/ --include="*.py"; then
+            echo "ERROR: Direct commit() found in route layer"
+            exit 1
+          fi
+      
+      - name: Check for Football table access outside integration
+        run: |
+          cd ims-backend
+          # Allow live_room references in: integrations/football*, core/config.py (config only)
+          if grep -rn "live_room" app/ --include="*.py" | grep -v "app/integrations/football" | grep -v "app/core/config.py"; then
+            echo "ERROR: live_room table accessed outside football_live integration"
+            exit 1
+          fi
+
+  openapi-check:
+    name: OpenAPI Check
+    runs-on: ubuntu-latest
+    if: false  # Enable when OpenAPI generation is implemented
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          cd ims-backend
+          python -m pip install --upgrade pip
+          pip install -e .
+      
+      - name: Generate OpenAPI spec
+        run: |
+          cd ims-backend
+          python -c "from app.main import app; import json; print(json.dumps(app.openapi()))" > openapi-generated.json
+      
+      - name: Compare with committed spec
+        run: |
+          cd ims-backend
+          if [ -f openapi.json ]; then
+            diff openapi.json openapi-generated.json || (echo "OpenAPI spec out of sync. Run 'make api-gen'" && exit 1)
+          fi
