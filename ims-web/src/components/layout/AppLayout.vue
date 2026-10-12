@@ -12,7 +12,7 @@ import { Menu, Bell, ArrowDown, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDownloadStore } from '@/stores/download'
 import { useResponsive } from '@/utils/responsive'
-import { collectLeafPaths, resolveLanding } from '@/utils/login-landing'
+import { collectLeafPaths, resolveLanding, visibleMenus } from '@/utils/login-landing'
 import DownloadBar from '@/components/file/DownloadBar.vue'
 import type { MenuItem } from '@/types'
 
@@ -33,7 +33,9 @@ const unreadCount = ref(3)
 
 // 计算属性
 const currentPath = computed(() => route.path)
-const hasMenus = computed(() => authStore.menus.length > 0)
+/** 未登记路由的菜单不进侧栏，避免 B3 前把工作台画成可点菜单。 */
+const sidebarMenus = computed(() => visibleMenus(authStore.menus, registeredPaths()))
+const hasMenus = computed(() => sidebarMenus.value.length > 0)
 
 function registeredPaths(): string[] {
   return router.getRoutes().map((item) => item.path)
@@ -131,7 +133,7 @@ function getActiveMenuPaths(): string[] {
     }
     return false
   }
-  traverse(authStore.menus)
+  traverse(sidebarMenus.value)
   return paths
 }
 
@@ -183,7 +185,7 @@ function handleLogout() {
           :collapse-transition="false"
           @select="handleMenuSelect"
         >
-          <template v-for="item in authStore.menus" :key="item.id">
+          <template v-for="item in sidebarMenus" :key="item.id">
             <!-- 有子菜单 -->
             <el-sub-menu v-if="item.children?.length" :index="item.id">
               <template #title>

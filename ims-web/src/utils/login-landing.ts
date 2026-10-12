@@ -47,6 +47,27 @@ function businessRoutes(paths: string[]): Set<string> {
   return new Set(paths.filter((path) => path && path !== APP_SHELL_PATH && !path.includes(':')))
 }
 
+/**
+ * 侧栏只保留路由已登记的叶子。目录在子项被滤空后一并去掉。
+ * B3 之前 /ims/workbench 尚未登记，不能把这份菜单画出来。
+ */
+export function visibleMenus(menus: MenuItem[], registeredPaths: string[]): MenuItem[] {
+  const registered = businessRoutes(registeredPaths)
+  const walk = (items: MenuItem[]): MenuItem[] => {
+    const visible: MenuItem[] = []
+    for (const item of items) {
+      if (item.children && item.children.length > 0) {
+        const children = walk(item.children)
+        if (children.length > 0) visible.push({ ...item, children })
+        continue
+      }
+      if (item.path && registered.has(item.path)) visible.push(item)
+    }
+    return visible
+  }
+  return walk(menus)
+}
+
 export function resolveLanding(options: {
   redirect?: unknown
   menus: MenuItem[]

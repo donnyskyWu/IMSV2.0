@@ -10,6 +10,7 @@ import {
   landingPath,
   resolveLanding,
   sanitizeRedirect,
+  visibleMenus,
 } from './login-landing'
 
 const registered = ['/demo/tokens', '/demo/list', '/ims/workbench', APP_SHELL_PATH, '/:pathMatch(.*)*']
@@ -86,5 +87,35 @@ describe('resolveLanding', () => {
       registeredPaths: registered,
     })).toBeNull()
     expect(landingPath({ menus: [], registeredPaths: registered })).toBe(APP_SHELL_PATH)
+  })
+})
+
+describe('visibleMenus', () => {
+  it('丢掉未登记叶子，子项滤空的目录也不显示', () => {
+    const menus: MenuItem[] = [
+      leaf('/ims/workbench', '工作台'),
+      {
+        id: 'auth',
+        name: '权限管理',
+        children: [leaf('/ims/auth/org', '组织'), leaf('/demo/tokens', 'Token')],
+      },
+      {
+        id: 'empty-dir',
+        name: '空目录',
+        children: [leaf('/ims/auth/position', '岗位')],
+      },
+    ]
+    const visible = visibleMenus(menus, ['/demo/tokens', '/:pathMatch(.*)*', APP_SHELL_PATH])
+    expect(visible.map((item) => item.name)).toEqual(['权限管理'])
+    expect(visible[0]?.children?.map((item) => item.path)).toEqual(['/demo/tokens'])
+  })
+
+  it('工作台路由登记后可以出现在侧栏', () => {
+    const visible = visibleMenus(
+      [leaf('/ims/workbench', '工作台')],
+      ['/ims/workbench'],
+    )
+    expect(visible.map((item) => item.path)).toEqual(['/ims/workbench'])
+    expect(visibleMenus([], ['/ims/workbench'])).toEqual([])
   })
 })

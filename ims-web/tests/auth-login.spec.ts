@@ -2,6 +2,7 @@
  * B1 账号登录与强制改密（前端）
  * 可跑用例对接 B0a 登录 /me /logout 契约，用 mock 固定响应。
  * 依赖后端锁定计数或改密落库的用例用 test.skip 标出，等后端第 2 个 PR 合入后再联调。
+ * LG-23 页面断言的种子账号依赖 #11；组织事件 1008 另依赖组织同步后端 PR，分开 skip。
  */
 import { test, expect, type Page, type Route } from '@playwright/test'
 import { expectNoHOverflow } from './helpers/mobile'
@@ -302,33 +303,20 @@ test.describe('B1 账号登录与改密', () => {
         permCodes: [],
       })))
     })
-    await page.route('**/admin-api/ims/system/user/page**', async (route) => {
-      await route.fulfill(json(fail(1008, '暂无权限')))
-    })
     await page.goto('/login')
     await submitLogin(page, 'test_r10', 'Test1234')
     await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
+    // B3 前工作台路由未登记，侧栏不渲染这份菜单，提示只出现在内容区。
     await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
-    await expect(page.locator('.app-sidebar').getByText('工作台')).toBeVisible()
-    await expect(page.locator('.app-sidebar').getByText('权限管理')).toHaveCount(0)
+    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
+    await expect(page.locator('.app-sidebar').getByText('工作台')).toHaveCount(0)
+    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
     await expect(page.getByTestId('denied-panel')).toHaveCount(0)
 
     // 地址栏直接打开组织页、岗位页，都停在无权限页，不渲染业务表格。
     await page.goto('/ims/auth/org')
     await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
     await expect(page.locator('.el-table')).toHaveCount(0)
-    await expect(page).toHaveURL(/\/ims\/auth\/org/)
-    const code = await page.evaluate(async () => {
-      const mod = await import('/src/api/request.ts')
-      try {
-        await mod.default.get('/admin-api/ims/system/user/page')
-        return 0
-      } catch (err) {
-        return (err as { code?: number }).code ?? -1
-      }
-    })
-    expect(code).toBe(1008)
-    await expect(page.locator('.el-message').filter({ hasText: '暂无权限' })).toBeVisible()
     await expect(page).toHaveURL(/\/ims\/auth\/org/)
 
     await page.goto('/ims/auth/position')
@@ -563,15 +551,15 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page).not.toHaveURL(/\/login/)
   })
 
-  test.skip('E2E-B1-LG-23 种子账号 test_r10（依赖后端 PR #11，未合入）', async ({ page }) => {
-    // #11 未合入，仓库里还没有仅 R10 的 test_r10。合入后去掉 skip 再跑。
+  test.skip('E2E-B1-LG-23 种子账号 test_r10 页面与侧栏（依赖后端 PR #11，未合入）', async ({ page }) => {
+    // #11 未合入，仓库里还没有仅 R10 的 test_r10。本条只验页面和侧栏，合入后去掉 skip。
     await page.goto('/login')
     await submitLogin(page, 'test_r10', 'Test1234')
     await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
     await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
-    await expect(page.locator('.app-sidebar').getByText('工作台')).toBeVisible()
-    await expect(page.locator('.app-sidebar').getByText('权限管理')).toHaveCount(0)
-    // 与可跑用例相同：地址栏打开组织页、岗位页都显示无权限页。
+    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
+    await expect(page.locator('.app-sidebar').getByText('工作台')).toHaveCount(0)
+    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
     await page.goto('/ims/auth/org')
     await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
     await expect(page.locator('.el-table')).toHaveCount(0)
@@ -580,17 +568,20 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
     await expect(page.locator('.el-table')).toHaveCount(0)
     await expect(page).toHaveURL(/\/ims\/auth\/position/)
-    const code = await page.evaluate(async () => {
-      const mod = await import('/src/api/request.ts')
-      try {
-        await mod.default.get('/admin-api/ims/system/user/page')
-        return 0
-      } catch (err) {
-        return (err as { code?: number }).code ?? -1
-      }
+  })
+
+  test.skip('E2E-B1-LG-23 外协会话请求组织事件返回 1008（依赖组织同步后端 PR）', async ({ page }) => {
+    // GET /admin-api/ims/auth/org/events 属于 B1 后端第 4 个 PR（组织同步），main 和 #11 都还没有。
+    // 会话账号 test_r10 另依赖 #11。两处都合入后再去掉 skip。用 page.request 带令牌，不依赖 Vite 源码模块。
+    await page.goto('/login')
+    await submitLogin(page, 'test_r10', 'Test1234')
+    const token = await page.evaluate(() => localStorage.getItem('ims_access_token'))
+    expect(token).toEqual(expect.any(String))
+    expect(token).not.toBe('')
+    const response = await page.request.get('/admin-api/ims/auth/org/events', {
+      headers: { Authorization: `Bearer ${token}` },
     })
-    expect(code).toBe(1008)
-    await expect(page.locator('.el-message').filter({ hasText: '暂无权限' })).toBeVisible()
-    await expect(page).toHaveURL(/\/ims\/auth\/position/)
+    const body = (await response.json()) as { code?: number }
+    expect(body.code).toBe(1008)
   })
 })
