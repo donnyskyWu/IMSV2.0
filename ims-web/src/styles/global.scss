@@ -1,0 +1,140 @@
+/**
+ * IMS 全局样式
+ * 依据: 02-前端基础层清单, 00-工作包 §2.1
+ */
+
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background-color: var(--bg);
+  min-height: 100vh;
+}
+
+/* === 通用工具类 === */
+
+/* 等宽字体 (§1.2 编号列) */
+.mono {
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 数字列右对齐 (§1.2) */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 负数红色 (§1.6) */
+.neg {
+  color: var(--red);
+}
+
+/* === 触控热区扩展 (§2.1 Q10, §2.3 U1) === */
+
+/* 用于 26px 小号按钮和 30px 控件, 保持原视觉尺寸但扩大热区到 44px */
+.touch-target {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: var(--min-touch-size);
+    min-height: var(--min-touch-size);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* §2.3 U1: 小号按钮之间的视觉间距 ≥18px */
+.btn-group--small {
+  display: inline-flex;
+  gap: 18px;
+}
+
+/* 通用小号按钮容器间距 */
+.el-button--small + .el-button--small {
+  margin-left: 18px;
+}
+
+/* === 移动端字号调整 (§2.1 Q12) === */
+
+/* 手机下最小字号 12px, 原来 11px 和 11.5px 统一提到 12px */
+@media (width <= 767px) {
+  /* 输入框字号 >=16px 防止 iOS 聚焦放大 */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  .el-date-range-picker {
+    width: auto !important;
+  }
+
+  .el-date-range-picker .el-picker-panel__body {
+    min-width: 0 !important;
+  }
+
+  .el-date-range-picker__content.is-right {
+    display: none !important;
+  }
+
+  .el-date-range-picker__content.is-left {
+    width: 100%;
+  }
+}
+
+/* === 滚动条样式 === */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 15%);
+  border-radius: 3px;
+
+  &:hover {
+    background: rgb(0 0 0 / 25%);
+  }
+}
+
+/* === 链接样式 === */
+a {
+  color: var(--blue);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--blue-h);
+  }
+}
+
+/* === 空值显示 (§1.6) === */
+.empty-value {
+  color: var(--text2);
+
+  &::before {
+    content: '—';
+  }
+}
