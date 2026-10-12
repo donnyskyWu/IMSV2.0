@@ -195,7 +195,7 @@
   --el-table-row-hover-bg-color: #fafafa;
 
   th.el-table__cell {
-    font-size: 11px;
+    font-size: 12px; // §2.1 Q12: 最小字号 12px
     font-weight: 600;
     color: var(--text2);
     padding: 10px 12px;

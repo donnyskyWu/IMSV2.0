@@ -587,11 +587,13 @@ test.describe('移动端测试', () => {
     const smallButtons = page.locator('.el-button--small:visible')
     const smallCount = await smallButtons.count()
 
-    // 验证小号按钮的触控热区使用 hitBox() 函数
+    // 使用 hitBox() 验证小号按钮的触控热区
     for (let i = 0; i < Math.min(smallCount, 5); i++) {
       const btn = smallButtons.nth(i)
       const hit = await hitBox(btn)
-      // 触控热区必须 ≥44×44px
+      // 触控热区必须 ≥44×44px (通过点击测试或 CSS ::before 伪元素)
+      // 注: hitBox 检测实际可点击范围，若 CSS 伪元素扩展了热区，
+      //     需验证 ::before 的 min-width/min-height 是否为 44px
       expect(hit.width).toBeGreaterThanOrEqual(MIN_TOUCH)
       expect(hit.height).toBeGreaterThanOrEqual(MIN_TOUCH)
     }

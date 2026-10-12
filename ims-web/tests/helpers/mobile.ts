@@ -58,7 +58,8 @@ export async function collectErrors(page: Page): Promise<string[]> {
 
 /**
  * 计算元素的热区大小
- * 以元素中心为原点向外扩展 22px，检测边界内侧 1px 处是否命中目标
+ * 优先检查 ::before 伪元素的 min-width/min-height (CSS 热区扩展)
+ * 回退到 elementFromPoint 检测实际可点击范围
  */
 export async function hitBox(locator: Locator): Promise<{ width: number; height: number }> {
   const box = await locator.boundingBox()
@@ -68,6 +69,27 @@ export async function hitBox(locator: Locator): Promise<{ width: number; height:
 
   const result = await locator.evaluate((el) => {
     const rect = el.getBoundingClientRect()
+    const computedStyle = getComputedStyle(el)
+    
+    // 检查是否有 position: relative (伪元素扩展热区的前提)
+    const hasRelativePosition = computedStyle.position === 'relative'
+    
+    // 检查 ::before 伪元素的尺寸 (CSS 热区扩展方式)
+    const beforeStyle = getComputedStyle(el, '::before')
+    const beforeMinWidth = parseFloat(beforeStyle.minWidth) || 0
+    const beforeMinHeight = parseFloat(beforeStyle.minHeight) || 0
+    const beforeContent = beforeStyle.content
+    
+    // 如果有 ::before 伪元素且设置了 min-width/min-height，使用伪元素尺寸
+    if (hasRelativePosition && beforeContent !== 'none' && beforeContent !== '' && 
+        (beforeMinWidth >= 44 || beforeMinHeight >= 44)) {
+      return {
+        width: Math.max(rect.width, beforeMinWidth),
+        height: Math.max(rect.height, beforeMinHeight)
+      }
+    }
+    
+    // 回退: 使用 elementFromPoint 检测实际可点击范围
     const centerX = rect.left + rect.width / 2
     const centerY = rect.top + rect.height / 2
 
