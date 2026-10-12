@@ -3,7 +3,7 @@
 Configuration management with environment-based loading.
 
 Config groups per FP-A01-01:
-- db: IMS main database (dev/test database name `imsV2.0`)
+- db: IMS main database（连接串只从环境变量读取，仓库不写主机或库名）
 - football_live: Read-only connection, schema definition file path
 - redis: Cache and session storage
 - jwt: Secret, access TTL (2h), refresh TTL (7d)

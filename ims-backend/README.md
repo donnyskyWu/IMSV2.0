@@ -49,8 +49,7 @@ pip install -e ".[dev]"
 
 ```bash
 IMS_ENV=dev
-IMS_DB_URL=mysql+pymysql://user:pass@localhost:3306/imsV2.0
-IMS_REDIS_URL=redis://localhost:6379/0
+# IMS_DB_URL、IMS_REDIS_URL 由部署环境注入。仓库不写主机、端口或库名。
 IMS_JWT_SECRET=your-secret-key
 ```
 
@@ -69,8 +68,12 @@ pytest tests/ -v
 # 运行单元测试
 pytest tests/unit/ -v
 
-# 带覆盖率
-pytest tests/ -v --cov=app --cov-report=term-missing
+# 带覆盖率（含分支）。总行覆盖门槛 80%。
+pytest tests/ -v --cov=app --cov-branch --cov-report=term-missing
+
+# P0 Service 分支覆盖门槛 90%（只看分支，不看语句+分支的合计）。
+# 增删文件只改 scripts/p0_services.txt。
+python scripts/check_p0_branch_coverage.py
 ```
 
 ## API 文档
@@ -140,7 +143,7 @@ python -m tools.seed --env dev
 # test_admin（密码 Test1234）在 test 和 e2e 创建，dev / prod 不创建
 python -m tools.seed --env test
 # 02 §0.2 其余测试账号（密码 Test1234）只在 e2e 环境创建
-# test_r10 只绑角色 R10。工作台菜单在 B3，当前不授任何菜单
+# test_r10 只绑角色 R10，并且只授「工作台」菜单
 python -m tools.seed --env e2e
 ```
 

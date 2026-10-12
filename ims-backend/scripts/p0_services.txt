@@ -1,0 +1,15 @@
+# P0 Service 分支覆盖名单。门槛看分支覆盖率，不是语句+分支的合计列。
+# 一行一个路径，相对 ims-backend 根目录。井号后面是注释。
+# 增删文件只改本文件。
+#
+# B0a 把认证、权限依赖、字典、角色定为 P0。
+# 权限判定、用户、请求会话是上一轮评审列入的已落地核心，继续门禁。
+# 《IMS-整体测试方案》点名的权限同步、分成计算、场次 ID、风控评分、机密拦截
+# 在当前 main 还没有可测实现，不在本名单。
+app/services/auth.py
+app/api/deps.py
+app/services/access.py
+app/services/user.py
+app/db/session.py
+app/services/dict.py
+app/services/role.py

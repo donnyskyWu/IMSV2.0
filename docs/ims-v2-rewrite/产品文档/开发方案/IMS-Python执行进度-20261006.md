@@ -77,7 +77,7 @@
 
 ## 本地 MySQL ims 库初始化（可重复）
 
-1. **凭据**：环境变量 `IMS_MYSQL_USER` / `IMS_MYSQL_PASSWORD` / `IMS_MYSQL_HOST` / `IMS_MYSQL_PORT`（默认 `root` / `root` / `127.0.0.1` / `3306`）；业务库名 `IMS_DB=ims`、`IMS_OPS_DB=opsbiz`（见 `ims-backend/app/core.py`）。勿把真实密码写入仓库。
+1. **凭据**：连接信息只放在环境变量，仓库不写主机、端口、账号或库名。勿把真实密码写入仓库。
 2. **一键建库 + 表 + 种子**（PowerShell）：
    ```powershell
    Set-Location d:\self\sy\IMS系统产品\ims-backend
