@@ -112,6 +112,22 @@ jobs:
         working-directory: ims-web
         run: npx playwright install --with-deps chromium
 
+      - name: Start Vite and warm / and /login
+        working-directory: ims-web
+        run: |
+          nohup npm run dev > /tmp/vite.log 2>&1 &
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ || true)
+            if [ "$code" = "200" ]; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/ -o /dev/null
+          curl -fsS http://127.0.0.1:3000/login -o /dev/null
+          echo "vite warmed"
+          cat /tmp/vite.log
+
       - name: Run live proxy test
         working-directory: ims-web
         run: npm run test:live-proxy

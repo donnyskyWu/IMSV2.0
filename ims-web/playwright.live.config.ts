@@ -76,7 +76,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://127.0.0.1:3000',
-    reuseExistingServer: false,
+    // CI 先单独起 Vite 并请求 / 与 /login。这里复用那次进程，避免再冷启动一次。
+    reuseExistingServer: !!process.env.CI,
     timeout: 60_000,
     env: webServerEnv,
   },

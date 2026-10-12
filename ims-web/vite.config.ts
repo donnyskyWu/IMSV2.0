@@ -92,6 +92,43 @@ export default defineConfig(({ mode }) => {
     },
     // 开发服务器与生产构建并行时分开缓存目录，避免互相覆盖
     cacheDir: mode === 'development' ? 'node_modules/.vite' : 'node_modules/.vite-build',
+    // 登录页和布局是懒加载的。冷缓存第一次打开时，这些依赖不在入口扫描里，
+    // Vite 会临时预构建并整页重载，把正在进行的登录导航打断。
+    optimizeDeps: {
+      include: [
+        'vue',
+        'vue-router',
+        'pinia',
+        'axios',
+        'element-plus',
+        'element-plus/es',
+        'element-plus/es/locale/lang/zh-cn',
+        '@element-plus/icons-vue',
+        // 冷启动日志里实际触发 reloading 的样式，以及登录/布局直接用到的消息组件
+        ...[
+          'avatar',
+          'badge',
+          'base',
+          'button',
+          'dropdown',
+          'dropdown-item',
+          'dropdown-menu',
+          'form',
+          'form-item',
+          'icon',
+          'input',
+          'menu',
+          'menu-item',
+          'message',
+          'message-box',
+          'progress',
+          'scrollbar',
+          'sub-menu',
+          'table',
+          'table-column',
+        ].map((name) => `element-plus/es/components/${name}/style/css`),
+      ],
+    },
     server: {
       port: 3000,
       host: '127.0.0.1',
