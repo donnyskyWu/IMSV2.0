@@ -250,8 +250,36 @@ def test_test_admin_me_includes_system_and_auth_menus(tmp_path):
         _release_real_db(original_url, context_token)
 
 
+def _assert_auth_leaves(menus: list) -> dict:
+    """01 清单第 45 行：权限管理下两个叶子的名称、父级、path、权限码。"""
+    auth = next(item for item in menus if item["name"] == "权限管理")
+    assert auth["type"] == "DIR"
+    assert auth["path"] == "/ims/auth"
+    children = auth["children"]
+    assert [item["name"] for item in children] == ["组织架构同步", "岗位-角色供给规则"]
+    org_sync, position = children
+    # 第 32 行查看码挂在组织同步叶子上，path 不是 B0a 占位 /system/org-sync。
+    assert org_sync["name"] == "组织架构同步"
+    assert org_sync["path"] == "/ims/auth/org"
+    assert org_sync["permCode"] == "ims:system:org-sync:query"
+    assert org_sync["type"] == "MENU"
+    assert org_sync["parentId"] == auth["id"]
+    assert not org_sync.get("children")
+    # 第 35 行查看码挂在岗位规则叶子上。
+    assert position["name"] == "岗位-角色供给规则"
+    assert position["path"] == "/ims/auth/position"
+    assert position["permCode"] == "ims:auth:position-rule:query"
+    assert position["type"] == "MENU"
+    assert position["parentId"] == auth["id"]
+    assert not position.get("children")
+    nodes = _walk_menus(menus)
+    assert "/system/org-sync" not in {item.get("path") for item in nodes}
+    assert "BUTTON" not in {item["type"] for item in nodes}
+    return auth
+
+
 def test_auth_menu_children_are_org_and_position_without_buttons(tmp_path):
-    """权限管理下有组织同步、岗位两个子菜单，整棵树没有按钮。"""
+    """第 45 行：权限管理下只有组织架构同步和岗位规则，树里没有按钮。"""
     from app.main import app
     from tools.seed.users import E2E_PASSWORD
 
@@ -260,26 +288,63 @@ def test_auth_menu_children_are_org_and_position_without_buttons(tmp_path):
         with TestClient(app) as client:
             me_body = _login_me(client, "test_admin", E2E_PASSWORD)
             menus = me_body["data"]["menus"]
-            auth = next(item for item in menus if item["name"] == "权限管理")
-            assert auth["type"] == "DIR"
-            children = auth["children"]
-            org_sync = next(item for item in children if item["path"] == "/ims/auth/org")
-            position = next(item for item in children if item["path"] == "/ims/auth/position")
-            assert org_sync["name"] == "组织架构同步", "权限管理应有子菜单组织同步"
-            assert position["name"] == "岗位-角色供给规则", "权限管理应有子菜单岗位"
-            assert org_sync["type"] == "MENU"
-            assert position["type"] == "MENU"
-            assert org_sync["parentId"] == auth["id"]
-            assert position["parentId"] == auth["id"]
-            assert [item["name"] for item in children] == ["组织架构同步", "岗位-角色供给规则"]
+            _assert_auth_leaves(menus)
 
             nodes = _walk_menus(menus)
-            assert "BUTTON" not in {item["type"] for item in nodes}
             assert "执行同步" not in {item["name"] for item in nodes}
             assert "新建规则" not in {item["name"] for item in nodes}
             perms = set(me_body["data"]["permCodes"])
+            # 按钮不进菜单树，R1 仍能在 permCodes 里看到第 33、36 行。
             assert "ims:system:org-sync:run" in perms
             assert "ims:auth:position-rule:create" in perms
+    finally:
+        _release_real_db(original_url, context_token)
+
+
+def test_r1_r2_r4_me_auth_leaves_follow_feature_list(tmp_path):
+    """第 32、35 行：R1、R2、R4 都能在 /me 菜单树里看到两个叶子；写操作只有 R1。"""
+    from app.main import app
+    from tools.seed.grants import B1_PERM_ALL, B1_PERM_READONLY
+    from tools.seed.users import E2E_PASSWORD
+
+    # 第 32、34、35 行三方都有；第 33、36–39 行只有 R1。
+    shared = {
+        "ims:system:org-sync:query",
+        "ims:system:org-sync:export",
+        "ims:auth:position-rule:query",
+    }
+    r1_only = {
+        "ims:system:org-sync:run",
+        "ims:auth:position-rule:create",
+        "ims:auth:position-rule:update",
+        "ims:auth:position-rule:delete",
+        "ims:auth:position-rule:refresh",
+    }
+    assert shared == set(B1_PERM_READONLY)
+    assert shared | r1_only == set(B1_PERM_ALL)
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            admin = _login_me(client, "test_admin", E2E_PASSWORD)
+            admin_menus = admin["data"]["menus"]
+            _assert_auth_leaves(admin_menus)
+            admin_names = {item["name"] for item in admin_menus}
+            assert "系统管理" in admin_names
+            assert "权限管理" in admin_names
+            admin_codes = set(admin["data"]["permCodes"])
+            assert shared <= admin_codes
+            assert r1_only <= admin_codes
+
+            for username in ("test_xz", "test_yyzj"):
+                body = _login_me(client, username, E2E_PASSWORD)
+                menus = body["data"]["menus"]
+                _assert_auth_leaves(menus)
+                # R2、R4 本批只挂权限管理，看不到系统管理和写操作按钮码。
+                assert [item["name"] for item in menus] == ["权限管理"]
+                codes = set(body["data"]["permCodes"])
+                assert codes == shared
+                assert r1_only.isdisjoint(codes)
     finally:
         _release_real_db(original_url, context_token)
 

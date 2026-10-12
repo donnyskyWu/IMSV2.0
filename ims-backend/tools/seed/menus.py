@@ -8,11 +8,12 @@ Permission code format: ims:<domain>:<resource>[:<action>]
 parent_id 仍是 0、而种子父级不是根时，补成目录 → 菜单 → 按钮。
 已经挂到别的父级视为管理员调整，不再改。
 B0a 的「组织同步」若名称和路径都还是占位值，才同时改名称和路径。
+新写入的组织同步菜单不是占位路径，见下方「权限管理」子菜单（01 清单第 45 行）。
 """
 
 from tools.seed.timeutil import seed_now
 
-# B0a 占位。只有名称和路径都没被改过，才迁到 B1 菜单。
+# 只用于认出 B0a 未改过的旧行。新菜单不写这个 path，写入值见 MENUS 里的 /ims/auth/org。
 B0A_ORG_MENU = {
     "name": "组织同步",
     "path": "/system/org-sync",
@@ -159,6 +160,7 @@ MENUS = [
         ],
     },
     # Q18：工作台页面在 B3。菜单行已在本列表 sort=0，「权限管理」仍排第 2（系统管理 sort=1）。
+    # 01 清单第 45 行：父级「权限管理」下两个叶子，path 与权限码按该行逐字写入。
     {
         "name": "权限管理",
         "type": "DIR",
@@ -167,6 +169,7 @@ MENUS = [
         "sort": 2,
         "children": [
             {
+                # 第 45 行菜单名与 path；权限码是第 32 行 ims:system:org-sync:query。
                 "name": "组织架构同步",
                 "type": "MENU",
                 "path": "/ims/auth/org",
@@ -179,6 +182,7 @@ MENUS = [
                 ],
             },
             {
+                # 第 45 行菜单名与 path；权限码是第 35 行 ims:auth:position-rule:query。
                 "name": "岗位-角色供给规则",
                 "type": "MENU",
                 "path": "/ims/auth/position",
