@@ -63,9 +63,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-# NOTE: Target is 80%, temporarily lowered to 35% until integration tests added
-# Current coverage is 38% with behavioral unit tests only
-fail_under = 35
+fail_under = 80
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

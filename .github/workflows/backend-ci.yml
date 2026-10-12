@@ -74,9 +74,7 @@ jobs:
       - name: Check coverage threshold
         run: |
           cd ims-backend
-          # NOTE: Target is 80%, currently at 38% due to behavioral tests
-          # Integration tests needed for API/service layers to reach gate
-          coverage report --fail-under=35
+          coverage report --fail-under=80
 
   static-checks:
     name: Static Checks

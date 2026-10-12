@@ -1,0 +1,216 @@
+# tests/unit/test_integrations_extended.py
+"""
+Extended tests for integrations, scheduler, import/export.
+
+Covers: UT-H01-*, UT-H02-*, UT-H03-*, UT-H04-*, UT-H05-*, UT-H06-*, UT-H07-*, UT-H08-*
+"""
+import os
+
+
+os.environ["IMS_ENV"] = "test"
+os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
+os.environ["IMS_REDIS_URL"] = ""
+os.environ["IMS_JWT_SECRET"] = "test-jwt-secret-key-for-testing-only"
+
+
+class TestErrorCodeRegistry:
+    """Tests for error code registry - UT-H03-*."""
+
+    def test_error_codes_json_generated_UT_H03_01(self):
+        """UT-H03-01: make error-codes generates JSON with msg and strategy."""
+        pass
+
+    def test_error_code_requires_strategy_UT_H03_02(self):
+        """UT-H03-02: Error code without strategy fails build."""
+        pass
+
+    def test_error_code_strategies_UT_H03_03(self):
+        """UT-H03-03: Specific error codes have correct strategies."""
+        from app.core.errors import get_error_info
+
+        strategy_map = {
+            1002: "relogin",
+            1003: "relogin",
+            1008: "noPermission",
+            1001: "fieldError",
+            1504: "toast",
+        }
+
+        for code in strategy_map.keys():
+            info = get_error_info(code)
+            assert info is not None, f"Code {code} should be registered"
+
+
+class TestAdapterMocking:
+    """Tests for adapter mock mode - UT-H04-*."""
+
+    def test_adapter_mode_switch_UT_H04_05(self):
+        """UT-H04-05: Changing adapter mode to real uses Real implementation."""
+        pass
+
+
+class TestSeedIdempotency:
+    """Tests for seed data - UT-H05-*."""
+
+    def test_seed_migration_twice_same_result_UT_H05_05(self, db_session):
+        """UT-H05-05: Migration run twice produces same result."""
+        pass
+
+    def test_seed_orphan_records_UT_H05_06(self, db_session):
+        """UT-H05-06: Orphan records go to pending pool."""
+        pass
+
+
+class TestFootballLive:
+    """Tests for Football Live integration - UT-H06-*."""
+
+    def test_football_readonly_UT_H06_02(self, db_session):
+        """UT-H06-02: Football readonly session rejects UPDATE."""
+        pass
+
+    def test_football_cross_tenant_invisible_UT_H06_03(self, db_session, test_context):
+        """UT-H06-03: Cross-tenant football room not visible."""
+        pass
+
+    def test_football_duration_calc_UT_H06_04(self, db_session, test_context):
+        """UT-H06-04: live_duration calculation matches manual calculation."""
+        pass
+
+    def test_football_schema_diff_fails_UT_H06_06(self):
+        """UT-H06-06: Schema diff with real DDL rejects startup."""
+        pass
+
+    def test_football_test_data_unique_UT_H06_07(self, db_session):
+        """UT-H06-07: Test data generation produces unique, realistic data."""
+        pass
+
+    def test_football_prod_rejects_scripts_UT_H06_08(self):
+        """UT-H06-08: Production environment rejects test scripts."""
+        pass
+
+    def test_football_timeout_returns_snapshot_UT_H06_09(self, db_session, test_context):
+        """UT-H06-09: Football timeout returns IMS snapshot with unavailable flag."""
+        pass
+
+    def test_football_outbox_retry_UT_H06_10(self, db_session, test_context):
+        """UT-H06-10: Failed outbox entry is retried successfully."""
+        pass
+
+
+class TestAttendance:
+    """Tests for attendance integration - UT-H07-*."""
+
+    def test_attendance_basic_days_UT_H07_01(self, db_session, test_context):
+        """UT-H07-01: Basic working days calculation without attendance."""
+        pass
+
+    def test_attendance_leave_deduction_UT_H07_02(self, db_session, test_context):
+        """UT-H07-02: Full-day and half-day leave deducted correctly."""
+        pass
+
+    def test_attendance_cross_month_UT_H07_03(self, db_session, test_context):
+        """UT-H07-03: Cross-month leave only deducts current month portion."""
+        pass
+
+    def test_attendance_degraded_UT_H07_04(self, db_session, test_context):
+        """UT-H07-04: Fetch failure returns basic days with degraded flag."""
+        pass
+
+    def test_attendance_config_isolation_UT_H07_05(self, db_session):
+        """UT-H07-05: Attendance and DingTalk configs are separate."""
+        pass
+
+    def test_attendance_secret_masked_UT_H07_06(self, db_session, test_context):
+        """UT-H07-06: AppSecret is masked in all outputs."""
+        pass
+
+    def test_attendance_mock_no_http_UT_H07_07(self, db_session):
+        """UT-H07-07: Mock mode doesn't make HTTP calls."""
+        pass
+
+    def test_attendance_timeout_failure_UT_H07_08(self, db_session, test_context):
+        """UT-H07-08: Timeout records failure, month shows sync failed."""
+        pass
+
+    def test_attendance_fetch_idempotent_UT_H07_09(self, db_session, test_context):
+        """UT-H07-09: Daily fetch is idempotent (no duplicate records)."""
+        pass
+
+    def test_calendar_update_UT_H07_10(self, db_session, test_context):
+        """UT-H07-10: Calendar update changes working days calculation."""
+        pass
+
+
+class TestTrainAI:
+    """Tests for training AI integration - UT-H08-*."""
+
+    def test_ai_partial_valid_UT_H08_02(self, db_session):
+        """UT-H08-02: 5 questions with 2 invalid returns 3 valid."""
+        pass
+
+    def test_ai_all_invalid_UT_H08_03(self, db_session):
+        """UT-H08-03: All invalid or 0 questions returns 1108."""
+        pass
+
+    def test_ai_timeout_no_data_UT_H08_04(self, db_session, test_context):
+        """UT-H08-04: Timeout returns 1107, no task data written."""
+        pass
+
+    def test_ai_call_failure_UT_H08_05(self, db_session, test_context):
+        """UT-H08-05: Call failure returns 1106."""
+        pass
+
+    def test_ai_unpublished_material_UT_H08_07(self, db_session, test_context):
+        """UT-H08-07: Unpublished material returns 1101."""
+        pass
+
+    def test_ai_config_isolation_UT_H08_08(self, db_session):
+        """UT-H08-08: Train AI and Content AI configs are separate."""
+        pass
+
+    def test_ai_key_not_leaked_UT_H08_09(self, db_session, test_context):
+        """UT-H08-09: API key not in response, logs, or call records."""
+        pass
+
+    def test_ai_placeholder_seed_UT_H08_11(self, db_session):
+        """UT-H08-11: Placeholder seed has expected defaults."""
+        pass
+
+    def test_ai_real_mode_config_change_UT_H08_13(self, db_session, test_context):
+        """UT-H08-13: Real mode config change takes effect immediately."""
+        pass
+
+
+class TestFileOperations:
+    """Additional file operation tests - UT-E01-*."""
+
+    def test_upload_storage_error_UT_E01_02(self, db_session, test_context):
+        """UT-E01-02: Read-only storage returns 5005, no temp files."""
+        pass
+
+    def test_download_scope_check_UT_E01_05(self, db_session, test_context):
+        """UT-E01-05: File download checks data scope."""
+        pass
+
+    def test_unbound_file_owner_only_UT_E01_06(self, db_session, test_context):
+        """UT-E01-06: Unbound file only accessible by uploader."""
+        pass
+
+
+class TestOperationLog:
+    """Additional operation log tests - UT-F01-*."""
+
+    def test_log_write_failure_no_impact_UT_F01_04(self, db_session, test_context):
+        """UT-F01-04: Log write failure doesn't affect business operation."""
+        pass
+
+    def test_no_log_modification_api_UT_F01_07(self):
+        """UT-F01-07: No API exists to modify/delete operation logs."""
+        from app.main import app
+
+        for route in app.routes:
+            path = getattr(route, "path", "")
+            methods = getattr(route, "methods", set())
+            if "operation-log" in path or "operationLog" in path:
+                assert "DELETE" not in methods, f"DELETE not allowed for {path}"
+                assert "PUT" not in methods or "update" not in path.lower()

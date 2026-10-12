@@ -57,19 +57,27 @@ def main():
     # Paths
     repo_root = Path(__file__).parent.parent.parent
     spec_path = repo_root / 'docs/ims-v2-rewrite/modules/B0a-框架/02-单测用例.md'
-    tests_dir = Path(__file__).parent.parent / 'tests/unit'
+    tests_root = Path(__file__).parent.parent / 'tests'
     
     if not spec_path.exists():
         print(f"ERROR: Spec file not found: {spec_path}")
         sys.exit(1)
     
-    if not tests_dir.exists():
-        print(f"ERROR: Tests directory not found: {tests_dir}")
+    if not tests_root.exists():
+        print(f"ERROR: Tests directory not found: {tests_root}")
         sys.exit(1)
     
-    # Parse
+    # Parse from both unit and integration tests
     spec_ut_ids = parse_ut_ids_from_spec(str(spec_path))
-    test_ut_mapping = parse_ut_ids_from_tests(str(tests_dir))
+    test_ut_mapping = {}
+    for subdir in ['unit', 'integration']:
+        subdir_path = tests_root / subdir
+        if subdir_path.exists():
+            mapping = parse_ut_ids_from_tests(str(subdir_path))
+            for ut_id, tests in mapping.items():
+                if ut_id not in test_ut_mapping:
+                    test_ut_mapping[ut_id] = []
+                test_ut_mapping[ut_id].extend(tests)
     covered_ut_ids = set(test_ut_mapping.keys())
     
     # Calculate
