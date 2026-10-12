@@ -10,6 +10,7 @@
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
  * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏里出现的名字必须来自 /me。
  *    现在的 main 会进示例页并画出这些名字；#12 只画已登记叶子，没登记时可以没有菜单项。
+ * 5. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
  */
 import { expect, test } from '@playwright/test'
 
@@ -102,5 +103,23 @@ test.describe('Vite 代理联通真实后端', () => {
     if (new URL(page.url()).pathname.startsWith('/demo/')) {
       expect(matched.length).toBeGreaterThan(0)
     }
+  })
+
+  test('不带令牌经 Vite 调用 /me 返回 401 与 1002', async ({ page }) => {
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.clear()
+      sessionStorage.clear()
+    })
+
+    const me = await page.evaluate(async () => {
+      const response = await fetch('/admin-api/ims/auth/me')
+      const body = await response.json()
+      return { status: response.status, url: response.url, body }
+    })
+    expect(new URL(me.url).origin).toBe('http://127.0.0.1:3000')
+    expect(me.url).toContain('/admin-api/ims/auth/me')
+    expect(me.status).toBe(401)
+    expect(me.body.code).toBe(1002)
   })
 })

@@ -133,6 +133,10 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '127.0.0.1',
       strictPort: true,
+      // Playwright 报告写在前端目录下。排除后，Vite 日志不再出现 page reload playwright-report。
+      watch: {
+        ignored: ['**/playwright-report/**'],
+      },
       // 与 preview 使用同一份代理，避免预览环境和开发环境行为不一致
       ...(proxy ? { proxy } : {}),
     },

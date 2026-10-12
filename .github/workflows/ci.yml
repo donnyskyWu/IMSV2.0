@@ -139,9 +139,13 @@ jobs:
       - name: Print Vite log and fail on reload
         if: always()
         run: |
+          if [ ! -f /tmp/vite.log ]; then
+            echo "Vite 没有写出 /tmp/vite.log，无法判断是否发生 reloading"
+            exit 1
+          fi
           echo "===== /tmp/vite.log ====="
           cat /tmp/vite.log
-          if grep -q "reloading" /tmp/vite.log; then
+          if grep -qi "reloading" /tmp/vite.log; then
             echo "Vite 日志出现 reloading"
             exit 1
           fi

@@ -307,10 +307,51 @@ test.describe('R. 请求层', () => {
     await page.goto('/demo/layout')
     await page.waitForSelector('.app-layout')
 
-    // 权限变更通过重新获取 /me 实现
-    // 验证 /me 接口可以正常调用
-    const response = await page.request.get('/admin-api/ims/auth/me')
-    expect(response.status()).toBe(200)
+    // 带上页面里的令牌再取 /me，已登录响应仍是 200。
+    const me = await page.evaluate(async () => {
+      const token = localStorage.getItem('ims_access_token')
+      const response = await fetch('/admin-api/ims/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const body = await response.json()
+      return { status: response.status, code: body.code as number }
+    })
+    expect(me.status).toBe(200)
+    expect(me.code).toBe(0)
+  })
+
+  test('未登录 /me 与后端一致返回 401 和 1002', async ({ page }) => {
+    await page.goto('/login')
+    const me = await page.evaluate(async () => {
+      const response = await fetch('/admin-api/ims/auth/me')
+      const body = await response.json()
+      return { status: response.status, code: body.code as number, msg: String(body.msg ?? '') }
+    })
+    expect(me.status).toBe(401)
+    expect(me.code).toBe(1002)
+    expect(me.msg).toContain('登录已失效')
+  })
+
+  test('无效令牌访问 /me 返回 401/1002 时清令牌并回到登录页', async ({ page }) => {
+    await page.goto('/demo/layout')
+    await page.waitForSelector('.app-layout')
+    await page.evaluate(() => {
+      localStorage.setItem('ims_access_token', 'expired-token')
+      localStorage.setItem('ims_refresh_token', 'expired-refresh')
+    })
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 1002, msg: '登录已失效，请重新登录', data: null }),
+      })
+    })
+    await page.reload()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByPlaceholder('请输入用户名')).toBeVisible()
+    await expect(page.locator('.app-layout')).toHaveCount(0)
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
+    await expect(page.evaluate(() => localStorage.getItem('ims_refresh_token'))).resolves.toBeNull()
   })
 
   test('VC-R-14: 字典变更实时生效', async ({ page }) => {

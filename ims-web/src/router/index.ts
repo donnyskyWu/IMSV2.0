@@ -177,6 +177,14 @@ function mustResetPassword(): boolean {
   return authStore.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1'
 }
 
+function failureCode(err: unknown): number | undefined {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code: unknown }).code
+    return typeof code === 'number' ? code : undefined
+  }
+  return undefined
+}
+
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
@@ -247,7 +255,15 @@ router.beforeEach(async (to, _from, next) => {
   if (authStore.permCodes.length === 0 && !isPasswordPath(to.path)) {
     try {
       await authStore.fetchUserInfo()
-    } catch {
+    } catch (err) {
+      const code = failureCode(err)
+      // /me 返回 401 + 1002（或 1003 被踢）时清会话回登录页，不再自动进入示例页。
+      if (code === 1002 || code === 1003) {
+        authStore.clearSession()
+        sessionStorage.setItem('ims_require_auth', '1')
+        next('/login')
+        return
+      }
       if (demoEnabled && to.path.startsWith('/demo')) {
         authStore.mockLogin()
       }

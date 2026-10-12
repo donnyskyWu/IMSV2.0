@@ -132,6 +132,8 @@ async function refreshAccessToken(): Promise<string | null> {
 
 function redirectToLogin(message = '登录已失效，请重新登录'): void {
   clearTokens()
+  // 记下需要真实登录，避免开发环境在浏览器后退时又自动进入示例页。
+  sessionStorage.setItem('ims_require_auth', '1')
   const currentPath = router.currentRoute.value.fullPath
   if (currentPath !== '/login' && !currentPath.startsWith('/login?')) {
     localStorage.setItem(REDIRECT_KEY, currentPath)
@@ -246,9 +248,20 @@ function createRequest(): AxiosInstance {
       return Promise.reject(new ApiError(result.code, result.msg || '请求失败', result.data))
     },
     async (error: AxiosError) => {
+      // #17：未登录、无效或过期令牌访问 /me 等接口返回 HTTP 401。
+      // 这里清令牌并回登录页，不走 HTTP 200 + 1002 的静默刷新。
       if (error.response?.status === 401) {
-        redirectToLogin()
-        return Promise.reject(error)
+        const result = (typeof error.response.data === 'object' && error.response.data)
+          ? error.response.data as CommonResult
+          : undefined
+        const code = result?.code === ErrorCode.KICKED_OFFLINE
+          ? ErrorCode.KICKED_OFFLINE
+          : ErrorCode.TOKEN_EXPIRED
+        const message = code === ErrorCode.KICKED_OFFLINE
+          ? '您的账号已在其他设备登录，本设备已下线'
+          : (result?.msg || '登录已失效，请重新登录')
+        redirectToLogin(message)
+        return Promise.reject(new ApiError(code, message, result?.data ?? null))
       }
 
       const silent = Boolean(error.config?.skipGlobalError)

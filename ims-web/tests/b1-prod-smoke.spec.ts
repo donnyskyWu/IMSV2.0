@@ -27,6 +27,19 @@ async function installNoMenuAuth(page: Page) {
     })))
   })
   await page.route('**/admin-api/ims/auth/me', async (route: Route) => {
+    const authorization = route.request().headers().authorization || ''
+    const token = authorization.toLowerCase().startsWith('bearer ')
+      ? authorization.slice(7).trim()
+      : ''
+    // 未登录与后端 #17 一致：HTTP 401 + code 1002。
+    if (!token) {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 1002, msg: '登录已失效，请重新登录', data: null }),
+      })
+      return
+    }
     await route.fulfill(json(ok({
       user: {
         id: '9',

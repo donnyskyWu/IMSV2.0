@@ -68,6 +68,19 @@ async function fulfillLogin(route: Route, body: unknown) {
 async function installAuth(page: Page, login: (route: Route) => Promise<void>) {
   await page.route('**/admin-api/ims/auth/login', login)
   await page.route('**/admin-api/ims/auth/me', async (route) => {
+    const authorization = route.request().headers().authorization || ''
+    const token = authorization.toLowerCase().startsWith('bearer ')
+      ? authorization.slice(7).trim()
+      : ''
+    // 未登录与后端 #17 一致：HTTP 401 + code 1002。
+    if (!token) {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify(fail(1002, '登录已失效，请重新登录')),
+      })
+      return
+    }
     await route.fulfill(json(mePayload()))
   })
   await page.route('**/admin-api/ims/auth/logout', async (route) => {
