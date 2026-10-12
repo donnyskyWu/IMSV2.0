@@ -34,6 +34,11 @@ class AuthService:
 
     # Cache key prefixes
     SESSION_PREFIX = "ims:session:"
+    # 刷新令牌 → 会话。领取时用 GETDEL，保证同一枚令牌只会被用走一次。
+    REFRESH_INDEX_PREFIX = "ims:refresh:"
+    # 已经轮换过的刷新令牌 → 会话。重放时凭它吊销整段会话。
+    REFRESH_USED_PREFIX = "ims:refresh_used:"
+    REFRESH_LOCK_PREFIX = "ims:refresh_lock:"
     USER_SESSIONS_PREFIX = "ims:user_sessions:"
     LOGIN_FAIL_PREFIX = "ims:login_fail:"
     TOKEN_BLACKLIST_PREFIX = "ims:token_blacklist:"
@@ -181,6 +186,12 @@ class AuthService:
             session_data,
             ttl=settings.jwt.refresh_token_ttl,
         )
+        # 反向索引，刷新时不必扫描全部会话。
+        Cache.set(
+            f"{self.REFRESH_INDEX_PREFIX}{refresh_token}",
+            session_id,
+            ttl=settings.jwt.refresh_token_ttl,
+        )
 
         # Add to user's session list and enforce limit
         await self._add_user_session(user.id, session_id)
@@ -216,7 +227,10 @@ class AuthService:
                         oldest_session = sid
 
             if oldest_session:
-                # Invalidate oldest session
+                # 被挤掉的会话连同它的刷新令牌一起作废。
+                self._forget_refresh_index(
+                    Cache.get_json(f"{self.SESSION_PREFIX}{oldest_session}")
+                )
                 Cache.delete(f"{self.SESSION_PREFIX}{oldest_session}")
                 Cache.srem(sessions_key, oldest_session)
 
@@ -331,25 +345,117 @@ class AuthService:
 
         return result
 
+    def _forget_refresh_index(self, session_data: Any) -> None:
+        """删掉会话上当前刷新令牌的反向索引，避免登出或改密后旧令牌还能被领走。"""
+        if isinstance(session_data, dict):
+            refresh_token = session_data.get("refresh_token")
+            if refresh_token:
+                Cache.delete(f"{self.REFRESH_INDEX_PREFIX}{refresh_token}")
+
+    async def _revoke_session(self, session_id: str) -> None:
+        """吊销整段会话：当前 access 与刚换发的 refresh 都失效。"""
+        session_key = f"{self.SESSION_PREFIX}{session_id}"
+        session_data = Cache.get_json(session_key)
+        self._forget_refresh_index(session_data)
+        user_id = session_data.get("user_id") if isinstance(session_data, dict) else None
+        Cache.delete(session_key)
+        # 黑名单挡住同一 sid 的访问令牌，即使会话键被重新写回也不放行。
+        Cache.set(
+            f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}",
+            "1",
+            ttl=settings.jwt.access_token_ttl,
+        )
+        if user_id is not None:
+            Cache.srem(f"{self.USER_SESSIONS_PREFIX}{user_id}", session_id)
+
+    async def _issue_rotated_tokens(
+        self,
+        session_id: str,
+        refresh_token: str,
+        used_key: str,
+    ) -> dict[str, Any]:
+        """校验会话后签发新的 access 与 refresh，并把旧刷新令牌记成已轮换。"""
+        from app.domains.sys.models import User
+
+        session_key = f"{self.SESSION_PREFIX}{session_id}"
+        session_data = Cache.get_json(session_key)
+        if not isinstance(session_data, dict) or session_data.get("refresh_token") != refresh_token:
+            raise BizError(1002)
+        if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
+            raise BizError(1002)
+
+        db = get_db_session()
+        user = db.query(User).filter(
+            User.id == int(session_data["user_id"]),
+            User.deleted == 0,
+        ).first()
+        if user is None or user.status in ("FROZEN", "RESIGNED"):
+            raise BizError(1002)
+
+        now = get_now()
+        new_refresh = secrets.token_urlsafe(32)
+        access_payload = {
+            "sub": str(user.id),
+            "tid": str(user.tenant_id),
+            "sid": session_id,
+            "exp": now + timedelta(seconds=settings.jwt.access_token_ttl),
+            "iat": now,
+            "type": "access",
+        }
+        access_token = jwt.encode(
+            access_payload,
+            settings.jwt.secret,
+            algorithm=settings.jwt.algorithm,
+        )
+        session_data["refresh_token"] = new_refresh
+        Cache.set_json(session_key, session_data, ttl=settings.jwt.refresh_token_ttl)
+        Cache.set(
+            f"{self.REFRESH_INDEX_PREFIX}{new_refresh}",
+            session_id,
+            ttl=settings.jwt.refresh_token_ttl,
+        )
+        # 新令牌落库之后才标记旧令牌。重放旧令牌时凭这个标记吊销整段会话。
+        Cache.set(used_key, session_id, ttl=settings.jwt.refresh_token_ttl)
+        return {
+            "access_token": access_token,
+            "refresh_token": new_refresh,
+            "expires_in": settings.jwt.access_token_ttl,
+            "pwd_reset_required": bool(user.pwd_reset_required),
+        }
+
     async def refresh(self, refresh_token: str) -> dict[str, Any]:
         """
-        Refresh access token.
+        轮换访问令牌和刷新令牌。
 
-        Rules per FP-D01-03:
-        - Valid refresh -> new access + new refresh
-        - Old refresh immediately invalidated
-        - Invalid/expired/reused -> 1002
+        旧刷新令牌用 Redis Lua（SET NX + GETDEL）一次领走：
+        - 领到会话：签发新的 access 与 refresh，旧 refresh 立即失效
+        - 同一枚令牌并发领取：只有一个成功，另一个 1002，且不吊销会话
+        - GETDEL 为空且没有已轮换记录：1002
+        - 重放已经轮换过的刷新令牌：1002，并吊销整段会话
+          （刚签发的 access 与 refresh 一并失效）
         """
-        # Find session by refresh token
-        # This is inefficient but works for now - should use reverse index
-        get_db_session()
+        if not refresh_token:
+            raise BizError(1002)
 
-
-        # Scan sessions (in production, use a refresh token -> session index)
-        # For now, we'll need to store refresh tokens with user reference
-        # This is a simplified implementation
-
-        raise BizError(1002, msg="请重新登录")  # Placeholder
+        lock_key = f"{self.REFRESH_LOCK_PREFIX}{refresh_token}"
+        index_key = f"{self.REFRESH_INDEX_PREFIX}{refresh_token}"
+        used_key = f"{self.REFRESH_USED_PREFIX}{refresh_token}"
+        # status: ok / concurrent / reuse / missing（GETDEL 为空且不是重放）
+        session_id, status = Cache.claim_refresh(lock_key, index_key, used_key, lock_ttl=10)
+        try:
+            if status == "concurrent":
+                raise BizError(1002)
+            if status == "reuse":
+                await self._revoke_session(session_id)
+                raise BizError(1002)
+            if status != "ok":
+                # GETDEL 为空：令牌不存在、已过期，或登出/改密时索引已被删掉。
+                raise BizError(1002)
+            return await self._issue_rotated_tokens(session_id, refresh_token, used_key)
+        finally:
+            # 并发失败者没有拿到锁，不能把赢家的锁删掉。
+            if status != "concurrent":
+                Cache.delete(lock_key)
 
     async def logout(self, token: str) -> None:
         """
@@ -371,8 +477,10 @@ class AuthService:
             user_id = payload.get("sub")
 
             if session_id:
-                # Delete session
-                Cache.delete(f"{self.SESSION_PREFIX}{session_id}")
+                session_key = f"{self.SESSION_PREFIX}{session_id}"
+                # 先丢掉刷新令牌索引，再删会话。旧 refresh 不能再换发。
+                self._forget_refresh_index(Cache.get_json(session_key))
+                Cache.delete(session_key)
 
                 # Blacklist the session ID
                 exp = payload.get("exp")
@@ -524,15 +632,19 @@ class AuthService:
             Menu.status == "ENABLED",
             Menu.deleted == 0,
         ).all()
-        return [
-            {
-                "id": str(menu.id),
-                "name": menu.name,
-                "perm_code": menu.perm_code,
-                "type": menu.type,
-            }
-            for menu in menus
-        ]
+        return [self._menu_node(menu) for menu in menus]
+
+    def _menu_node(self, menu: Any) -> dict[str, Any]:
+        """沿用 id/name/perm_code/type。MENU 再带上库里的路由 path，目录不补。"""
+        node = {
+            "id": str(menu.id),
+            "name": menu.name,
+            "perm_code": menu.perm_code,
+            "type": menu.type,
+        }
+        if menu.type == "MENU":
+            node["path"] = (menu.path or "").strip()
+        return node
 
     async def change_password(
         self, user_id: int, new_password: str, keep_session_id: str
@@ -550,7 +662,10 @@ class AuthService:
         for sid in list(Cache.smembers(sessions_key)):
             if sid == keep_session_id:
                 continue
-            Cache.delete(f"{self.SESSION_PREFIX}{sid}")
+            session_key = f"{self.SESSION_PREFIX}{sid}"
+            # 其它会话的旧刷新令牌一并失效，当前这次登录的刷新令牌保留。
+            self._forget_refresh_index(Cache.get_json(session_key))
+            Cache.delete(session_key)
             Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
             Cache.srem(sessions_key, sid)
         session.flush()

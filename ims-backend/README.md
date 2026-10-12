@@ -159,4 +159,5 @@ mypy app/ --ignore-missing-imports
 
 ## 版本历史
 
+- **2.0.1**: 刷新令牌用 Redis Lua（SET NX + GETDEL）原子轮换；重放已轮换的刷新令牌会吊销整段会话。`/me` 的 MENU 节点返回种子里的 `path`。
 - **2.0.0**: 初始版本，框架核心实现
