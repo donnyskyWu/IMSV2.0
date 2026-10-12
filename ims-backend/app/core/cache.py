@@ -43,7 +43,7 @@ def init_cache() -> None:
             _cache_mode = "UP"
             logger.info("Redis connection established")
         except Exception as e:
-            if settings.env == "dev":
+            if settings.env in ("dev", "test"):
                 logger.warning(f"Redis unavailable, using in-memory cache: {e}")
                 _redis_client = None
                 _cache_mode = "MEMORY"
@@ -51,7 +51,7 @@ def init_cache() -> None:
                 raise RuntimeError(
                     f"Redis connection required for {settings.env} environment"
                 ) from e
-    elif settings.env == "dev":
+    elif settings.env in ("dev", "test"):
         logger.info("Redis not configured, using in-memory cache")
         _cache_mode = "MEMORY"
     else:
