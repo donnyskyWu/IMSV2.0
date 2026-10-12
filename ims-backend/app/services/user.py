@@ -341,3 +341,145 @@ class UserService:
         # TODO: Use configured secret key
         key = b"ims_mobile_hash_key"
         return hmac.new(key, mobile.encode(), hashlib.sha256).hexdigest()
+    
+    @transactional
+    async def update_user_depts(
+        self,
+        user_id: str,
+        dept_ids: list[str],
+        main_dept_id: str,
+    ) -> None:
+        """
+        Update user's department assignments.
+        
+        Rules per FP-B03-02:
+        - User can belong to multiple departments
+        - Must have exactly one main department
+        - Removing main dept requires specifying another main first
+        - Removing all depts auto-assigns to "待分配" dept
+        
+        Args:
+            user_id: User ID
+            dept_ids: List of department IDs
+            main_dept_id: Main department ID
+        """
+        from app.domains.sys.models import User, UserDept, Dept
+        session = get_db_session()
+        
+        tenant_id = ctx.tenant_id
+        user_id_int = int(user_id)
+        
+        # Get user
+        user = session.query(User).filter(
+            User.id == user_id_int,
+            User.tenant_id == tenant_id,
+            User.deleted == 0,
+        ).first()
+        
+        if not user:
+            raise BizError(1504)
+        
+        dept_id_ints = [int(d) for d in dept_ids]
+        main_dept_id_int = int(main_dept_id)
+        
+        # If no depts provided, assign to "待分配"
+        if not dept_id_ints:
+            system_dept = session.query(Dept).filter(
+                Dept.source == "SYSTEM",
+                Dept.tenant_id == tenant_id,
+                Dept.deleted == 0,
+            ).first()
+            
+            if system_dept:
+                dept_id_ints = [system_dept.id]
+                main_dept_id_int = system_dept.id
+            else:
+                raise BizError(1001, msg="未找到系统部门")
+        
+        # Main dept must be in dept list
+        if main_dept_id_int not in dept_id_ints:
+            raise BizError(1001, msg="主部门必须在所属部门列表中")
+        
+        # Validate all depts exist and are enabled
+        depts = session.query(Dept).filter(
+            Dept.id.in_(dept_id_ints),
+            Dept.tenant_id == tenant_id,
+            Dept.deleted == 0,
+        ).all()
+        
+        if len(depts) != len(dept_id_ints):
+            raise BizError(1500)
+        
+        for dept in depts:
+            if dept.status != "ENABLED":
+                raise BizError(1501)
+        
+        # Delete existing associations
+        session.query(UserDept).filter(
+            UserDept.user_id == user_id_int,
+            UserDept.tenant_id == tenant_id,
+        ).delete()
+        
+        # Create new associations
+        for dept_id in dept_id_ints:
+            user_dept = UserDept(
+                tenant_id=tenant_id,
+                user_id=user_id_int,
+                dept_id=dept_id,
+                is_main=(dept_id == main_dept_id_int),
+                source="LOCAL",
+            )
+            session.add(user_dept)
+        
+        # Update user's main dept
+        user.main_dept_id = main_dept_id_int
+        
+        session.flush()
+    
+    @transactional
+    async def delete_user(self, user_id: str) -> None:
+        """
+        Delete user.
+        
+        Rules per FP-B03-01 item 3:
+        - Only users who never logged in AND have no business references can be deleted
+        - RESIGNED users cannot be deleted -> 1502
+        
+        Args:
+            user_id: User ID
+        """
+        from app.domains.sys.models import User, UserDept
+        session = get_db_session()
+        
+        tenant_id = ctx.tenant_id
+        user_id_int = int(user_id)
+        
+        user = session.query(User).filter(
+            User.id == user_id_int,
+            User.tenant_id == tenant_id,
+            User.deleted == 0,
+        ).first()
+        
+        if not user:
+            raise BizError(1504)
+        
+        # RESIGNED users cannot be deleted
+        if user.status == "RESIGNED":
+            raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
+        
+        # Users who have logged in cannot be deleted
+        if user.last_login_time is not None:
+            raise BizError(1502, refs=[{"entity": "有登录记录的用户", "count": 1}])
+        
+        # TODO: Check for business references (in future modules)
+        
+        # Delete user-dept associations
+        session.query(UserDept).filter(
+            UserDept.user_id == user_id_int,
+            UserDept.tenant_id == tenant_id,
+        ).delete()
+        
+        # Soft delete user
+        user.deleted = user.id
+        
+        session.flush()

@@ -785,3 +785,51 @@ class IntegrityScan(AuditBase):
         comment="RUNNING/SUCCESS/FAILED"
     )
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class OrgSyncBatch(AuditBase):
+    """
+    Organization sync batch model (FP-D07-04).
+    
+    Table: ims_sys_org_sync_batch
+    
+    Records each DingTalk sync operation with counts.
+    """
+    
+    __tablename__ = "ims_sys_org_sync_batch"
+    
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING",
+        comment="PENDING/RUNNING/SUCCESS/FAILED"
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, comment="开始时间"
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, comment="完成时间"
+    )
+    added_depts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="新增部门数"
+    )
+    updated_depts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="更新部门数"
+    )
+    removed_depts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="删除部门数"
+    )
+    added_users: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="新增用户数"
+    )
+    updated_users: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="更新用户数"
+    )
+    removed_users: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="删除用户数"
+    )
+    error_msg: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="错误信息"
+    )
+    
+    __table_args__ = (
+        Index("idx_org_sync_batch_time", "started_at"),
+    )

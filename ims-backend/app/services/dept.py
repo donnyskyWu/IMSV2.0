@@ -561,6 +561,39 @@ class DeptService:
         dept.deleted = dept.id
         session.flush()
     
+    @transactional
+    async def confirm_orphan_dept(self, dept_id: str) -> None:
+        """
+        Confirm keeping a local orphan department.
+        
+        Rules per FP-D07-02 item 7:
+        - Sets local_orphan=0, marking dept as confirmed to keep
+        - Only applicable to departments with local_orphan=1
+        
+        Args:
+            dept_id: Department ID
+        """
+        from app.domains.sys.models import Dept
+        session = get_db_session()
+        
+        tenant_id = ctx.tenant_id
+        dept_id_int = int(dept_id)
+        
+        dept = session.query(Dept).filter(
+            Dept.id == dept_id_int,
+            Dept.tenant_id == tenant_id,
+            Dept.deleted == 0,
+        ).first()
+        
+        if not dept:
+            raise BizError(1504)
+        
+        if not dept.local_orphan:
+            raise BizError(1001, msg="该部门不是待确认状态")
+        
+        dept.local_orphan = False
+        session.flush()
+    
     def _dept_to_response(self, dept) -> dict[str, Any]:
         """Convert department to response dict."""
         return {

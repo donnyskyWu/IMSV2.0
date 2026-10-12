@@ -181,6 +181,11 @@ def register_routes(app: FastAPI) -> None:
     
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])
+    
+    # Demo routes - test environment only (FP-B08-08)
+    if settings.env == "test":
+        from app.api.demo import router as demo_router
+        app.include_router(demo_router, prefix="/admin-api/ims/demo", tags=["演示"])
 
 
 def validate_routes(app: FastAPI) -> None:

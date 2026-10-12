@@ -407,6 +407,141 @@ async def create_user(request: UserCreateRequest) -> CommonResult[UserListItem]:
 
 # ============== Role Endpoints ==============
 
+@router.put(
+    "/dept/confirm-orphan",
+    response_model=CommonResult,
+    summary="确认保留待确认部门",
+    dependencies=[Depends(require_permission("ims:system:dept:update"))],
+)
+async def confirm_orphan_dept(
+    id: str = Query(..., description="部门ID"),
+) -> CommonResult:
+    """
+    Confirm keeping a local orphan department.
+    
+    Rules per FP-D07-02 item 7:
+    - Sets local_orphan=0, marking dept as confirmed to keep
+    - Only applicable to departments with local_orphan=1
+    """
+    from app.services.dept import DeptService
+    
+    service = DeptService()
+    await service.confirm_orphan_dept(id)
+    return CommonResult.success()
+
+
+@router.put(
+    "/user/update-depts",
+    response_model=CommonResult,
+    summary="调整用户部门",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def update_user_depts(
+    id: str = Query(..., description="用户ID"),
+    dept_ids: list[str] = Query(..., description="部门ID列表"),
+    main_dept_id: str = Query(..., description="主部门ID"),
+) -> CommonResult:
+    """
+    Update user's department assignments.
+    
+    Rules per FP-B03-02:
+    - User can belong to multiple departments
+    - Must have exactly one main department
+    - Removing main dept requires specifying another main first
+    - Removing all depts auto-assigns to "待分配" dept
+    """
+    from app.services.user import UserService
+    
+    service = UserService()
+    await service.update_user_depts(id, dept_ids, main_dept_id)
+    return CommonResult.success()
+
+
+@router.delete(
+    "/user/delete",
+    response_model=CommonResult,
+    summary="删除用户",
+    dependencies=[Depends(require_permission("ims:system:user:delete"))],
+)
+async def delete_user(id: str = Query(..., description="用户ID")) -> CommonResult:
+    """
+    Delete user.
+    
+    Rules per FP-B03-01 item 3:
+    - Only users who never logged in AND have no business references can be deleted
+    - RESIGNED users cannot be deleted -> 1502
+    """
+    from app.services.user import UserService
+    
+    service = UserService()
+    await service.delete_user(id)
+    return CommonResult.success()
+
+
+# ============== Org Sync Schemas ==============
+
+class OrgSyncBatchItem(BaseSchema):
+    """Org sync batch item."""
+    batch_id: str
+    status: str  # PENDING, RUNNING, SUCCESS, FAILED
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    added_depts: int = 0
+    updated_depts: int = 0
+    removed_depts: int = 0
+    added_users: int = 0
+    updated_users: int = 0
+    removed_users: int = 0
+    error_msg: Optional[str] = None
+
+
+# ============== Org Sync Endpoints ==============
+
+@router.post(
+    "/org-sync/reconcile",
+    response_model=CommonResult[OrgSyncBatchItem],
+    summary="触发组织架构同步",
+    dependencies=[Depends(require_permission("ims:system:org-sync:run"))],
+)
+async def trigger_org_sync_reconcile() -> CommonResult[OrgSyncBatchItem]:
+    """
+    Trigger organization structure reconciliation with DingTalk.
+    
+    Rules per FP-D07-04:
+    - Compares IMS org structure with DingTalk
+    - Creates sync batch record
+    - Returns immediately with batch info (async execution)
+    """
+    from app.services.org_sync import OrgSyncService
+    
+    service = OrgSyncService()
+    result = await service.trigger_reconcile()
+    return CommonResult.success(data=result)
+
+
+@router.get(
+    "/org-sync/latest-batch",
+    response_model=CommonResult[OrgSyncBatchItem],
+    summary="获取最新同步批次",
+    dependencies=[Depends(require_permission("ims:system:org-sync:query"))],
+)
+async def get_latest_org_sync_batch() -> CommonResult[OrgSyncBatchItem]:
+    """
+    Get the latest org sync batch status.
+    
+    Rules per FP-D07-04:
+    - Returns the most recent sync batch
+    - Includes counts for dept/user changes
+    """
+    from app.services.org_sync import OrgSyncService
+    
+    service = OrgSyncService()
+    result = await service.get_latest_batch()
+    return CommonResult.success(data=result)
+
+
+# ============== Role Endpoints ==============
+
 @router.get(
     "/role/simple-list",
     response_model=CommonResult[list[RoleSimpleItem]],
