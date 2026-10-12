@@ -7,6 +7,8 @@ e2e_admin 是 PR #15 的集成测试账号，缺 R1 关联时补上。
 02 §0.2 的 test_* 账号整行已存在则跳过，不补角色。
 部门或租户还没种上时跳过对应 test_*，避免单独跑 users 把 e2e_admin 一起失败掉。
 
+test_r10 只绑角色键 R10（种子显示名「外部协作」，规格称外协），对应 FP-B1-LG-10 / E2E-B1-LG-23。
+
 钉钉成员、岗位规则、同步事件仍由提测脚本 tools/e2e_seed/b1.py 负责。
 平台超级管理员：B0a 没有给出用户名，这里不另造生产账号。
 """
@@ -47,6 +49,13 @@ E2E_ACCOUNTS = [
         "status": "ACTIVE",
         "tenant_id": 2,
     },
+    {
+        "username": "test_r10",
+        "nickname": "测试外协",
+        "role_key": "R10",
+        "dept": None,
+        "status": "ACTIVE",
+    },
 ]
 
 
@@ -63,6 +72,7 @@ def seed_users(env: str, dry_run: bool = False) -> int:
 
     session = get_db_session()
     now = seed_now()
+    # 同一密码只哈希一次，本文件列出的测试账号共用。
     password_hash = bcrypt.hashpw(
         E2E_PASSWORD.encode(), bcrypt.gensalt(rounds=10)
     ).decode()

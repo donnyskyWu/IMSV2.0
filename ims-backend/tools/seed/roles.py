@@ -79,7 +79,7 @@ STANDARD_ROLES = [
     },
     {
         "role_key": "R10",
-        "name": "外部协作",
+        "name": "外部协作",  # 规格称外协；显示名保持本种子，授权只在工作台菜单存在时补
         "data_scope": "SELF",
         "remark": "外部协作人员",
         "sort": 10,

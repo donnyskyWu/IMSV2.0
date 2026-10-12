@@ -315,6 +315,89 @@ class TestE2EAccounts:
         assert account.status == "FROZEN"
         assert db_session.query(User).filter(User.username == "test_xz").count() == 1
 
+    def test_test_r10_has_only_role_r10_and_no_grants(self, db_session):
+        """外协账号只绑 R10。工作台菜单不在本批种子里，所以没有任何菜单授权。"""
+        from app.domains.sys.models import Menu, Role, RoleMenu, User, UserRole
+        from tools.seed.runner import run_seeds
+
+        assert run_seeds(env="test") is True
+        assert db_session.query(User).filter(User.username == "test_r10").count() == 0
+
+        assert run_seeds(env="e2e") is True
+        account = db_session.query(User).filter(User.username == "test_r10").one()
+        assert account.nickname == "测试外协"
+        assert account.status == "ACTIVE"
+        assert bcrypt.checkpw(b"Test1234", account.password_hash.encode())
+        links = db_session.query(UserRole).filter(UserRole.user_id == account.id).all()
+        assert len(links) == 1
+        role = db_session.query(Role).filter(Role.id == links[0].role_id).one()
+        assert role.role_key == "R10"
+        assert role.name == "外部协作"
+        assert db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).count() == 0
+        assert db_session.query(Menu).filter(Menu.path == "/ims/workbench").count() == 0
+
+        account.password_hash = "changed"
+        account.nickname = "不要重置"
+        db_session.commit()
+        assert run_seeds(env="e2e") is True
+        db_session.refresh(account)
+        assert account.password_hash == "changed"
+        assert account.nickname == "不要重置"
+        assert db_session.query(UserRole).filter(UserRole.user_id == account.id).count() == 1
+
+    def test_r10_grant_is_workbench_menu_only(self, db_session):
+        """工作台菜单出现后，R10 只得到这一条，不得到 B1 权限。删掉后不再补回。"""
+        from app.domains.sys.models import Menu, Role, RoleMenu
+        from tools.seed.grants import seed_grants
+        from tools.seed.menus import seed_menus
+        from tools.seed.roles import seed_roles
+
+        seed_menus(env="test")
+        seed_roles(env="test")
+        assert seed_grants(env="test") > 0
+        role = db_session.query(Role).filter(Role.role_key == "R10").one()
+        assert db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).count() == 0
+
+        workbench = Menu(
+            tenant_id=1,
+            parent_id=0,
+            type="MENU",
+            name="工作台",
+            path="/ims/workbench",
+            perm_code="ims:workbench:query",
+            sort=0,
+            visible=True,
+            status="ENABLED",
+        )
+        button = Menu(
+            tenant_id=1,
+            parent_id=0,
+            type="BUTTON",
+            name="工作台按钮",
+            path="/ims/workbench",
+            perm_code="ims:workbench:assign",
+            sort=1,
+            visible=True,
+            status="ENABLED",
+        )
+        db_session.add(workbench)
+        db_session.add(button)
+        db_session.commit()
+
+        assert seed_grants(env="test") == 1
+        links = db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).all()
+        assert len(links) == 1
+        granted = db_session.query(Menu).filter(Menu.id == links[0].menu_id).one()
+        assert granted.path == "/ims/workbench"
+        assert granted.type == "MENU"
+        assert granted.perm_code == "ims:workbench:query"
+        assert seed_grants(env="test") == 0
+
+        db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).delete()
+        db_session.commit()
+        assert seed_grants(env="test") == 0
+        assert db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).count() == 0
+
 
 class TestB1Backfill:
     """FP-B1-BG-08 历史回填只补空值。"""

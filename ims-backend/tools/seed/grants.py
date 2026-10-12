@@ -5,6 +5,7 @@
 
 R1 授予本批全部权限码。R2、R4 只授予查询、导出、岗位规则查询。
 「全部」指 01 §0.3 列出的本批权限码，不是系统管理下的全部菜单。
+R10 只授予工作台菜单（path=/ims/workbench）。该菜单在 B3 才有；没有时不授任何菜单。
 
 只补缺：
 - 角色菜单关联已存在则不改、不删；
@@ -44,6 +45,9 @@ E2E_ROLE_PERMS = {
 }
 
 AUTH_DIR_PATH = "/ims/auth"
+# B3 才会写入的工作台菜单。R10 只允许这一条，不授本批其他权限。
+WORKBENCH_PATH = "/ims/workbench"
+R10_ROLE_KEY = "R10"
 
 
 def planned_grant_count(env: str) -> int:
@@ -102,8 +106,39 @@ def seed_grants(env: str, dry_run: bool = False) -> int:
                 RoleMenu, SeedApply,
             )
 
+    count += _grant_r10_workbench_only(session, menus, now, Role, RoleMenu, SeedApply)
+
     session.commit()
     return count
+
+
+def _grant_r10_workbench_only(session, menus, now, role_cls, role_menu_cls, marker_cls) -> int:
+    """R10 只挂工作台菜单。菜单尚未存在时不授任何权限。"""
+    role = session.query(role_cls).filter(
+        role_cls.tenant_id == 1,
+        role_cls.role_key == R10_ROLE_KEY,
+        role_cls.deleted == 0,
+    ).first()
+    if role is None:
+        return 0
+    workbench = next(
+        (
+            menu for menu in menus
+            if menu.type == "MENU" and menu.path == WORKBENCH_PATH
+        ),
+        None,
+    )
+    if workbench is None:
+        return 0
+    return _ensure_link(
+        session,
+        role,
+        workbench,
+        f"grant:{R10_ROLE_KEY}:path:{WORKBENCH_PATH}",
+        now,
+        role_menu_cls,
+        marker_cls,
+    )
 
 
 def _ensure_link(session, role, menu, marker_key: str, now, role_menu_cls, marker_cls) -> int:
