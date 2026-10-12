@@ -45,7 +45,7 @@ body {
   color: var(--red);
 }
 
-/* === 触控热区扩展 (§2.1 Q10) === */
+/* === 触控热区扩展 (§2.1 Q10, §2.3 U1) === */
 
 /* 用于 26px 小号按钮和 30px 控件, 保持原视觉尺寸但扩大热区到 44px */
 .touch-target {
@@ -60,6 +60,17 @@ body {
     min-height: var(--min-touch-size);
     transform: translate(-50%, -50%);
   }
+}
+
+/* §2.3 U1: 小号按钮之间的视觉间距 ≥18px */
+.btn-group--small {
+  display: inline-flex;
+  gap: 18px;
+}
+
+/* 通用小号按钮容器间距 */
+.el-button--small + .el-button--small {
+  margin-left: 18px;
 }
 
 /* === 移动端字号调整 (§2.1 Q12) === */

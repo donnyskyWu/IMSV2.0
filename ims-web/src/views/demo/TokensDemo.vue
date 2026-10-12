@@ -92,7 +92,7 @@ const statusColors = [
           <el-button text type="primary">文字按钮</el-button>
           <el-button text type="danger">危险文字按钮</el-button>
         </div>
-        <div class="button-row">
+        <div class="button-row button-row--small">
           <el-button type="primary" size="small">小号主按钮</el-button>
           <el-button size="small">小号次按钮</el-button>
         </div>
@@ -283,6 +283,11 @@ const statusColors = [
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
+
+  // §2.3 U1: 小号按钮之间的视觉间距 ≥18px
+  &--small {
+    gap: 18px;
+  }
 }
 
 .button-specs {

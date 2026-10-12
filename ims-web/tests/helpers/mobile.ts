@@ -7,6 +7,7 @@ import { type Page, type Locator, expect } from '@playwright/test'
 export const BP_MOBILE = 768
 export const MIN_TOUCH = 44
 export const MIN_GAP = 8
+export const MIN_GAP_SMALL = 18 // §2.3 U1: 小号按钮之间的视觉间距 ≥18px
 export const MIN_FONT = 12
 export const INPUT_FONT = 16
 export const VW = 390

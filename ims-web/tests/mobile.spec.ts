@@ -3,7 +3,7 @@
  * 依据: 02-验证用例.md VC-M-01~32 (VC-M-30 已撤销)
  */
 import { test, expect } from '@playwright/test'
-import { expectNoHOverflow, expectInViewport, BP_MOBILE, MIN_TOUCH, VW } from './helpers/mobile'
+import { expectNoHOverflow, expectInViewport, BP_MOBILE, MIN_TOUCH, MIN_GAP, MIN_GAP_SMALL, VW } from './helpers/mobile'
 
 test.describe('移动端测试', () => {
   test.beforeEach(async ({ page }) => {
@@ -578,18 +578,71 @@ test.describe('移动端测试', () => {
     await expectNoHOverflow(page)
   })
 
-  test('VC-M-27: 触控热区>=44px 间距>=8px', async ({ page }) => {
-    await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
+  test('VC-M-27: 触控热区>=44px 间距>=8px 小号按钮间距>=18px', async ({ page }) => {
+    // 依据: §2.1 Q10, §2.2 #3, §2.3 U1
+    await page.goto('/demo/tokens')
+    await page.waitForSelector('.tokens-demo, .app-layout')
 
+    // 获取所有可见按钮
     const buttons = page.locator('button:visible, a:visible, [role=button]:visible')
     const count = await buttons.count()
 
+    // 验证按钮尺寸
     for (let i = 0; i < Math.min(count, 10); i++) {
       const btn = buttons.nth(i)
       const box = await btn.boundingBox()
       if (box) {
+        // 视觉尺寸可以是 26px (小号) 或更大
         expect(Math.max(box.width, box.height)).toBeGreaterThanOrEqual(26)
+      }
+    }
+
+    // 获取小号按钮，验证它们之间的间距 ≥18px (§2.3 U1)
+    const smallButtons = page.locator('.el-button--small:visible')
+    const smallCount = await smallButtons.count()
+
+    if (smallCount >= 2) {
+      const boxes = await Promise.all(
+        Array.from({ length: smallCount }, (_, i) =>
+          smallButtons.nth(i).boundingBox()
+        )
+      )
+
+      // 检查同一行的相邻小号按钮间距
+      for (let i = 0; i < boxes.length - 1; i++) {
+        const current = boxes[i]
+        const next = boxes[i + 1]
+
+        if (current && next) {
+          // 同一行 (y 坐标相近)
+          if (Math.abs(current.y - next.y) < 10) {
+            const gap = next.x - (current.x + current.width)
+            // 小号按钮之间的视觉间距 ≥18px
+            expect(gap).toBeGreaterThanOrEqual(MIN_GAP_SMALL - 1) // 允许 1px 误差
+          }
+        }
+      }
+    }
+
+    // 普通按钮间距 ≥8px
+    const normalButtons = page.locator('.el-button:visible:not(.el-button--small)')
+    const normalCount = await normalButtons.count()
+
+    if (normalCount >= 2) {
+      const boxes = await Promise.all(
+        Array.from({ length: normalCount }, (_, i) =>
+          normalButtons.nth(i).boundingBox()
+        )
+      )
+
+      for (let i = 0; i < boxes.length - 1; i++) {
+        const current = boxes[i]
+        const next = boxes[i + 1]
+
+        if (current && next && Math.abs(current.y - next.y) < 10) {
+          const gap = next.x - (current.x + current.width)
+          expect(gap).toBeGreaterThanOrEqual(MIN_GAP - 1)
+        }
       }
     }
   })
@@ -811,12 +864,15 @@ test.describe('移动端测试', () => {
     const badCodeWarnings = warnings.filter((w) => w.includes('bad-code'))
     expect(badCodeWarnings.length).toBeGreaterThanOrEqual(0) // 允许有或没有，取决于示例页实现
 
-    // 验证没有 error（排除常见无关错误）
+    // 验证没有 error（排除常见无关错误和 v-perm 权限码格式警告）
+    // 按 §2.2 #9，权限码格式错误降级为 console.warn，不算冒烟失败
     const relevantErrors = errors.filter(
       (e) =>
         !e.includes('ResizeObserver') &&
         !e.includes('favicon') &&
-        !e.includes('props.items')
+        !e.includes('props.items') &&
+        !e.includes('v-perm') &&
+        !e.includes('bad-code')
     )
     expect(relevantErrors).toHaveLength(0)
 

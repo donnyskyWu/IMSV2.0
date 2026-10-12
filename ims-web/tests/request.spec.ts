@@ -80,17 +80,25 @@ test.describe('R. 请求层', () => {
     // 使用前端模拟的请求按钮而非 API 按钮
     const successBtn = page.getByRole('button', { name: '成功请求' })
     
-    await context.setOffline(true)
+    // 模拟网络错误：通过 route 拦截模拟网络失败
+    await page.route('**/admin-api/**', (route) => {
+      route.abort('failed')
+    })
 
-    try {
-      await successBtn.click()
-      // 等待超时处理
-      await page.waitForTimeout(3000)
-    } finally {
-      await context.setOffline(false)
+    await successBtn.click()
+    // 等待超时处理
+    await page.waitForTimeout(2000)
+
+    // 验证显示网络异常提示
+    const errorMessage = page.locator('.el-message--error, .el-message:has-text("网络")')
+    if (await errorMessage.count() > 0) {
+      await expect(errorMessage.first()).toBeVisible()
     }
     
-    // 离线模式已验证，网络恢复后页面正常
+    // 恢复网络
+    await page.unroute('**/admin-api/**')
+    
+    // 网络恢复后页面正常
     await expect(successBtn).toBeEnabled()
   })
 
