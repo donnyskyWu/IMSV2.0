@@ -138,6 +138,7 @@ async def get_users(
 alembic upgrade head
 python -m tools.seed --env dev
 # 02 §0.2 测试账号（密码 Test1234）只在 e2e 环境创建
+# test_r10 只绑角色 R10。工作台菜单在 B3，当前不授任何菜单
 python -m tools.seed --env e2e
 ```
 
