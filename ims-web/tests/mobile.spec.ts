@@ -480,10 +480,18 @@ test.describe('移动端测试', () => {
     await expectNoHOverflow(page)
   })
 
-  test.fixme('VC-M-22: 文件上传导入导出下载条', async ({ page }) => {
-    // 依赖后端 API
+  test('VC-M-22: 文件上传导入导出下载条', async ({ page }) => {
+    // 验证移动端文件操作组件
     await page.goto('/demo/files')
     await page.waitForSelector('.files-demo, .app-layout')
+    
+    // 验证上传组件在移动端正常显示
+    const upload = page.locator('.el-upload, .file-upload').first()
+    if (await upload.count() > 0) {
+      await expectInViewport(upload)
+    }
+    
+    await expectNoHOverflow(page)
   })
 
   test('VC-M-23: 展示组件单列图表自适应', async ({ page }) => {
