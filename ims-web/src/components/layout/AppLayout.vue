@@ -104,7 +104,7 @@ function handleLogout() {
 
     <!-- 侧栏 -->
     <aside
-      class="app-sidebar"
+      class="sidebar app-sidebar"
       :class="{
         collapsed: sidebarCollapsed && !isMobile,
         'mobile-open': isMobile && mobileSidebarOpen,
@@ -164,7 +164,7 @@ function handleLogout() {
     <!-- 主区域 -->
     <div class="app-main">
       <!-- 顶栏 (Q3: 高度保持 56px) -->
-      <header class="app-topbar">
+      <header class="topbar app-topbar">
         <!-- 左侧: 菜单按钮 -->
         <div class="topbar-left">
           <el-button class="menu-btn touch-target" text @click="toggleSidebar">

@@ -115,7 +115,43 @@ export interface QueryField {
   key: string
   label: string
   type: 'input' | 'select' | 'dict' | 'date' | 'daterange' | 'user' | 'dept'
+  placeholder?: string
+  options?: Array<{ value: string | number; label: string }>
   props?: Record<string, unknown>
+}
+
+// 树节点
+export interface TreeNode {
+  id: string | number
+  label: string
+  children?: TreeNode[]
+  count?: number
+  [key: string]: unknown
+}
+
+// 文件项
+export interface FileItem {
+  name: string
+  url: string
+  type?: string
+  size?: number
+}
+
+// 流程节点
+export interface FlowNode {
+  id: string
+  label: string
+  type: 'start' | 'end' | 'task' | 'gateway' | 'condition'
+  status?: 'pending' | 'running' | 'completed' | 'failed'
+  x?: number
+  y?: number
+}
+
+// 流程边
+export interface FlowEdge {
+  from: string
+  to: string
+  label?: string
 }
 
 // 统计卡项

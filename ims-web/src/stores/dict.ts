@@ -41,6 +41,23 @@ export const useDictStore = defineStore('dict', () => {
       { value: 'MANUAL', label: '手工', colorType: 'neutral' },
       { value: 'DINGTALK', label: '钉钉自动', colorType: 'info' },
     ],
+    ticket_priority: [
+      { value: 'LOW', label: '低', colorType: 'neutral' },
+      { value: 'MEDIUM', label: '中', colorType: 'info' },
+      { value: 'HIGH', label: '高', colorType: 'warning' },
+      { value: 'URGENT', label: '紧急', colorType: 'danger' },
+    ],
+    ticket_status: [
+      { value: 'pending', label: '待处理', colorType: 'warning' },
+      { value: 'processing', label: '处理中', colorType: 'primary' },
+      { value: 'completed', label: '已完成', colorType: 'success' },
+      { value: 'closed', label: '已关闭', colorType: 'neutral' },
+    ],
+    product_status: [
+      { value: 'ON_SALE', label: '在售', colorType: 'success' },
+      { value: 'OFF_SALE', label: '下架', colorType: 'neutral' },
+      { value: 'SOLD_OUT', label: '售罄', colorType: 'warning' },
+    ],
   }
 
   // 获取字典列表

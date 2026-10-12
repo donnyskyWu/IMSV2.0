@@ -1,117 +1,137 @@
 <script setup lang="ts">
 /**
- * 请求演示页 (FP-P-02)
- * 依据: 按钮触发各种错误码处理
+ * 请求演示页 (FP-P-14)
+ * 展示 API 请求、错误处理、Toast 等
  */
-import { ElMessage } from 'element-plus'
+import { ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import { toast } from '@/utils/toast'
 
-// 模拟请求成功
-function handleSuccess() {
-  ElMessage.success('请求成功')
+// 加载状态
+const loading = ref(false)
+
+// 模拟请求
+async function simulateRequest(type: 'success' | 'error' | 'timeout') {
+  loading.value = true
+  
+  try {
+    await new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (type === 'success') {
+          resolve({ data: { message: '操作成功' } })
+        } else if (type === 'error') {
+          reject(new Error('服务器错误'))
+        } else {
+          reject(new Error('请求超时'))
+        }
+      }, 1500)
+    })
+    
+    toast.success('请求成功')
+  } catch (err) {
+    const error = err as Error
+    toast.error(error.message || '请求失败')
+  } finally {
+    loading.value = false
+  }
 }
 
-// 模拟 1001 表单错误
-function handle1001() {
-  ElMessage.warning('表单校验失败（1001）: 名称、金额字段有误')
+// 测试 Toast 去重
+function testToastDedupe() {
+  // 连续调用相同内容
+  toast.info('这条消息只会显示一次')
+  toast.info('这条消息只会显示一次')
+  toast.info('这条消息只会显示一次')
 }
 
-// 模拟 1008 无权限
-function handle1008() {
-  ElMessage.error('暂无权限')
+// 测试 Toast 队列
+function testToastQueue() {
+  toast.success('消息 1')
+  toast.success('消息 2')
+  toast.success('消息 3')
+  toast.success('消息 4')
+  toast.success('消息 5')
 }
 
-// 模拟 1504 资源不可用
-function handle1504() {
-  ElMessage.warning('资源不可用（1504）')
-}
-
-// 模拟 5007 系统异常
-function handle5007() {
-  const traceId = 'abc12345'
-  ElMessage.error(`系统繁忙，请稍后再试 问题编号：${traceId}`)
-}
-
-// 模拟超时
-function handleTimeout() {
-  ElMessage.error('网络异常，请检查网络后重试')
-}
-
-// 模拟 401 刷新成功
-function handle401RefreshSuccess() {
-  ElMessage.success('令牌已刷新，请求重放成功')
-}
-
-// 模拟 401 刷新失败
-function handle401RefreshFail() {
-  ElMessage.error('登录已失效，请重新登录')
-}
-
-// 模拟 1003 被挤下线
-function handle1003() {
-  ElMessage.error('您的账号已在其他设备登录，本设备已下线')
+// 测试不同类型
+function testToastTypes() {
+  toast.success('成功提示')
+  setTimeout(() => toast.warning('警告提示'), 200)
+  setTimeout(() => toast.error('错误提示'), 400)
+  setTimeout(() => toast.info('信息提示'), 600)
 }
 </script>
 
 <template>
   <AppLayout>
     <div class="request-demo">
-      <PageHeader title="请求演示" sub-title="FP-P-02" />
+      <PageHeader title="请求与提示演示" sub-title="FP-P-14" />
 
-      <section class="demo-section">
-        <h3>模拟请求响应</h3>
-        <div class="btn-grid">
-          <el-button type="primary" @click="handleSuccess">
+      <div class="demo-section">
+        <h3 class="section-title">1. 模拟 API 请求</h3>
+        <div class="button-group">
+          <el-button
+            type="primary"
+            :loading="loading"
+            @click="simulateRequest('success')"
+          >
             成功请求
           </el-button>
-          <el-button @click="handle1001">
-            1001 表单错误
+          <el-button
+            type="warning"
+            :loading="loading"
+            @click="simulateRequest('error')"
+          >
+            错误请求
           </el-button>
-          <el-button @click="handle1008">
-            1008 无权限
-          </el-button>
-          <el-button @click="handle1504">
-            1504 资源不可用
-          </el-button>
-          <el-button type="danger" @click="handle5007">
-            5007 系统异常
-          </el-button>
-          <el-button @click="handleTimeout">
-            超时
+          <el-button
+            type="danger"
+            :loading="loading"
+            @click="simulateRequest('timeout')"
+          >
+            超时请求
           </el-button>
         </div>
-      </section>
+      </div>
 
-      <section class="demo-section">
-        <h3>令牌刷新场景</h3>
-        <div class="btn-grid">
-          <el-button type="success" @click="handle401RefreshSuccess">
-            401 刷新成功
-          </el-button>
-          <el-button type="warning" @click="handle401RefreshFail">
-            401 刷新失败
-          </el-button>
-          <el-button type="danger" @click="handle1003">
-            1003 被挤下线
-          </el-button>
+      <div class="demo-section">
+        <h3 class="section-title">2. Toast 提示</h3>
+        <div class="button-group">
+          <el-button @click="testToastTypes">不同类型</el-button>
+          <el-button @click="testToastDedupe">去重测试</el-button>
+          <el-button @click="testToastQueue">队列测试</el-button>
         </div>
-      </section>
+        <div class="demo-tip">
+          <p>• 不同类型：依次显示 success、warning、error、info</p>
+          <p>• 去重测试：1s 内相同内容只显示一次</p>
+          <p>• 队列测试：最多同时显示 3 条，其余排队</p>
+        </div>
+      </div>
 
-      <section class="demo-section">
-        <h3>说明</h3>
-        <div class="notes">
-          <p>• 成功请求: 显示绿色提示"请求成功"</p>
-          <p>• 1001 表单错误: 字段级红框提示，不弹 toast</p>
-          <p>• 1008 无权限: 提示"暂无权限"，页面保持原样</p>
-          <p>• 1504 资源不可用: 抽屉内则关闭抽屉并刷新列表</p>
-          <p>• 5xxx 系统异常: 显示问题编号（traceId 前 8 位）</p>
-          <p>• 超时/网络错误: 提示"网络异常，请检查网络后重试"</p>
-        </div>
-      </section>
+      <div class="demo-section">
+        <h3 class="section-title">3. 错误码说明</h3>
+        <el-table :data="errorCodes" style="width: 100%">
+          <el-table-column prop="code" label="错误码" width="100" />
+          <el-table-column prop="name" label="名称" width="150" />
+          <el-table-column prop="description" label="说明" />
+        </el-table>
+      </div>
     </div>
   </AppLayout>
 </template>
+
+<script lang="ts">
+const errorCodes = [
+  { code: '0', name: '成功', description: '请求成功' },
+  { code: '401', name: '未认证', description: '需要登录或 Token 已过期' },
+  { code: '403', name: '无权限', description: '没有操作权限' },
+  { code: '404', name: '未找到', description: '资源不存在' },
+  { code: '1001', name: '字段错误', description: '表单校验失败，返回字段错误列表' },
+  { code: '1002', name: '业务异常', description: '业务规则校验失败' },
+  { code: '500', name: '服务器错误', description: '服务器内部错误' },
+]
+</script>
 
 <style lang="scss" scoped>
 .request-demo {
@@ -119,35 +139,39 @@ function handle1003() {
 }
 
 .demo-section {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+  padding: 24px;
+  background-color: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
 
-  h3 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 12px;
+  &:last-child {
+    margin-bottom: 0;
   }
 }
 
-.btn-grid {
+.section-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.button-group {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-
-  @include mobile {
-    gap: $small-btn-gap;
-  }
 }
 
-.notes {
-  padding: 16px;
-  background-color: var(--card);
-  border-radius: var(--r-s);
-  border: 1px solid var(--line);
+.demo-tip {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: var(--hover);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text2);
 
   p {
-    font-size: 13px;
-    color: var(--text2);
     margin: 4px 0;
   }
 }
