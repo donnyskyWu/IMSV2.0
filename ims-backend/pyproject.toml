@@ -80,7 +80,7 @@ exclude_lines = [
 target-version = "py311"
 line-length = 100
 select = ["E", "F", "W", "I", "N", "B", "C4", "SIM"]
-ignore = ["E501"]
+ignore = ["E501", "SIM117"]
 
 [tool.ruff.isort]
 known-first-party = ["app"]
