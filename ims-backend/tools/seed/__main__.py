@@ -34,24 +34,24 @@ def main():
         action="store_true",
         help="Show what would be seeded without executing"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Set environment
     os.environ["IMS_ENV"] = args.env
-    
+
     # Parse --only list
     only = None
     if args.only:
         only = [s.strip() for s in args.only.split(",")]
-    
+
     # Run seeds
     success = run_seeds(
         env=args.env,
         only=only,
         dry_run=args.dry_run,
     )
-    
+
     sys.exit(0 if success else 1)
 
 

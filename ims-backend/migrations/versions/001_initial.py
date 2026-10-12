@@ -1,7 +1,7 @@
 """Initial migration - create all B0a framework tables
 
 Revision ID: 001_initial
-Revises: 
+Revises:
 Create Date: 2026-10-12
 
 Tables created per FP-B01-01 through FP-B09-01:
@@ -27,9 +27,8 @@ Tables created per FP-B01-01 through FP-B09-01:
 - ims_sys_integrity_scan (FP-B09-01)
 - ims_sys_org_sync_batch (FP-D07-04)
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = '001_initial'
 down_revision = None

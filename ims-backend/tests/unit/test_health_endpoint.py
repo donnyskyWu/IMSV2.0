@@ -17,11 +17,12 @@ os.environ.setdefault("IMS_DB_URL", "sqlite:///:memory:")
 os.environ.setdefault("IMS_REDIS_URL", "")
 os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 import pytest
 
 from app import __version__
-from app.api.health import health_check, HealthData
+from app.api.health import HealthData, health_check
 
 
 class TestHealthCheckEndpoint:
@@ -35,9 +36,9 @@ class TestHealthCheckEndpoint:
                 mock_db.check_ims.return_value = True
                 mock_db.check_football.return_value = (True, "UP")
                 mock_cache.check.return_value = (True, "UP")
-                
+
                 result = await health_check()
-                
+
                 assert result.data.status == "UP"
                 assert result.data.db == "UP"
                 assert result.data.redis == "UP"
@@ -50,9 +51,9 @@ class TestHealthCheckEndpoint:
                 mock_db.check_ims.return_value = True
                 mock_db.check_football.return_value = (True, "UP")
                 mock_cache.check.return_value = (False, "DOWN")
-                
+
                 result = await health_check()
-                
+
                 assert result.data.status == "DEGRADED"
                 assert result.data.redis == "DOWN"
 
@@ -64,9 +65,9 @@ class TestHealthCheckEndpoint:
                 mock_db.check_ims.return_value = True
                 mock_db.check_football.return_value = (False, "DOWN")
                 mock_cache.check.return_value = (True, "UP")
-                
+
                 result = await health_check()
-                
+
                 assert result.data.status == "DEGRADED"
                 assert result.data.football_live == "DOWN"
 
@@ -78,9 +79,9 @@ class TestHealthCheckEndpoint:
                 mock_db.check_ims.return_value = False
                 mock_db.check_football.return_value = (False, "DOWN")
                 mock_cache.check.return_value = (True, "UP")
-                
+
                 result = await health_check()
-                
+
                 # When DB is down, result is JSONResponse with 503
                 assert result.status_code == 503
                 assert b'"DOWN"' in result.body
@@ -93,13 +94,13 @@ class TestHealthCheckEndpoint:
                 mock_db.check_ims.return_value = True
                 mock_db.check_football.return_value = (True, "UP")
                 mock_cache.check.return_value = (True, "UP")
-                
+
                 result = await health_check()
-                
+
                 # Convert to JSON and verify no URLs
                 data_dict = result.model_dump()
                 data_str = str(data_dict)
-                
+
                 # Should not contain any connection patterns
                 assert "mysql" not in data_str.lower()
                 assert "redis://" not in data_str.lower()
@@ -113,9 +114,9 @@ class TestHealthCheckEndpoint:
                 mock_db.check_ims.return_value = True
                 mock_db.check_football.return_value = (True, "UP")
                 mock_cache.check.return_value = (True, "UP")
-                
+
                 result = await health_check()
-                
+
                 assert result.data.version == __version__
 
 
@@ -131,7 +132,7 @@ class TestHealthData:
             football_live="UP",
             version="1.0.0",
         )
-        
+
         assert data.status == "UP"
         assert data.db == "UP"
         assert data.redis == "UP"
@@ -147,7 +148,7 @@ class TestHealthData:
             football_live="DISABLED",
             version="1.0.0",
         )
-        
+
         assert data.status == "DEGRADED"
         assert data.redis == "DOWN"
         assert data.football_live == "DISABLED"

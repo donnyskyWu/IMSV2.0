@@ -7,7 +7,6 @@ Business code must NOT use role_key for permission checks.
 
 from datetime import datetime
 
-
 # Standard roles R1-R11
 # Per spec, these are placeholders - actual permissions defined by M01/M02
 STANDARD_ROLES = [
@@ -104,7 +103,7 @@ def seed_roles(env: str, dry_run: bool = False) -> int:
         Number of records upserted
     """
     roles = STANDARD_ROLES.copy()
-    
+
     # Add E2E roles if in e2e environment
     if env == "e2e":
         e2e_roles = [
@@ -117,31 +116,31 @@ def seed_roles(env: str, dry_run: bool = False) -> int:
             },
         ]
         roles.extend(e2e_roles)
-    
+
     if dry_run:
         print(f"  Would seed {len(roles)} roles")
         return len(roles)
-    
+
     from app.db.session import get_db_session
     from app.domains.sys.models import Role
-    
+
     session = get_db_session()
     now = datetime.now()
     count = 0
-    
+
     # Seed for platform tenant (id=1)
     tenant_id = 1
-    
+
     for r in roles:
         existing = session.query(Role).filter(
             Role.tenant_id == tenant_id,
             Role.role_key == r["role_key"],
             Role.deleted == 0,
         ).first()
-        
+
         if not existing:
             is_standard = r["role_key"].startswith("R") and r["role_key"][1:].isdigit()
-            
+
             role = Role(
                 tenant_id=tenant_id,
                 role_key=r["role_key"],
@@ -157,6 +156,6 @@ def seed_roles(env: str, dry_run: bool = False) -> int:
             )
             session.add(role)
             count += 1
-    
+
     session.commit()
     return count

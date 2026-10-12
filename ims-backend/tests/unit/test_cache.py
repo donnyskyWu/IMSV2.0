@@ -34,7 +34,7 @@ class TestCacheBasics:
         """Test cache has required methods."""
         from app.core.cache import Cache
 
-        methods = ["get", "set", "delete", "get_json", "set_json", "getdel", 
+        methods = ["get", "set", "delete", "get_json", "set_json", "getdel",
                    "sadd", "smembers", "srem", "expire", "setnx", "incr"]
         for method in methods:
             assert hasattr(Cache, method), f"Cache missing method: {method}"

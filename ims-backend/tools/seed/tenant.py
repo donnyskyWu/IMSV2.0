@@ -21,16 +21,16 @@ def seed_tenant(env: str, dry_run: bool = False) -> int:
     if dry_run:
         print("  Would seed platform tenant (id=1)")
         return 1
-    
+
     from app.db.session import get_db_session
     from app.domains.sys.models import Tenant
-    
+
     session = get_db_session()
     now = datetime.now()
-    
+
     # Check if platform tenant exists
     existing = session.query(Tenant).filter(Tenant.id == 1).first()
-    
+
     if not existing:
         tenant = Tenant(
             id=1,
@@ -43,5 +43,5 @@ def seed_tenant(env: str, dry_run: bool = False) -> int:
         session.add(tenant)
         session.commit()
         return 1
-    
+
     return 0

@@ -81,7 +81,7 @@ class TestGetDbSession:
 
     def test_get_db_session_no_context_raises(self):
         """Test get_db_session raises when no session in context."""
-        from app.db.session import get_db_session, _db_session
+        from app.db.session import _db_session, get_db_session
 
         # Reset context
         _db_session.set(None)
@@ -112,11 +112,8 @@ class TestGetDb:
         session = next(gen)
         assert isinstance(session, Session)
 
-        # Cleanup
-        try:
-            next(gen)
-        except StopIteration:
-            pass
+        # Cleanup - exhaust generator
+        gen.close()
 
     def test_get_db_session_available_during_request(self):
         """Test get_db_session works during request context."""
@@ -133,11 +130,8 @@ class TestGetDb:
         assert ctx_session is request_session
         assert isinstance(ctx_session, Session)
 
-        # Cleanup
-        try:
-            next(gen)
-        except StopIteration:
-            pass
+        # Cleanup - exhaust generator
+        gen.close()
 
 
 class TestInitDb:
@@ -145,7 +139,7 @@ class TestInitDb:
 
     def test_init_db_creates_engine(self):
         """Test init_db creates database engine."""
-        from app.db.session import engine, init_db
+        from app.db.session import init_db
 
         init_db()
         from app.db.session import engine as updated_engine

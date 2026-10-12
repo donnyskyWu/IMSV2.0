@@ -7,7 +7,6 @@ Permission code format: ims:<domain>:<resource>[:<action>]
 
 from datetime import datetime
 
-
 # Menu tree structure
 # type: DIR (directory), MENU (page), BUTTON (action)
 MENUS = [
@@ -166,15 +165,14 @@ def seed_menus(env: str, dry_run: bool = False) -> int:
         count = _count_menus(MENUS)
         print(f"  Would seed {count} menu items")
         return count
-    
+
     from app.db.session import get_db_session
-    from app.domains.sys.models import Menu
-    
+
     session = get_db_session()
     now = datetime.now()
-    
+
     count = _seed_menu_tree(session, MENUS, parent_id=0, now=now)
-    
+
     session.commit()
     return count
 
@@ -190,9 +188,9 @@ def _count_menus(menus: list) -> int:
 def _seed_menu_tree(session, menus: list, parent_id: int, now: datetime) -> int:
     """Recursively seed menu tree."""
     from app.domains.sys.models import Menu
-    
+
     count = 0
-    
+
     for m in menus:
         # Find by perm_code or path
         existing = None
@@ -206,7 +204,7 @@ def _seed_menu_tree(session, menus: list, parent_id: int, now: datetime) -> int:
                 Menu.path == m["path"],
                 Menu.deleted == 0,
             ).first()
-        
+
         if not existing:
             menu = Menu(
                 tenant_id=1,
@@ -226,7 +224,7 @@ def _seed_menu_tree(session, menus: list, parent_id: int, now: datetime) -> int:
             session.add(menu)
             session.flush()
             count += 1
-            
+
             # Seed children
             children = m.get("children", [])
             if children:
@@ -236,5 +234,5 @@ def _seed_menu_tree(session, menus: list, parent_id: int, now: datetime) -> int:
             children = m.get("children", [])
             if children:
                 count += _seed_menu_tree(session, children, existing.id, now)
-    
+
     return count

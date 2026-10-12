@@ -15,7 +15,6 @@ Note: Train AI config is NOT in system params (goes to B10 AI Resource Center).
 
 from datetime import datetime
 
-
 PARAMS = [
     # 通用
     {
@@ -26,7 +25,7 @@ PARAMS = [
         "default_value": "false",
         "value": "false",
     },
-    
+
     # 内容审核
     {
         "param_key": "content.review.level1.role",
@@ -46,7 +45,7 @@ PARAMS = [
         "value": "",
         "remark": "存角色ID",
     },
-    
+
     # 钉钉
     {
         "param_key": "dingtalk.notify.enabled",
@@ -64,7 +63,7 @@ PARAMS = [
         "default_value": "true",
         "value": "true",
     },
-    
+
     # AI
     {
         "param_key": "air.key.ip_whitelist.enabled",
@@ -74,7 +73,7 @@ PARAMS = [
         "default_value": "false",
         "value": "false",
     },
-    
+
     # 绩效 (【裁定】C011)
     {
         "param_key": "perf.grade.excellent",
@@ -96,7 +95,7 @@ PARAMS = [
         "min_value": "0",
         "max_value": "100",
     },
-    
+
     # 钉钉考勤 (FP-H07-01)
     {
         "param_key": "dingtalk_attendance.enabled",
@@ -167,20 +166,20 @@ def seed_params(env: str, dry_run: bool = False) -> int:
     if dry_run:
         print(f"  Would seed {len(PARAMS)} parameters")
         return len(PARAMS)
-    
+
     from app.db.session import get_db_session
     from app.domains.sys.models import SysParam
-    
+
     session = get_db_session()
     count = 0
     now = datetime.now()
-    
+
     for p in PARAMS:
         existing = session.query(SysParam).filter(
             SysParam.param_key == p["param_key"],
             SysParam.deleted == 0,
         ).first()
-        
+
         if not existing:
             obj = SysParam(
                 tenant_id=1,
@@ -200,6 +199,6 @@ def seed_params(env: str, dry_run: bool = False) -> int:
             )
             session.add(obj)
             count += 1
-    
+
     session.commit()
     return count
