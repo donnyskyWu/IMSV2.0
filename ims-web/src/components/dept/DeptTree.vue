@@ -63,6 +63,26 @@ const { isMobile } = useResponsive()
 
 // 搜索关键词
 const searchKeyword = ref('')
+const treeRef = ref<{
+  filter: (value: string) => void
+  store?: { nodesMap: Record<string, { expanded: boolean; key: string | number }> }
+} | null>(null)
+let savedExpanded: Array<string | number> | null = null
+
+watch(searchKeyword, (val, prev) => {
+  if (val && !prev) {
+    const map = treeRef.value?.store?.nodesMap
+    savedExpanded = map ? Object.values(map).filter((node) => node.expanded).map((node) => node.key) : []
+  }
+  treeRef.value?.filter(val)
+  if (!val && savedExpanded && treeRef.value?.store?.nodesMap) {
+    const keys = new Set(savedExpanded)
+    Object.values(treeRef.value.store.nodesMap).forEach((node) => {
+      node.expanded = keys.has(node.key)
+    })
+    savedExpanded = null
+  }
+})
 
 // 展开的节点
 const expandedKeys = ref<(string | number)[]>([])
@@ -212,7 +232,34 @@ function handleCommand(command: string, node: DeptNode) {
     case 'delete':
       handleDelete(node)
       break
+    case 'move':
+      movingNode.value = node
+      moveVisible.value = true
+      break
   }
+}
+
+const moveVisible = ref(false)
+const movingNode = ref<DeptNode | null>(null)
+
+function flatten(nodes: DeptNode[], acc: DeptNode[] = []): DeptNode[] {
+  for (const node of nodes) {
+    acc.push(node)
+    if (node.children?.length) flatten(node.children, acc)
+  }
+  return acc
+}
+
+const flatNodes = computed(() => flatten(props.data))
+
+function moveBlockReason(target: DeptNode): string {
+  const moving = movingNode.value
+  if (!moving) return ''
+  if (target.id === moving.id) return '不可选'
+  if (flatten(moving.children || []).some((node) => node.id === target.id)) return '不可选'
+  if (target.name === '待分配') return '不可选'
+  if (moving.source === 'dingtalk' && target.source === 'local') return '钉钉部门不能移到本地部门下'
+  return ''
 }
 </script>
 
@@ -256,6 +303,7 @@ function handleCommand(command: string, node: DeptNode) {
     <!-- 树 -->
     <div class="tree-body">
       <el-tree
+        ref="treeRef"
         :data="data"
         :props="treeProps"
         :filter-node-method="filterNode"
@@ -308,6 +356,7 @@ function handleCommand(command: string, node: DeptNode) {
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="move">移动</el-dropdown-item>
                   <el-dropdown-item command="add">
                     <el-icon><Plus /></el-icon>
                     添加子部门
@@ -335,10 +384,25 @@ function handleCommand(command: string, node: DeptNode) {
     </div>
 
     <!-- 编辑抽屉 -->
+    <el-dialog v-model="moveVisible" title="移动部门" width="420px">
+      <p v-if="movingNode">将「{{ movingNode.name }}」移到新上级</p>
+      <div
+        v-for="node in flatNodes"
+        :key="node.id"
+        class="move-option"
+        :class="{ 'is-disabled': !!moveBlockReason(node) }"
+        :title="moveBlockReason(node)"
+      >
+        {{ node.name }}
+        <span v-if="moveBlockReason(node)">{{ moveBlockReason(node) }}</span>
+      </div>
+    </el-dialog>
+
     <FormDrawer
-      v-model="editDrawerVisible"
+      v-model:open="editDrawerVisible"
       :title="isAdding ? '新增部门' : '编辑部门'"
-      @submit="handleSave"
+      size="S"
+      :submit="handleSave"
     >
       <el-form v-if="editingNode" label-width="80px">
         <el-form-item label="部门名称" required>
@@ -369,6 +433,11 @@ function handleCommand(command: string, node: DeptNode) {
 </template>
 
 <style lang="scss" scoped>
+.move-option {
+  padding: 6px 0;
+  &.is-disabled { color: var(--text2); }
+}
+
 .dept-tree {
   display: flex;
   flex-direction: column;

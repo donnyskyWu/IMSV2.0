@@ -26,12 +26,11 @@ test.describe('L03. 左树右表', () => {
 
   test('VC-L03-02: 点部门查询含下级', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    const treeNode = page.locator('.el-tree-node__content').nth(2)
-    if (await treeNode.isVisible()) {
-      await treeNode.click()
-      await page.waitForTimeout(500)
-    }
+    await page.locator('.el-tree-node__content').filter({ hasText: '市场部' }).click()
+    await expect(page).toHaveURL(/dept=market/)
+    await expect(page.locator('.el-table__body tbody tr')).toHaveCount(9)
+    await expect(page.getByRole('cell', { name: '王五' })).toHaveCount(1)
+    await expect(page.locator('.el-pager li.is-active')).toHaveText('1')
   })
 
   test('VC-L03-03: 切部门保持条件回第 1 页', async ({ page }) => {
@@ -75,41 +74,24 @@ test.describe('L03. 左树右表', () => {
   })
 
   test('VC-L03-05: 关闭含下级只显示直属', async ({ page }) => {
-    test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    const treeNode = page.locator('.el-tree-node__content').nth(2)
-    if (await treeNode.isVisible()) {
-      await treeNode.click()
-      await page.waitForTimeout(500)
-
-      const includeSwitch = page.locator('.include-children-switch, .el-switch').first()
-      if (await includeSwitch.isVisible()) {
-        await includeSwitch.click()
-        await page.waitForTimeout(500)
-      }
-    }
+    test.skip((page.viewportSize()?.width ?? 0) < 768, '仅限桌面视口')
+    await page.locator('.el-tree-node__content').filter({ hasText: '市场部' }).click()
+    await expect(page.locator('.el-table__body tbody tr')).toHaveCount(9)
+    await page.locator('.include-row .el-switch').click()
+    await expect(page.locator('.el-table__body tbody tr')).toHaveCount(3)
+    await expect(page.getByRole('cell', { name: '王五' })).toBeVisible()
+    await page.locator('.include-row .el-switch').click()
+    await expect(page.locator('.el-table__body tbody tr')).toHaveCount(9)
   })
 
   test('VC-L03-06: 切换含下级人数变化', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    const treeNode = page.locator('.el-tree-node__content').nth(2)
-    if (await treeNode.isVisible()) {
-      await treeNode.click()
-      await page.waitForTimeout(500)
-
-      const totalBefore = page.locator('.el-pagination__total, :text("共")').first()
-      let countBefore = ''
-      if (await totalBefore.isVisible()) {
-        countBefore = await totalBefore.textContent() || ''
-      }
-
-      const includeSwitch = page.locator('.include-children-switch, .el-switch').first()
-      if (await includeSwitch.isVisible()) {
-        await includeSwitch.click()
-        await page.waitForTimeout(500)
-      }
-    }
+    await page.locator('.el-tree-node__content').filter({ hasText: '运营部' }).click()
+    await expect(page.locator('.pagination-total')).toContainText('共 4 条')
+    await page.locator('.include-row .el-switch').click()
+    await expect(page.locator('.pagination-total')).toContainText('共 2 条')
+    await page.locator('.include-row .el-switch').click()
+    await expect(page.locator('.pagination-total')).toContainText('共 4 条')
   })
 
   test('VC-L03-07: 点全部隐藏含下级', async ({ page }) => {
@@ -130,12 +112,10 @@ test.describe('L03. 左树右表', () => {
 
   test('VC-L03-08: 点待分配', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    const pendingNode = page.locator('.el-tree-node:has-text("待分配") .el-tree-node__content').first()
-    if (await pendingNode.isVisible()) {
-      await pendingNode.click()
-      await page.waitForTimeout(500)
-    }
+    await page.locator('.el-tree-node__content').filter({ hasText: '待分配' }).click()
+    await expect(page.locator('.el-table__body tbody tr')).toHaveCount(2)
+    await expect(page.getByRole('cell', { name: '待一' })).toBeVisible()
+    await expect(page.getByRole('cell', { name: '待二' })).toBeVisible()
   })
 
   test('VC-L03-09: 新建人员带入部门', async ({ page }) => {
@@ -154,7 +134,7 @@ test.describe('L03. 左树右表', () => {
         await page.waitForTimeout(500)
 
         // 验证抽屉中部门已填
-        const drawer = page.locator('.el-drawer').first()
+        const drawer = page.locator('.el-drawer:visible').first()
         if (await drawer.isVisible()) {
           const deptField = drawer.locator('.el-select:has-text("技术部"), input[value*="技术部"], :text("技术部")')
           if (await deptField.count() > 0) {
@@ -169,55 +149,25 @@ test.describe('L03. 左树右表', () => {
 
   test('VC-L03-10: 全部时新建部门为空', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    // 选中"全部"
-    const allNode = page.locator('.el-tree-node:has-text("全部") .el-tree-node__content').first()
-    if (await allNode.count() > 0 && await allNode.isVisible()) {
-      await allNode.click()
-      await page.waitForTimeout(500)
-
-      const addBtn = page.locator('button:has-text("新建人员"), button:has-text("新建")')
-      if (await addBtn.count() > 0 && await addBtn.first().isVisible()) {
-        await addBtn.first().click()
-        await page.waitForTimeout(500)
-
-        const drawer = page.locator('.el-drawer').first()
-        if (await drawer.isVisible()) {
-          // 全部时部门应为空
-          await page.keyboard.press('Escape')
-        }
-      }
-    }
+    await page.locator('.el-tree-node__content').filter({ hasText: /^全部$/ }).click()
+    await page.getByRole('button', { name: '新建人员' }).click()
+    const drawer = page.locator('.el-drawer:visible')
+    await expect(drawer).toBeVisible()
+    await expect(drawer.locator('.el-select')).toContainText('请选择')
+    await expect(drawer.locator('.el-select')).not.toContainText('市场部')
   })
 
   test('VC-L03-11: 停用部门不带入', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    // 勾选显示停用部门
-    const showDisabledCheckbox = page.locator(':text("显示停用"), input[type="checkbox"]').first()
-    if (await showDisabledCheckbox.isVisible()) {
-      await showDisabledCheckbox.click()
-      await page.waitForTimeout(300)
-    }
-
-    // 选中停用部门
-    const disabledNode = page.locator('.el-tree-node:has-text("停用") .el-tree-node__content').first()
-    if (await disabledNode.count() > 0 && await disabledNode.isVisible()) {
-      await disabledNode.click()
-      await page.waitForTimeout(500)
-
-      const addBtn = page.locator('button:has-text("新建人员"), button:has-text("新建")')
-      if (await addBtn.count() > 0 && await addBtn.first().isVisible()) {
-        await addBtn.first().click()
-        await page.waitForTimeout(500)
-
-        const drawer = page.locator('.el-drawer').first()
-        if (await drawer.isVisible()) {
-          // 停用部门不带入
-          await page.keyboard.press('Escape')
-        }
-      }
-    }
+    await page.getByText('显示停用部门').click()
+    await page.locator('.el-tree-node__content').filter({ hasText: '旧项目组' }).click()
+    await page.getByRole('button', { name: '新建人员' }).click()
+    const drawer = page.locator('.el-drawer:visible')
+    await expect(drawer.locator('.el-select')).toContainText('请选择')
+    await drawer.locator('.el-select').click()
+    const option = page.getByRole('option', { name: '旧项目组' })
+    await expect(option).toBeVisible()
+    await expect(option).toHaveClass(/is-disabled/)
   })
 
   test('VC-L03-12: 新建人员树人数更新', async ({ page }) => {
@@ -348,23 +298,19 @@ test.describe('L03. 左树右表', () => {
 
   test('VC-L03-20: 浏览器前进后退同步', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
-
-    const node1 = page.locator('.el-tree-node__content').nth(2)
-    const node2 = page.locator('.el-tree-node__content').nth(3)
-
-    if (await node1.isVisible() && await node2.isVisible()) {
-      await node1.click()
-      await page.waitForTimeout(300)
-
-      await node2.click()
-      await page.waitForTimeout(300)
-
-      await page.goBack()
-      await page.waitForTimeout(300)
-
-      await page.goForward()
-      await page.waitForTimeout(300)
-    }
+    const node = (name: string) => page.locator('.el-tree-node__content').filter({ hasText: name })
+    await node('市场部').click()
+    await node('技术部').click()
+    await node('运营部').click()
+    await page.goBack()
+    await expect(page).toHaveURL(/dept=tech/)
+    await expect(page.getByRole('cell', { name: '技一' })).toBeVisible()
+    await page.goBack()
+    await expect(page).toHaveURL(/dept=market/)
+    await expect(page.getByRole('cell', { name: '张一' })).toBeVisible()
+    await page.goForward()
+    await expect(page).toHaveURL(/dept=tech/)
+    await expect(page.getByRole('cell', { name: '技一' })).toBeVisible()
   })
 
   test('VC-L03-21: 已删除部门地址提示', async ({ page }) => {

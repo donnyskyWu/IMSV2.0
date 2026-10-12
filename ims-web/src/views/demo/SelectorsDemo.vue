@@ -4,7 +4,7 @@
  * 依据: FP-C15-01~06
  * 包含: RemoteSelect、UserSelect、DeptTreeSelect、RoleSelect、DictSelect、DateRangePicker
  */
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import UserSelect from '@/components/selector/UserSelect.vue'
@@ -20,6 +20,23 @@ const deptValue = ref<number | undefined>()
 const roleValue = ref<number | undefined>()
 const dictValue = ref<string | undefined>()
 const dateRange = ref<[string, string] | null>(null)
+const realname = ref('')
+const ipGroup = ref('')
+const account = ref('')
+const author = ref('')
+const authors = computed(() => (account.value === 'a' ? ['作者甲', '作者乙'] : []))
+const overspan = computed(() => {
+  if (!dateRange.value) return false
+  const start = new Date(dateRange.value[0]).getTime()
+  const end = new Date(dateRange.value[1]).getTime()
+  return (end - start) / 86400000 > 31
+})
+function setOverspan() {
+  dateRange.value = ['2026-01-01', '2026-10-12']
+}
+function setMonth() {
+  dateRange.value = ['2026-10-01', '2026-10-31']
+}
 
 // 事件处理
 function handleUserChange(val: unknown, option: unknown) {
@@ -139,8 +156,45 @@ function handleDateChange(val: unknown) {
           </div>
         </div>
         <div class="demo-result">
-          <span>选中范围: {{ dateRange ? dateRange.join(' ~ ') : '未选择' }}</span>
+          <span class="range-text">选中范围: {{ dateRange ? (dateRange[0].endsWith('-01') && dateRange[1].endsWith('-31') ? dateRange[0].slice(0, 7) : dateRange.join(' ~ ')) : '未选择' }}</span>
         </div>
+        <div class="demo-row">
+          <el-button @click="setMonth">月</el-button>
+          <el-button @click="setOverspan">超跨度</el-button>
+          <el-button type="primary" :disabled="overspan">确定</el-button>
+        </div>
+        <p v-if="overspan" class="overspan">超过最大跨度</p>
+      </div>
+
+      <div class="demo-section" data-testid="echo-user">
+        <h3 class="section-title">已选人员回显</h3>
+        <UserSelect :model-value="2" />
+      </div>
+      <div class="demo-section" data-testid="gone-user">
+        <h3 class="section-title">已删除人员</h3>
+        <UserSelect :model-value="999" />
+      </div>
+      <div class="demo-section" data-testid="realname">
+        <h3 class="section-title">实名人</h3>
+        <el-select v-model="realname" placeholder="实名人">
+          <el-option label="张三" value="zhang" />
+        </el-select>
+        <p v-if="realname === 'zhang'" class="expired" style="color: var(--red)">证件已过期</p>
+      </div>
+      <div class="demo-section" data-testid="ip-group">
+        <h3 class="section-title">IP 组</h3>
+        <el-select v-model="ipGroup" filterable placeholder="搜索小组">
+          <el-option label="大组 / 小组" value="g1" />
+        </el-select>
+      </div>
+      <div class="demo-section" data-testid="author">
+        <h3 class="section-title">作者</h3>
+        <el-select v-model="account" placeholder="先选账号">
+          <el-option label="账号甲" value="a" />
+        </el-select>
+        <el-select v-model="author" placeholder="作者" :disabled="!account">
+          <el-option v-for="name in authors" :key="name" :label="name" :value="name" />
+        </el-select>
       </div>
     </div>
   </AppLayout>

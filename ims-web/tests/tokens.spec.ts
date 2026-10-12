@@ -2,6 +2,10 @@
  * Token 系统测试
  * 依据: 02-验证用例.md VC-T-01~04
  */
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { ESLint } from 'eslint'
+import stylelint from 'stylelint'
 import { test, expect } from '@playwright/test'
 
 test.describe('T. Token 系统', () => {
@@ -82,7 +86,47 @@ test.describe('T. Token 系统', () => {
     }
   })
 
-  test('VC-T-04: ESLint 禁止硬编码颜色和接口路径', async ({ page }) => {
-    test.skip(true, 'Shell 命令检查，不在 Playwright 中执行')
+  test('VC-T-04: ESLint 禁止硬编码颜色和接口路径', async () => {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+    const eslint = new ESLint({
+      cwd: root,
+      overrideConfigFile: path.join(root, 'eslint.config.js'),
+    })
+    const bad = `<script setup>
+const roles = ['admin']
+if (roles.includes('admin')) {
+  const api = '/admin-api/ims/demo'
+  void api
+}
+</script>`
+    const badResult = await eslint.lintText(bad, { filePath: path.join(root, 'src/views/_vc_t04_probe.vue') })
+    const badText = badResult.flatMap((item) => item.messages.map((message) => message.message)).join('\n')
+    expect(badText).toMatch(/admin-api/)
+    expect(badText).toMatch(/角色/)
+
+    const clean = `<script setup>
+const permCodes = ['ims:demo:order:query']
+const ok = permCodes.includes('ims:demo:order:query')
+void ok
+</script>`
+    const cleanResult = await eslint.lintText(clean, { filePath: path.join(root, 'src/views/_vc_t04_clean.vue') })
+    const cleanText = cleanResult.flatMap((item) => item.messages.map((message) => message.message)).join('\n')
+    expect(cleanText).not.toMatch(/admin-api/)
+    expect(cleanText).not.toMatch(/角色名/)
+
+    const styled = await stylelint.lint({
+      code: '.probe{color:#123456}',
+      codeFilename: 'probe.css',
+      config: { rules: { 'color-no-hex': true } },
+    })
+    expect(styled.errored).toBe(true)
+    expect(styled.results[0]?.warnings.map((warning) => warning.text).join('\n')).toMatch(/[Hh]ex|color/)
+
+    const plain = await stylelint.lint({
+      code: '.probe{color:var(--blue)}',
+      codeFilename: 'plain.css',
+      config: { rules: { 'color-no-hex': true } },
+    })
+    expect(plain.errored).toBe(false)
   })
 })

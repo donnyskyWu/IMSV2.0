@@ -43,7 +43,7 @@ const shortcuts = computed(() => {
       },
     },
     {
-      text: '最近7天',
+      text: '近 7 天',
       value: () => {
         const end = dayjs().format('YYYY-MM-DD')
         const start = dayjs().subtract(6, 'day').format('YYYY-MM-DD')

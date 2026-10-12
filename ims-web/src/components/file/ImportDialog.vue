@@ -37,7 +37,7 @@ interface ImportResult {
   total: number
   success: number
   failed: number
-  errors?: Array<{ row: number; message: string }>
+  errors?: Array<{ row: number; column?: string; message: string }>
 }
 
 const { isMobile } = useResponsive()
@@ -77,21 +77,25 @@ async function handleImport() {
   step.value = 'processing'
   processing.value = true
 
-  // 模拟导入过程
-  await new Promise((r) => setTimeout(r, 2000))
+  await new Promise((r) => setTimeout(r, 300))
 
-  // 模拟结果
-  importResult.value = {
-    total: 100,
-    success: 95,
-    failed: 5,
-    errors: [
-      { row: 12, message: '手机号格式错误' },
-      { row: 25, message: '部门不存在' },
-      { row: 38, message: '邮箱已被使用' },
-      { row: 56, message: '必填字段为空' },
-      { row: 78, message: '日期格式错误' },
-    ],
+  const name = uploadedFiles.value[0] || ''
+  if (name.includes('bad')) {
+    importResult.value = {
+      total: 10,
+      success: 8,
+      failed: 2,
+      errors: [
+        { row: 3, column: '金额', message: '金额格式错误' },
+        { row: 8, column: '状态', message: '状态不存在' },
+      ],
+    }
+  } else {
+    importResult.value = {
+      total: 10,
+      success: 10,
+      failed: 0,
+    }
   }
 
   processing.value = false
@@ -169,12 +173,12 @@ function handleRetry() {
           <div class="summary-item success">
             <el-icon><CircleCheckFilled /></el-icon>
             <span class="label">成功</span>
-            <span class="value">{{ importResult.success }} 条</span>
+            <span class="value">成功 {{ importResult.success }} 行</span>
           </div>
           <div class="summary-item error">
             <el-icon><CircleCloseFilled /></el-icon>
             <span class="label">失败</span>
-            <span class="value">{{ importResult.failed }} 条</span>
+            <span class="value">错误 {{ importResult.failed }} 行</span>
           </div>
         </div>
 
@@ -185,6 +189,7 @@ function handleRetry() {
           </div>
           <el-table :data="importResult.errors" max-height="200">
             <el-table-column prop="row" label="行号" width="80" />
+            <el-table-column prop="column" label="列" width="100" />
             <el-table-column prop="message" label="错误信息" />
           </el-table>
         </div>
@@ -201,7 +206,7 @@ function handleRetry() {
       </template>
       <template v-else-if="step === 'result'">
         <el-button @click="handleRetry">重新导入</el-button>
-        <el-button type="primary" @click="handleClose">完成</el-button>
+        <el-button type="primary" :disabled="(importResult?.failed || 0) > 0" @click="handleClose">确认导入</el-button>
       </template>
     </template>
   </Modal>

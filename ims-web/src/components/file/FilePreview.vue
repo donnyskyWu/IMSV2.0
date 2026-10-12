@@ -15,6 +15,7 @@ interface FileItem {
   url: string
   type?: string
   size?: number
+  unavailable?: boolean
 }
 
 interface Props {
@@ -78,8 +79,18 @@ function formatSize(bytes?: number): string {
 }
 
 // 预览文件
+const blockedName = ref('')
+
 function handlePreview(file: FileItem) {
+  if (file.unavailable) {
+    blockedName.value = file.name
+    return
+  }
   const mediaType = getMediaType(file)
+  if (mediaType === 'pdf') {
+    window.open(file.url, '_blank', 'noopener')
+    return
+  }
   if (mediaType === 'other') {
     // 直接下载
     handleDownload(file)
@@ -108,6 +119,7 @@ function handleDownload(file: FileItem) {
       class="file-item"
       @click="handlePreview(file)"
     >
+      <p v-if="file.unavailable && blockedName === file.name" class="file-unavailable">文件不可用</p>
       <!-- 图片缩略图 -->
       <div
         v-if="getMediaType(file) === 'image'"

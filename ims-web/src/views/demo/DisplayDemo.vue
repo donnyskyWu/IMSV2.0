@@ -4,7 +4,7 @@
  * 依据: FP-C-35~39
  * 包含: Timeline、DescriptionList、MaskedText、MoneyText、PercentText、Chart、TraceGraph
  */
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import Timeline from '@/components/display/Timeline.vue'
@@ -16,12 +16,30 @@ import Chart from '@/components/display/Chart.vue'
 import TraceGraph from '@/components/display/TraceGraph.vue'
 // ECharts 配置类型
 
+const designerText = ref('')
+
+function markDesignerDirty() {
+  sessionStorage.setItem('ims_designer_dirty', designerText.value ? '1' : '')
+}
+
+function onBeforeUnload(event: { preventDefault: () => void }) {
+  if (sessionStorage.getItem('ims_designer_dirty') === '1') {
+    event.preventDefault()
+  }
+}
+
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', onBeforeUnload)
+  sessionStorage.removeItem('ims_designer_dirty')
+})
+
 // 时间轴数据
 const timelineItems = ref([
-  { time: '2026-10-12 14:30:00', title: '订单创建', content: '用户提交了订单申请', type: 'primary' as const },
-  { time: '2026-10-12 15:00:00', title: '初审通过', content: '财务部门已完成初审', type: 'success' as const },
-  { time: '2026-10-12 16:30:00', title: '复审中', content: '等待主管审批', type: 'warning' as const },
   { time: '2026-10-12 17:00:00', title: '审批完成', content: '主管已批准', type: 'success' as const },
+  { time: '2026-10-12 16:30:00', title: '复审中', content: '等待主管审批', type: 'warning' as const },
+  { time: '2026-10-12 15:00:00', title: '初审通过', content: '财务部门已完成初审', type: 'success' as const },
+  { time: '2026-10-12 14:30:00', title: '订单创建', content: '用户提交了订单申请', type: 'primary' as const },
 ])
 
 // 描述列表数据
@@ -33,6 +51,7 @@ const descItems = ref([
   { label: '联系电话', value: '138****5678', type: 'masked' as const },
   { label: '创建时间', value: '2026-10-12 14:30:00' },
   { label: '备注说明', value: '这是一条较长的备注说明文字，用于展示多行内容的处理效果', span: 2 },
+  { label: '空字段', value: '' },
 ])
 
 // 图表配置
@@ -63,6 +82,11 @@ const flowNodes = ref([
   { id: 'end', label: '结束', type: 'end' as const, status: 'pending' as const },
 ])
 
+const nodeLog = ref('')
+const emptyChartOption = ref({
+  series: [{ type: 'line' as const, data: [] as number[] }],
+})
+
 const flowEdges = ref([
   { from: 'start', to: 'task1' },
   { from: 'task1', to: 'gateway1' },
@@ -74,6 +98,10 @@ const flowEdges = ref([
 <template>
   <AppLayout>
     <div class="display-demo">
+      <section class="designer-section">
+        <h3>设计器</h3>
+        <el-input v-model="designerText" type="textarea" placeholder="修改设计内容" @input="markDesignerDirty" />
+      </section>
       <PageHeader title="展示组件演示" sub-title="FP-P-09 / FP-C35~C39" />
 
       <div class="demo-section">
@@ -111,6 +139,7 @@ const flowEdges = ref([
       <div class="demo-section">
         <h3 class="section-title">4. 图表 (Chart)</h3>
         <Chart :option="chartOption" :height="300" />
+        <Chart :option="emptyChartOption" :height="120" />
       </div>
 
       <div class="demo-section">
@@ -120,7 +149,9 @@ const flowEdges = ref([
           :edges="flowEdges"
           current-node="task2"
           :height="300"
+          @node-click="(node) => nodeLog = `已点击 ${node.label}`"
         />
+        <p class="node-log">{{ nodeLog }}</p>
       </div>
     </div>
   </AppLayout>

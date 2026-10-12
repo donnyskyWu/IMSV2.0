@@ -2,11 +2,11 @@
 /**
  * Modal 模态对话框
  * 依据: FP-C-29
- * 桌面: 根据 tier 决定宽度 (sm: 400px, md: 560px, lg: 800px)
+ * 桌面: sm 360 / md 520 / lg 800
  * 手机: min(tier, 100vw - 32px)
  */
 import { computed } from 'vue'
-import { useResponsive } from '@/utils/responsive'
+import { useResponsive, getModalWidth } from '@/utils/responsive'
 
 type ModalTier = 'sm' | 'md' | 'lg'
 
@@ -40,29 +40,13 @@ const emit = defineEmits<{
 const { isMobile } = useResponsive()
 
 // 不同 tier 对应的宽度
-const tierWidths: Record<ModalTier, number> = {
-  sm: 400,
-  md: 560,
+const tierWidths: Record<ModalTier, 360 | 520 | 800> = {
+  sm: 360,
+  md: 520,
   lg: 800,
 }
 
-// 计算对话框宽度
-const dialogWidth = computed(() => {
-  const tierWidth = tierWidths[props.tier]
-  if (isMobile.value) {
-    // min(tier, 100vw - 32px)
-    return '100%'
-  }
-  return `${tierWidth}px`
-})
-
-// 移动端最大宽度
-const mobileMaxWidth = computed(() => {
-  if (isMobile.value) {
-    return `min(${tierWidths[props.tier]}px, calc(100vw - 32px))`
-  }
-  return undefined
-})
+const dialogWidth = computed(() => `${getModalWidth(tierWidths[props.tier])}px`)
 
 // 控制显示
 const visible = computed({
@@ -89,7 +73,6 @@ function handleClose() {
     v-model="visible"
     :title="title"
     :width="dialogWidth"
-    :style="{ maxWidth: mobileMaxWidth }"
     :close-on-click-modal="closeOnClickModal"
     :close-on-press-escape="true"
     :append-to-body="true"

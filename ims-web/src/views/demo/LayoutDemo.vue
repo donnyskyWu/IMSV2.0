@@ -7,7 +7,7 @@
  * - 页头按钮三组配置切换 (A/B/C) 供 VC-M-31 使用
  * - 一个故意写错格式的权限码 供 VC-M-35 使用
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import Tabs from '@/components/layout/Tabs.vue'
@@ -30,12 +30,15 @@ const buttonConfigOptions = [
 ]
 
 // Tab 配置
-const activeTab = ref('tab1')
+const activeTab = ref(sessionStorage.getItem('ims_layout_tab') || 'tab1')
+watch(activeTab, (value) => sessionStorage.setItem('ims_layout_tab', value))
 const tabItems = [
   { key: 'tab1', label: '标签一', count: 10 },
   { key: 'tab2', label: '标签二', count: 5 },
   { key: 'tab3', label: '标签三', count: 0 },
 ]
+
+const breadcrumbExpanded = ref(false)
 
 // 面包屑路径 (7 层)
 const breadcrumbPath = [
@@ -112,16 +115,17 @@ function handleAction(name: string) {
       <section class="demo-section">
         <h3>面包屑导航 (7层)</h3>
         <div class="breadcrumb-demo">
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item
-              v-for="(item, index) in breadcrumbPath"
-              :key="index"
-            >
-              <template v-if="index < breadcrumbPath.length - 1">
-                <a href="javascript:void(0)">{{ item.label }}</a>
-              </template>
-              <template v-else>{{ item.label }}</template>
+          <el-breadcrumb v-if="breadcrumbExpanded" separator="/">
+            <el-breadcrumb-item v-for="(item, index) in breadcrumbPath" :key="index">
+              {{ item.label }}
             </el-breadcrumb-item>
+          </el-breadcrumb>
+          <el-breadcrumb v-else separator="/">
+            <el-breadcrumb-item>{{ breadcrumbPath[0].label }}</el-breadcrumb-item>
+            <el-breadcrumb-item>
+              <button type="button" class="crumb-ellipsis" @click="breadcrumbExpanded = true">…</button>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item>{{ breadcrumbPath[breadcrumbPath.length - 1].label }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
       </section>

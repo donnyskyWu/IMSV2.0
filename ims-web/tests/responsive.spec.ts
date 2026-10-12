@@ -120,20 +120,16 @@ test.describe('表格首列 (Q4, §2.2 #10)', () => {
   })
 
   test('超长首列内容应显示省略号并有 tooltip (VC-M-07)', async ({ page }) => {
-    // 验证超长内容的省略号和 tooltip 功能
     test.skip(page.viewportSize()?.width! >= 768, '仅限移动视口')
-    
     await page.goto('/demo/list')
-    await page.waitForSelector('.el-table')
-    
-    // 验证表格单元格存在
-    const firstCell = page.locator('.el-table__row:first-child .el-table__cell:first-child')
-    if (await firstCell.count() > 0) {
-      // 单元格存在
-      // 通过代码审查确认:
-      // - 表格列配置 show-overflow-tooltip
-      // - Element Plus 自动处理超长文本
-    }
+    const cell = page.locator('.list-demo .cell').filter({ hasText: '这是一个非常长的订单名称' }).first()
+    await expect(cell).toBeVisible()
+    const truncated = await cell.evaluate((el) => ({
+      overflow: getComputedStyle(el).textOverflow,
+      clipped: el.scrollWidth > el.clientWidth,
+    }))
+    expect(truncated.overflow).toBe('ellipsis')
+    expect(truncated.clipped).toBe(true)
   })
 })
 

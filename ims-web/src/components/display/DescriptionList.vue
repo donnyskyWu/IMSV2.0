@@ -28,7 +28,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   columns: 2,
-  labelWidth: 100,
+  labelWidth: 120,
   border: false,
 })
 
@@ -50,7 +50,7 @@ const labelStyle = computed(() => {
 // 空值占位
 function emptyValue(val?: string | number | null): string {
   if (val === null || val === undefined || val === '') {
-    return '-'
+    return '—'
   }
   return String(val)
 }

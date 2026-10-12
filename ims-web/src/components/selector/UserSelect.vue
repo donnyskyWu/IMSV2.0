@@ -12,12 +12,14 @@ interface Props {
   placeholder?: string
   multiple?: boolean
   disabled?: boolean
+  pageSize?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '选择用户',
   multiple: false,
   disabled: false,
+  pageSize: 8,
 })
 
 const emit = defineEmits<{
@@ -28,7 +30,7 @@ const emit = defineEmits<{
 // 模拟用户数据
 const mockUsers = [
   { value: 1, label: '张三', dept: '技术部' },
-  { value: 2, label: '李四', dept: '产品部' },
+  { value: 2, label: '李四', dept: '市场部' },
   { value: 3, label: '王五', dept: '设计部' },
   { value: 4, label: '赵六', dept: '技术部' },
   { value: 5, label: '钱七', dept: '市场部' },
@@ -37,6 +39,11 @@ const mockUsers = [
   { value: 8, label: '吴十', dept: '人事部' },
   { value: 9, label: '郑十一', dept: '技术部' },
   { value: 10, label: '陈十二', dept: '产品部' },
+  ...Array.from({ length: 16 }, (_, index) => ({
+    value: 11 + index,
+    label: `用户${11 + index}`,
+    dept: '扩展部',
+  })),
 ]
 
 // 搜索函数
@@ -61,7 +68,11 @@ async function echoUsers(value: string | number | Array<string | number>) {
   await new Promise((r) => setTimeout(r, 100))
   
   const values = Array.isArray(value) ? value : [value]
-  return mockUsers.filter((u) => values.includes(u.value))
+  return values.map((item) => {
+    const user = mockUsers.find((entry) => entry.value === item)
+    if (!user) return { value: item, label: '（已不可用）', dept: '' }
+    return { ...user, label: `${user.label}（${user.dept}）` }
+  })
 }
 
 function handleUpdate(val: string | number | Array<string | number> | undefined) {
@@ -79,6 +90,7 @@ function handleChange(val: unknown, option: unknown) {
     :placeholder="placeholder"
     :multiple="multiple"
     :disabled="disabled"
+    :page-size="pageSize"
     :fetch-fn="fetchUsers"
     :echo-fn="echoUsers"
     @update:model-value="handleUpdate"

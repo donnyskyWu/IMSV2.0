@@ -4,7 +4,7 @@
  * 依据: FP-C-39
  * 第 1 步仅实现只读显示，编辑功能在第 2 步实现
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useResponsive } from '@/utils/responsive'
 
 interface FlowNode {
@@ -34,6 +34,15 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { isMobile } = useResponsive()
+const scale = ref(1)
+
+const emit = defineEmits<{
+  (e: 'node-click', node: FlowNode): void
+}>()
+
+function onWheel(event: { deltaY: number }) {
+  scale.value = Math.min(2, Math.max(0.5, Number((scale.value + (event.deltaY < 0 ? 0.1 : -0.1)).toFixed(2))))
+}
 
 // 节点颜色
 function getNodeColor(node: FlowNode): string {
@@ -172,8 +181,10 @@ function getEdgePath(edge: FlowEdge): string {
     class="trace-graph"
     :class="{ 'trace-graph--mobile': isMobile }"
     :style="{ height: `${height}px` }"
+    :data-scale="scale"
+    @wheel.prevent="onWheel"
   >
-    <svg :viewBox="viewBox" class="flow-svg">
+      <svg :viewBox="viewBox" class="flow-svg" :style="{ transform: `scale(${scale})` }">
       <!-- 箭头定义 -->
       <defs>
         <marker
@@ -203,8 +214,9 @@ function getEdgePath(edge: FlowEdge): string {
       <g
         v-for="node in layoutNodes"
         :key="node.id"
-        class="node"
+        class="node graph-node"
         :transform="`translate(${node.x || 0}, ${node.y || 0})`"
+        @click="emit('node-click', node)"
       >
         <rect
           x="0"

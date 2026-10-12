@@ -13,6 +13,7 @@ interface DownloadTask {
   progress: number
   status: 'pending' | 'downloading' | 'completed' | 'error'
   url?: string
+  reason?: string
 }
 
 interface Props {
@@ -82,6 +83,11 @@ function handleDownload(task: DownloadTask) {
           />
         </div>
 
+        <div v-for="task in tasks.filter((t) => t.status === 'error')" :key="task.id" class="task-item">
+          <span class="task-name">失败</span>
+          <span class="task-name">{{ task.reason }}</span>
+        </div>
+
         <!-- 已完成的任务 -->
         <div v-if="completedCount > 0" class="completed-tasks">
           <div
@@ -111,6 +117,14 @@ function handleDownload(task: DownloadTask) {
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
   z-index: 2000;
   overflow: hidden;
+
+  @media (width <= 767px) {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    border-radius: 0;
+  }
 }
 
 .bar-header {
@@ -187,6 +201,5 @@ function handleDownload(task: DownloadTask) {
 .slide-up-enter-from,
 .slide-up-leave-to {
   opacity: 0;
-  transform: translateY(20px);
 }
 </style>

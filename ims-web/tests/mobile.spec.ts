@@ -22,16 +22,15 @@ test.describe('移动端测试', () => {
     await page.setViewportSize({ width: 767, height: 844 })
     await page.waitForTimeout(300)
 
-    const menuBtn = page.locator('.menu-btn, [data-testid="menu-btn"], button[aria-label="菜单"]').first()
-    const sidebar = page.locator('.sidebar, .app-sidebar').first()
+    const shell = page.locator('.app-layout').first()
+    const menuBtn = shell.locator('> .app-main > .app-topbar .menu-btn')
+    const sidebar = shell.locator('> .app-sidebar')
+    await expect(menuBtn).toBeVisible()
+    await expect(sidebar).toHaveClass(/mobile-hidden/)
 
-    if (await menuBtn.count() > 0) {
-      await expect(menuBtn).toBeVisible()
-    }
-    if (await sidebar.count() > 0) {
-      const hasHiddenClass = await sidebar.evaluate((el) => el.classList.contains('mobile-hidden'))
-      expect(hasHiddenClass).toBe(true)
-    }
+    await page.setViewportSize({ width: 768, height: 900 })
+    await expect(sidebar).not.toHaveClass(/mobile-hidden/)
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(232)
   })
 
   test('VC-M-02: 移动端侧栏隐藏菜单按钮', async ({ page }) => {
@@ -52,59 +51,36 @@ test.describe('移动端测试', () => {
 
   test('VC-M-03: 菜单抽屉滑出遮罩关闭', async ({ page }) => {
     await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
-
-    const menuBtn = page.locator('.menu-btn, [data-testid="menu-btn"]').first()
-    if (await menuBtn.isVisible()) {
-      await menuBtn.tap()
-      await page.waitForTimeout(500)
-
-      const drawer = page.locator('.sidebar-drawer, .el-drawer').first()
-      if (await drawer.isVisible()) {
-        const box = await drawer.boundingBox()
-        if (box) {
-          expect(box.x).toBe(0)
-          expect(box.width).toBeCloseTo(240, -1)
-        }
-
-        const overlay = page.locator('.el-overlay').first()
-        if (await overlay.isVisible()) {
-          await page.mouse.click(380, 400)
-          await page.waitForTimeout(300)
-          await expect(drawer).not.toBeVisible()
-        }
-      }
-    }
+    await page.waitForSelector('.layout-demo')
+    const shell = page.locator('.app-layout').first()
+    const menuBtn = shell.locator('> .app-main > .app-topbar .menu-btn')
+    const sidebar = shell.locator('> .app-sidebar')
+    await menuBtn.tap()
+    await expect(sidebar).toHaveClass(/mobile-open/)
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.x ?? -1)).toBe(0)
+    const box = await sidebar.boundingBox()
+    expect(box!.width).toBeCloseTo(240, 0)
+    const overlay = shell.locator('.sidebar-overlay')
+    await expect(overlay).toBeVisible()
+    await page.mouse.click(380, 400)
+    await expect(sidebar).toHaveClass(/mobile-hidden/)
+    await menuBtn.tap()
+    await sidebar.locator('.el-sub-menu__title').filter({ hasText: '示例' }).click()
+    await sidebar.getByRole('menuitem', { name: '列表演示' }).dispatchEvent('click')
+    await expect(page).toHaveURL(/\/demo\/list/)
+    await expect(sidebar).toHaveClass(/mobile-hidden/)
   })
 
   test('VC-M-04: 顶栏 56px 四元素统计范围在用户菜单', async ({ page }) => {
     await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
-
-    const topbar = page.locator('.app-topbar, .topbar').first()
-    if (await topbar.isVisible()) {
-      const box = await topbar.boundingBox()
-      if (box) {
-        expect(box.height).toBe(56)
-      }
-
-      const scopeInTopbar = topbar.locator(':text("统计范围")')
-      expect(await scopeInTopbar.count()).toBe(0)
-
-      const userMenu = topbar.locator('.user-menu, .el-avatar, .user-avatar').first()
-      if (await userMenu.isVisible()) {
-        await userMenu.tap()
-        await page.waitForTimeout(300)
-
-        const menuDropdown = page.locator('.el-dropdown-menu:visible, .user-dropdown:visible').first()
-        if (await menuDropdown.isVisible()) {
-          const scopeInMenu = menuDropdown.locator(':text("统计范围")')
-          if (await scopeInMenu.count() > 0) {
-            await expect(scopeInMenu.first()).toBeVisible()
-          }
-        }
-      }
-    }
+    const topbar = page.locator('.app-layout').first().locator('> .app-main > .app-topbar')
+    await expect(topbar).toBeVisible()
+    const box = await topbar.boundingBox()
+    expect(box?.height).toBeCloseTo(56, 0)
+    await expect(topbar.getByText(/统计范围/)).toHaveCount(0)
+    await expect(page.locator('.page-header').first().getByText(/统计范围/)).toHaveCount(0)
+    await topbar.locator('.user-dropdown').tap()
+    await expect(page.locator('.el-dropdown-menu:visible').getByText(/统计范围：/)).toBeVisible()
   })
 
   test('VC-M-05: Tab 栏横向滚动不换行', async ({ page }) => {
@@ -133,80 +109,85 @@ test.describe('移动端测试', () => {
 
   test('VC-M-06: 面包屑不溢出点击展开', async ({ page }) => {
     await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
-
-    const breadcrumb = page.locator('.el-breadcrumb, .breadcrumb').first()
-    if (await breadcrumb.isVisible()) {
-      await expectInViewport(breadcrumb)
-
-      const ellipsis = breadcrumb.locator(':text("…"), :text("...")')
-      if (await ellipsis.count() > 0) {
-        await ellipsis.first().tap()
-        await page.waitForTimeout(300)
-      }
+    const breadcrumb = page.locator('.breadcrumb-demo')
+    await expect(breadcrumb).toBeVisible()
+    await expectInViewport(breadcrumb)
+    const ellipsis = breadcrumb.locator('.crumb-ellipsis')
+    await expect(ellipsis).toBeVisible()
+    await ellipsis.hover()
+    await expect(breadcrumb.getByText('系统管理')).toHaveCount(0)
+    await ellipsis.tap()
+    for (const label of ['首页', '系统管理', '组织架构', '部门管理', '市场部', '市场一组', '详情']) {
+      await expect(breadcrumb.getByText(label, { exact: true })).toBeVisible()
     }
+    await expectNoHOverflow(page)
   })
 
   test('VC-M-07: 表格横向滚动固定列更多操作', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const table = page.locator('.el-table').first()
+    const table = page.locator('.list-demo .el-table').first()
     await expect(table).toBeVisible()
-
+    const wrap = table.locator('.el-scrollbar__wrap')
+    const scrollable = await wrap.evaluate((el) => el.scrollWidth > el.clientWidth)
+    expect(scrollable).toBe(true)
+    await expect(table.locator('th.el-table-fixed-column--left').first()).toBeVisible()
+    await expect(table.locator('th.el-table-fixed-column--right').first()).toBeVisible()
+    const moreBtn = table.getByRole('button', { name: '更多' }).first()
+    await expect(moreBtn).toBeVisible()
+    await moreBtn.tap()
+    const menu = page.locator('.el-dropdown-menu:visible')
+    await expect(menu.getByText('删除')).toBeVisible()
     await expectNoHOverflow(page)
-
-    const moreBtn = table.locator('.el-dropdown, button:has-text("更多")').first()
-    if (await moreBtn.isVisible()) {
-      await moreBtn.tap()
-      await page.waitForTimeout(300)
-
-      const menu = page.locator('.el-dropdown-menu:visible').first()
-      if (await menu.isVisible()) {
-        const items = menu.locator('.el-dropdown-menu__item')
-        const count = await items.count()
-        expect(count).toBeGreaterThan(0)
-      }
-    }
   })
 
   test('VC-M-08: 负数红色状态色脱敏点击提示', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const negativeAmount = page.locator(':text("-¥"), .negative-amount').first()
-    if (await negativeAmount.isVisible()) {
-      const color = await negativeAmount.evaluate((el) => getComputedStyle(el).color)
-      expect(color).toMatch(/rgb\(255,|#ff/)
-    }
-
-    const masked = page.locator(':text("***"), .masked-text').first()
-    if (await masked.isVisible()) {
-      await masked.tap()
-      await page.waitForTimeout(300)
-
-      const tooltip = page.locator('.el-tooltip__popper:visible, .el-popper:visible').first()
-      if (await tooltip.count() > 0) {
-        await expect(tooltip).toContainText(/无.*权限/)
-      }
-    }
+    const negativeAmount = page.locator('.list-demo .neg').first()
+    await expect(negativeAmount).toBeVisible()
+    const color = await negativeAmount.evaluate((el) => getComputedStyle(el).color)
+    expect(color).toMatch(/rgb\(255,\s*59,\s*48\)/)
+    const masked = page.locator('.list-demo .masked').first()
+    await page.locator('.list-demo .el-table').first().evaluate((el) => {
+      const cell = el.querySelector('.masked')?.closest('td')
+      const wrap = el.querySelector('.el-scrollbar__wrap') as HTMLElement | null
+      const leftFixed = [...el.querySelectorAll('.el-table__body td.el-table-fixed-column--left')].at(-1)
+      const rightFixed = el.querySelector('.el-table__body td.el-table-fixed-column--right')
+      if (!cell || !wrap || !rightFixed) return
+      const leftEdge = leftFixed ? leftFixed.getBoundingClientRect().right : wrap.getBoundingClientRect().left
+      const rightEdge = rightFixed.getBoundingClientRect().left
+      const rect = cell.getBoundingClientRect()
+      wrap.scrollLeft += rect.left + rect.width / 2 - (leftEdge + rightEdge) / 2
+    })
+    await masked.tap()
+    await expect(page.getByRole('tooltip').filter({ hasText: '无查看权限' })).toBeVisible()
   })
 
   test('VC-M-09: 排序勾选触控可用', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const sortHeader = page.locator('.el-table__header th.is-sortable').first()
-    if (await sortHeader.isVisible()) {
-      await sortHeader.tap()
-      await page.waitForTimeout(300)
-    }
-
-    const checkbox = page.locator('.el-table .el-checkbox').first()
-    if (await checkbox.isVisible()) {
-      await checkbox.tap()
-      await page.waitForTimeout(300)
-    }
+    const table = page.locator('.list-demo .el-table').first()
+    const header = table.locator('th').filter({ hasText: '金额' })
+    const boxes = table.locator('.el-table__body .el-checkbox')
+    await boxes.nth(0).tap()
+    await boxes.nth(1).tap()
+    await expect(page.getByRole('button', { name: '批量操作' })).toBeVisible()
+    await table.evaluate((el) => {
+      const th = [...el.querySelectorAll('.el-table__header-wrapper th')].find((node) => node.textContent?.includes('金额')) as HTMLElement | undefined
+      const wrap = el.querySelector('.el-scrollbar__wrap') as HTMLElement | null
+      const leftFixed = [...el.querySelectorAll('.el-table__header-wrapper th.el-table-fixed-column--left')].at(-1)
+      const rightFixed = el.querySelector('.el-table__header-wrapper th.el-table-fixed-column--right')
+      const caret = th?.querySelector('.caret-wrapper')
+      if (!th || !wrap || !rightFixed || !caret) return
+      const leftEdge = leftFixed ? leftFixed.getBoundingClientRect().right : wrap.getBoundingClientRect().left
+      const rightEdge = rightFixed.getBoundingClientRect().left
+      const caretRect = caret.getBoundingClientRect()
+      const targetCenter = (leftEdge + rightEdge) / 2
+      const caretCenter = caretRect.left + caretRect.width / 2
+      wrap.scrollLeft += caretCenter - targetCenter
+    })
+    const sortBtn = header.locator('.sort-caret.ascending')
+    await expect(sortBtn).toBeInViewport()
+    await sortBtn.click()
+    await expect(header).toHaveClass(/ascending/)
   })
 
   test('VC-M-10: 查询栏筛选全屏抽屉 Chip', async ({ page }) => {
@@ -234,27 +215,18 @@ test.describe('移动端测试', () => {
 
   test('VC-M-11: 分页简化 1/N 无跳页', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const pagination = page.locator('.el-pagination, .pagination').first()
-    if (await pagination.isVisible()) {
-      await expectInViewport(pagination)
-
-      const pageInfo = pagination.locator(':text-matches("\\\\d+/\\\\d+")')
-      if (await pageInfo.count() > 0) {
-        await expect(pageInfo.first()).toBeVisible()
-      }
-
-      const sizes = pagination.locator('.el-pagination__sizes')
-      const jump = pagination.locator('.el-pagination__jump')
-
-      if (await sizes.count() > 0) {
-        await expect(sizes.first()).not.toBeVisible()
-      }
-      if (await jump.count() > 0) {
-        await expect(jump.first()).not.toBeVisible()
-      }
-    }
+    const pagination = page.locator('.list-demo .pagination')
+    await expect(pagination).toBeVisible()
+    await expectInViewport(pagination)
+    await expect(pagination.getByText('1/4')).toBeVisible()
+    await expect(pagination.getByText('共 35 条')).toBeVisible()
+    await expect(pagination.locator('.el-pagination__sizes, .el-pagination__jump, .page-size-select')).toHaveCount(0)
+    await pagination.locator('.pager-btn').nth(1).tap()
+    await expect(pagination.getByText('2/4')).toBeVisible()
+    await page.getByPlaceholder('请输入名称').fill('不存在的搜索词xxxyyy')
+    await page.getByRole('button', { name: '查询' }).tap()
+    await expect(pagination).toBeHidden()
+    await expect(page.locator('.list-demo').getByText('暂无数据')).toBeVisible()
   })
 
   test('VC-M-12: 统计卡每行 2 列', async ({ page }) => {
@@ -363,23 +335,16 @@ test.describe('移动端测试', () => {
 
   test('VC-M-16: 弹窗宽度 min(档位, 358px)', async ({ page }) => {
     await page.goto('/demo/form')
-    await page.waitForSelector('.form-demo, .app-layout')
-
-    const modalBtn = page.locator('button:has-text("弹窗")').first()
-    if (await modalBtn.isVisible()) {
-      await modalBtn.tap()
-      await page.waitForTimeout(300)
-
-      const dialog = page.locator('.el-dialog').first()
-      if (await dialog.isVisible()) {
-        const box = await dialog.boundingBox()
-        if (box) {
-          expect(box.width).toBeLessThanOrEqual(358)
-          expect(box.x).toBeGreaterThanOrEqual(16 - 1)
-        }
-
-        await page.keyboard.press('Escape')
-      }
+    for (const name of ['打开小弹窗', '打开中弹窗', '打开大弹窗']) {
+      await page.getByRole('button', { name }).tap()
+      const dialog = page.locator('.el-dialog').filter({ hasText: '弹窗内容' })
+      await expect(dialog).toBeVisible()
+      const box = await dialog.boundingBox()
+      expect(box).toBeTruthy()
+      expect(box!.width).toBeCloseTo(358, 0)
+      expect(box!.x).toBeCloseTo(16, 0)
+      await page.keyboard.press('Escape')
+      await expect(dialog).toBeHidden()
     }
   })
 
@@ -406,25 +371,30 @@ test.describe('移动端测试', () => {
 
   test('VC-M-18: 空态无权限出错态完整显示', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const emptyState = page.locator('.el-empty, .empty-state').first()
-    if (await emptyState.isVisible()) {
-      await expectInViewport(emptyState)
-    }
-
+    await page.getByRole('button', { name: '空数据' }).tap()
+    const empty = page.getByText('暂无数据')
+    await expect(empty).toBeVisible()
+    await expectInViewport(empty)
+    await page.getByRole('button', { name: '无权限' }).tap()
+    const denied = page.getByText('暂无权限查看此内容')
+    await expect(denied).toBeVisible()
+    await expectInViewport(denied)
+    await page.getByRole('button', { name: '加载失败' }).tap()
+    const failed = page.getByText('加载失败，请稍后重试')
+    await expect(failed).toBeVisible()
+    await expectInViewport(failed)
+    await page.getByRole('button', { name: '重试' }).tap()
+    await expect(page.getByText('已重试 1')).toBeVisible()
     await expectNoHOverflow(page)
   })
 
   test('VC-M-19: 加载遮罩在视口内', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('ims_slow_list', '1'))
     await page.goto('/demo/list')
-
-    const loadingMask = page.locator('.el-loading-mask').first()
-    if (await loadingMask.isVisible()) {
-      await expectInViewport(loadingMask)
-    }
-
-    await page.waitForSelector('.list-demo, .app-layout')
+    const mask = page.locator('.el-loading-mask')
+    await expect(mask).toBeVisible()
+    await expectInViewport(mask)
+    await expect(mask).toBeHidden({ timeout: 5000 })
     await expectNoHOverflow(page)
   })
 
@@ -450,33 +420,55 @@ test.describe('移动端测试', () => {
 
   test('VC-M-21: 选择器下拉在视口内滚动加载', async ({ page }) => {
     await page.goto('/demo/selectors')
-    await page.waitForSelector('.selectors-demo, .app-layout')
-
-    const select = page.locator('.el-select').first()
-    if (await select.isVisible()) {
-      await select.tap()
-      await page.waitForTimeout(300)
-
-      const popper = page.locator('.el-popper:visible, .el-select-dropdown:visible').first()
-      if (await popper.isVisible()) {
-        await expectInViewport(popper)
-      }
-    }
-
+    const userSelect = page.locator('.remote-select').first()
+    await userSelect.scrollIntoViewIfNeeded()
+    await userSelect.tap()
+    const popper = page.locator('.el-select-dropdown:visible, .el-popper:visible').first()
+    await expect(popper).toBeVisible()
+    await expectInViewport(popper)
+    const scroller = page.locator('.el-select-dropdown:visible .options-container').first()
+    await scroller.evaluate((el) => { el.scrollTop = el.scrollHeight })
+    await expect(page.getByRole('option', { name: /用户16/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.locator('.demo-section').filter({ hasText: '日期范围选择器' }).locator('input').first().tap()
+    await expect(page.locator('.el-date-range-picker__content:visible')).toHaveCount(1)
     await expectNoHOverflow(page)
   })
 
   test('VC-M-22: 文件上传导入导出下载条', async ({ page }) => {
-    // 验证移动端文件操作组件
     await page.goto('/demo/files')
-    await page.waitForSelector('.files-demo, .app-layout')
-    
-    // 验证上传组件在移动端正常显示
-    const upload = page.locator('.el-upload, .file-upload').first()
-    if (await upload.count() > 0) {
-      await expectInViewport(upload)
-    }
-    
+    const upload = page.locator('.file-upload').first()
+    await expect(upload).toBeVisible()
+    await expectInViewport(upload)
+    await page.getByRole('button', { name: '打开导入对话框' }).tap()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: 'bad-import.xlsx',
+      mimeType: 'application/vnd.ms-excel',
+      buffer: Buffer.from('bad'),
+    })
+    await dialog.getByRole('button', { name: '开始导入' }).tap()
+    await expect(dialog.getByRole('cell', { name: '3' })).toBeVisible()
+    await expect(dialog.getByText('金额格式错误')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: '导出', exact: true }).tap()
+    const bar = page.locator('.download-bar').first()
+    await expect(bar).toBeVisible()
+    await expect.poll(async () => {
+      const box = await bar.boundingBox()
+      return box ? Math.round(box.y + box.height) : 0
+    }).toBe(page.viewportSize()!.height)
+    await page.locator('.menu-btn').last().tap()
+    await page.locator('.el-sub-menu__title').filter({ hasText: '示例' }).last().tap()
+    await page.getByRole('menuitem', { name: '列表演示' }).last().tap()
+    await expect(page).toHaveURL(/\/demo\/list/)
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    const pagination = page.locator('.pagination')
+    const pageBox = await pagination.boundingBox()
+    const barAfter = await page.locator('.download-bar').first().boundingBox()
+    expect(pageBox).toBeTruthy()
+    expect(barAfter).toBeTruthy()
+    expect(pageBox!.y + pageBox!.height).toBeLessThanOrEqual(barAfter!.y + 1)
     await expectNoHOverflow(page)
   })
 

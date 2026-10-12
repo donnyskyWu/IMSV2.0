@@ -64,6 +64,12 @@ const heightStyle = computed(() => {
   return props.height
 })
 
+const isEmpty = computed(() => {
+  const series = (props.option as { series?: Array<{ data?: unknown[] }> }).series
+  if (!series?.length) return true
+  return series.every((item) => !item.data?.length)
+})
+
 // 初始化图表
 function initChart() {
   if (!chartRef.value) return
@@ -143,6 +149,14 @@ defineExpose({
 
 <template>
   <div
+    v-if="isEmpty"
+    class="chart chart-empty"
+    :style="{ height: heightStyle }"
+  >
+    暂无数据
+  </div>
+  <div
+    v-else
     ref="chartRef"
     class="chart"
     :class="{ 'chart--mobile': isMobile }"

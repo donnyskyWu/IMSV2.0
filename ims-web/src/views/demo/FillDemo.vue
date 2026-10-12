@@ -7,16 +7,32 @@ import { ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import EmptyState from '@/components/list/EmptyState.vue'
+import { toast } from '@/utils/toast'
 
 const emptyType = ref<'empty' | 'noPermission' | 'error'>('empty')
 
 function handleRetry() {
   console.log('Retry clicked')
 }
+
+const submitting = ref(false)
+const submitCount = ref(0)
+
+async function handleSubmit() {
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    submitCount.value += 1
+    toast.success('提交成功')
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <template>
-  <AppLayout>
+  <AppLayout hide-sidebar>
     <div class="fill-demo">
       <PageHeader title="空状态演示" sub-title="FP-P-13" />
 
@@ -32,6 +48,10 @@ function handleRetry() {
         <div class="empty-container">
           <EmptyState :type="emptyType" @retry="handleRetry" />
         </div>
+      </div>
+      <div class="fill-footer">
+        <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
+        <span class="submit-count">已提交 {{ submitCount }}</span>
       </div>
     </div>
   </AppLayout>
@@ -52,6 +72,16 @@ function handleRetry() {
 .type-selector {
   margin-bottom: 24px;
   text-align: center;
+}
+
+.fill-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  background: var(--bg);
 }
 
 .empty-container {

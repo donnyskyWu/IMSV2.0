@@ -73,6 +73,14 @@ export default [
           selector: 'TemplateLiteral:has(TemplateElement[value.raw=/admin-api/])',
           message: '禁止在 views 中直接使用 /admin-api，请通过 api/ 层调用',
         },
+        {
+          selector: 'CallExpression[callee.object.name="roles"][callee.property.name="includes"]',
+          message: '禁止按角色名判断权限，请使用权限码',
+        },
+        {
+          selector: 'Identifier[name=/role_key|roleKey/]',
+          message: '禁止按角色名判断权限，请使用权限码',
+        },
       ],
     },
   },

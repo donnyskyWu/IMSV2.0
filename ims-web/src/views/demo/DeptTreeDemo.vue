@@ -8,6 +8,7 @@ import { ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import DeptTree from '@/components/dept/DeptTree.vue'
+import EmptyState from '@/components/list/EmptyState.vue'
 
 // 模拟部门数据
 const deptData = ref([
@@ -44,10 +45,23 @@ const deptData = ref([
         source: 'local' as const,
         count: 35,
         children: [
-          { id: 131, name: '市场部', source: 'local' as const, count: 20 },
+          {
+            id: 131,
+            name: '市场部',
+            source: 'dingtalk' as const,
+            count: 20,
+            children: [
+              { id: 1311, name: '市场一组', source: 'dingtalk' as const, count: 8 },
+              { id: 1312, name: '市场二组', source: 'dingtalk' as const, count: 6 },
+            ],
+          },
           { id: 132, name: '客服部', source: 'local' as const, count: 15 },
+          { id: 133, name: '运营部', source: 'local' as const, count: 9 },
         ],
       },
+      { id: 16, name: '技术部', source: 'local' as const, count: 11 },
+      { id: 17, name: '待分配', source: 'local' as const, count: 2 },
+      { id: 18, name: '临时项目组', source: 'local' as const, count: 3 },
       { id: 14, name: '财务部', source: 'local' as const, count: 12 },
       { id: 15, name: '人力资源部', source: 'dingtalk' as const, count: 8 },
     ],
@@ -56,6 +70,7 @@ const deptData = ref([
 
 // 选中的部门
 const selectedKey = ref<string | number>('')
+const loadFailed = ref(false)
 
 // 事件日志
 const eventLogs = ref<string[]>([])
@@ -111,7 +126,10 @@ function handleSync() {
       <div class="demo-content">
         <div class="tree-panel">
           <h3 class="panel-title">部门组织架构</h3>
+          <el-button size="small" @click="loadFailed = true">模拟加载失败</el-button>
+          <EmptyState v-if="loadFailed" type="error" @retry="loadFailed = false" />
           <DeptTree
+            v-else
             v-model:selected-key="selectedKey"
             :data="deptData"
             :allow-edit="true"

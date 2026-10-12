@@ -65,12 +65,12 @@ function nextPage() {
 </script>
 
 <template>
-  <div v-if="showPagination" class="pagination" :class="{ 'pagination--mobile': isMobile }">
+  <div v-if="showPagination || !isMobile" class="pagination" :class="{ 'pagination--mobile': isMobile }">
     <!-- 总数 -->
     <span class="pagination-total">共 {{ total }} 条</span>
 
-    <!-- 桌面端 -->
-    <template v-if="!isMobile">
+    <!-- 桌面端：total=0 时只留总数，不显示页码 -->
+    <template v-if="!isMobile && total > 0">
       <!-- 每页条数 -->
       <el-select
         :model-value="pageSize"

@@ -5,6 +5,7 @@
  * 三种默认文案: "暂无数据" / "暂无权限查看此内容" / "加载失败，请稍后重试"
  * 任何场景不显示 403 白页
  */
+import { computed } from 'vue'
 import type { EmptyType } from '@/types'
 
 interface Props {
@@ -27,7 +28,7 @@ const defaultMessages: Record<EmptyType, string> = {
   error: '加载失败，请稍后重试',
 }
 
-const message = props.desc || defaultMessages[props.type]
+const message = computed(() => props.desc || defaultMessages[props.type])
 </script>
 
 <template>

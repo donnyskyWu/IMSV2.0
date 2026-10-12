@@ -10,8 +10,9 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import FileUpload from '@/components/file/FileUpload.vue'
 import FilePreview from '@/components/file/FilePreview.vue'
 import ImportDialog from '@/components/file/ImportDialog.vue'
-import ExportButton from '@/components/file/ExportButton.vue'
-import DownloadBar from '@/components/file/DownloadBar.vue'
+import { toast } from '@/utils/toast'
+import { useDownloadStore } from '@/stores/download'
+import { checkFileFormat } from '@/api/file'
 
 // 上传的文件
 const uploadedFiles = ref<string[]>([])
@@ -21,16 +22,15 @@ const previewFiles = ref([
   { name: '合同文档.pdf', url: '/mock/contract.pdf', type: 'application/pdf', size: 1024000 },
   { name: '产品图片.jpg', url: 'https://picsum.photos/400/300', type: 'image/jpeg', size: 256000 },
   { name: '数据报表.xlsx', url: '/mock/report.xlsx', type: 'application/vnd.ms-excel', size: 512000 },
+  { name: '跨租户合同.pdf', url: '/mock/other-tenant.pdf', type: 'application/pdf', size: 1024, unavailable: true },
 ])
 
 // 导入对话框
 const importVisible = ref(false)
 
 // 下载任务
-const downloadTasks = ref([
-  { id: '1', name: '订单数据导出.xlsx', progress: 100, status: 'completed' as const, url: '/mock/export.xlsx' },
-])
-const showDownloadBar = ref(false)
+const downloadStore = useDownloadStore()
+const importedRows = ref(0)
 
 // 文件变化
 function handleFileChange(files: unknown[]) {
@@ -39,30 +39,27 @@ function handleFileChange(files: unknown[]) {
 }
 
 // 导入成功
-function handleImportSuccess(result: unknown) {
-  console.log('Import success:', result)
+function handleImportSuccess(result: { failed?: number; success?: number }) {
+  if (result && !result.failed && result.success) {
+    importedRows.value += result.success
+  }
 }
 
-// 导出
-function handleExport(option: unknown) {
-  console.log('Export:', option)
-  // 模拟下载任务
-  downloadTasks.value = [
-    { id: '1', name: '数据导出.xlsx', progress: 0, status: 'downloading' as const },
-  ]
-  showDownloadBar.value = true
+function handleExport() {
+  toast.success('已开始导出')
+  downloadStore.start('订单数据导出.xlsx')
+}
 
-  // 模拟进度
-  let progress = 0
-  const timer = setInterval(() => {
-    progress += 20
-    downloadTasks.value[0].progress = progress
-    if (progress >= 100) {
-      clearInterval(timer)
-      downloadTasks.value[0].status = 'completed'
-      downloadTasks.value[0].url = '/mock/export.xlsx'
-    }
-  }, 500)
+function handleExportFail() {
+  downloadStore.fail('导出服务暂不可用')
+}
+
+async function checkFakeFormat() {
+  try {
+    await checkFileFormat()
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : '文件格式不正确')
+  }
 }
 </script>
 
@@ -74,12 +71,14 @@ function handleExport(option: unknown) {
       <div class="demo-section">
         <h3 class="section-title">1. 文件上传 (FileUpload)</h3>
         <FileUpload
+          class="limit-100"
           :max-count="3"
-          :max-size="5"
-          accept=".jpg,.png,.pdf,.xlsx"
-          tip="支持 jpg、png、pdf、xlsx 格式，单个文件不超过 5MB"
+          :max-size="100"
+          accept=".pdf,.jpg,.png,.xlsx"
+          tip="单个文件不超过 100MB"
           @change="handleFileChange"
         />
+        <el-button class="fake-format" @click="checkFakeFormat">校验伪造格式</el-button>
         <div v-if="uploadedFiles.length > 0" class="demo-result">
           已上传: {{ uploadedFiles.join(', ') }}
         </div>
@@ -101,19 +100,10 @@ function handleExport(option: unknown) {
       </div>
 
       <div class="demo-section">
-        <h3 class="section-title">4. 导出按钮 (ExportButton)</h3>
-        <ExportButton @export="handleExport" />
-        <span class="demo-tip">点击后会显示下载进度条</span>
-      </div>
-
-      <div class="demo-section">
-        <h3 class="section-title">5. 下载进度条 (DownloadBar)</h3>
-        <el-button @click="showDownloadBar = true">显示下载进度条</el-button>
-        <DownloadBar
-          :tasks="downloadTasks"
-          :visible="showDownloadBar"
-          @close="showDownloadBar = false"
-        />
+        <h3 class="section-title">4. 导出</h3>
+        <el-button @click="handleExport">导出</el-button>
+        <el-button @click="handleExportFail">导出失败</el-button>
+        <p class="imported-count">列表 {{ importedRows }} 条</p>
       </div>
     </div>
   </AppLayout>

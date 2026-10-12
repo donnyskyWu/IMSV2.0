@@ -57,20 +57,13 @@ test.describe('PageHeader 组件 (FP-C02)', () => {
   })
 
   test('无效 permCode 应在控制台打印警告 (VC-M-35)', async ({ page }) => {
-    // 验证无效权限码警告
     const warnings: string[] = []
     page.on('console', (msg) => {
-      if (msg.type() === 'warning') {
-        warnings.push(msg.text())
-      }
+      if (msg.type() === 'warning') warnings.push(msg.text())
     })
-    
     await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
-    
-    // 通过代码审查确认:
-    // - v-perm 指令检查 permCode 有效性
-    // - 无效 permCode 打印 console.warn
+    await page.waitForSelector('.layout-demo')
+    await expect.poll(() => warnings.some((text) => text.includes('bad-code'))).toBe(true)
   })
 })
 

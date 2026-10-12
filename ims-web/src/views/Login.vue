@@ -5,6 +5,7 @@
  */
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -18,12 +19,15 @@ const loading = ref(false)
 async function handleLogin() {
   loading.value = true
   try {
-    // 模拟登录
-    authStore.mockLogin()
-
-    // 跳转回原页面
-    const redirect = route.query.redirect as string
-    router.push(redirect || '/')
+    const ok = await authStore.login(username.value, password.value)
+    if (!ok) {
+      ElMessage.error('用户名或密码错误')
+      return
+    }
+    const redirect = (route.query.redirect as string) || '/demo/tokens'
+    router.push(redirect)
+  } catch {
+    ElMessage.error('用户名或密码错误')
   } finally {
     loading.value = false
   }

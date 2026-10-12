@@ -3,151 +3,95 @@
  * 依据: 02-验证用例.md VC-L01, VC-L04~L08
  */
 import { test, expect } from '@playwright/test'
+import { skipOnMobile } from './helpers/viewport'
 
 test.describe('其他模板', () => {
   test('VC-L01-01: 标准列表增删改查流程', async ({ page }) => {
-    // 验证标准列表 CRUD 流程
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-    
-    // 验证列表页面结构
-    const table = page.locator('.el-table').first()
-    await expect(table).toBeVisible()
-    
-    // 验证操作按钮存在
-    const createBtn = page.locator('button:has-text("新建")').first()
-    const editBtn = page.locator('button:has-text("编辑")').first()
-    
-    // 通过代码审查确认:
-    // - 列表组件调用 userApi.getPage / deptApi.getTree 等
-    // - CRUD 操作调用对应 API
-    // - 成功后刷新列表
+    await expect(page.locator('.el-table')).toBeVisible()
+    await expect(page.getByRole('button', { name: '新建' }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: '编辑' }).first()).toBeVisible()
+    await page.getByRole('button', { name: '新建' }).first().click()
+    await page.locator('.el-drawer').getByPlaceholder('请输入名称').fill('标准新增')
+    await page.locator('.el-drawer').getByRole('button', { name: '保存' }).click()
+    await expect(page.getByText('标准新增')).toBeVisible()
+    await expect(page.locator('.el-message').filter({ hasText: '保存成功' })).toBeVisible()
   })
 
   test('VC-L01-02: 详情后条件页码保持', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const searchInput = page.locator('.query-bar input').first()
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('测试')
-      await searchInput.press('Enter')
-      await page.waitForTimeout(500)
-
-      const viewBtn = page.locator('button:has-text("查看")').first()
-      if (await viewBtn.isVisible()) {
-        await viewBtn.click()
-        await page.waitForTimeout(500)
-
-        const drawer = page.locator('.el-drawer').first()
-        if (await drawer.isVisible()) {
-          await page.keyboard.press('Escape')
-          await page.waitForTimeout(300)
-
-          const inputValue = await searchInput.inputValue()
-          expect(inputValue).toBe('测试')
-        }
-      }
-    }
+    const searchInput = page.getByPlaceholder('请输入名称')
+    await searchInput.fill('示例订单')
+    await page.getByRole('button', { name: '查询' }).click()
+    await page.getByRole('button', { name: '查看' }).first().click()
+    await expect(page.locator('.el-drawer:visible')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.el-drawer:visible')).toHaveCount(0)
+    await expect(searchInput).toHaveValue('示例订单')
+    await expect(page.getByRole('cell', { name: '示例订单 002' })).toBeVisible()
   })
 
   test('VC-L04-01: 看板切换周期刷新', async ({ page }) => {
     await page.goto('/demo/workbench')
-    await page.waitForSelector('.workbench-demo, .app-layout')
-
-    const periodSelect = page.locator('.period-select, .el-select:has-text("本月")').first()
-    if (await periodSelect.isVisible()) {
-      await periodSelect.click()
-      await page.waitForTimeout(300)
-
-      const option = page.locator('.el-select-dropdown__item:has-text("上月")').first()
-      if (await option.isVisible()) {
-        await option.click()
-        await page.waitForTimeout(500)
-      }
-    }
-
-    const updateTime = page.locator(':text("截至"), .update-time')
-    if (await updateTime.count() > 0) {
-      await expect(updateTime.first()).toBeVisible()
-    }
+    await expect(page.locator('.update-time')).toContainText('截至 2026-10-12 10:00')
+    await page.locator('.period-select').click()
+    await page.getByRole('option', { name: '上月' }).click()
+    await expect(page.locator('.update-time')).toContainText('截至 2026-09-30 23:59')
   })
 
   test('VC-L05-01: 工作台待办和消息', async ({ page }) => {
-    // 验证工作台待办和消息列表
     await page.goto('/demo/workbench')
-    await page.waitForSelector('.workbench-demo, .app-layout')
-    
-    // 验证工作台页面结构
-    // 通过代码审查确认:
-    // - 待办列表调用待办 API
-    // - 消息列表调用消息 API
+    await expect(page.getByText('审批 2')).toBeVisible()
+    await expect(page.getByText('预警 1')).toBeVisible()
+    await expect(page.getByText('未读消息 3')).toBeVisible()
+    await page.getByRole('button', { name: '审批单甲' }).click()
+    await expect(page).toHaveURL(/#todo/)
   })
 
   test('VC-L05-02: 待办无权限提示', async ({ page }) => {
-    // 验证待办无权限时的提示
-    
-    // 通过代码审查确认:
-    // - 后端返回 1008 无权限
-    // - 前端显示"暂无权限"提示
+    await page.goto('/demo/workbench')
+    await page.getByText('预警 1').click()
+    await page.getByRole('button', { name: '库存预警' }).click()
+    await expect(page.getByText('暂无权限')).toBeVisible()
+    await expect(page).not.toHaveURL(/#todo/)
   })
 
   test('VC-L06-01: 设计器未保存提示', async ({ page }) => {
+    skipOnMobile(page, '手机下设计器只读，无法修改')
     await page.goto('/demo/display')
-    await page.waitForSelector('.display-demo, .app-layout')
-
-    const designerSection = page.locator('.designer-section, .trace-graph').first()
-    if (await designerSection.isVisible()) {
-      // 模拟修改内容
-    }
+    await page.getByPlaceholder('修改设计内容').fill('改了一处')
+    const blocked = await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    })
+    expect(blocked).toBe(true)
+    await page.getByRole('menuitem', { name: '列表演示' }).first().click()
+    await expect(page.getByText('有未保存修改')).toBeVisible()
+    await expect(page).toHaveURL(/\/demo\/display/)
   })
 
   test('VC-L07-01: 填报页无侧栏连点提交', async ({ page }) => {
     await page.goto('/demo/fill')
-    await page.waitForSelector('.fill-demo, .app-layout')
-
-    const sidebar = page.locator('.sidebar, .app-sidebar')
-    if (page.viewportSize()?.width! < 768) {
-      test.skip(true, '移动端侧栏行为不同')
-    }
-
-    const submitBtn = page.locator('button:has-text("提交")').first()
-    if (await submitBtn.isVisible()) {
-      for (let i = 0; i < 3; i++) {
-        await submitBtn.click()
-        await page.waitForTimeout(50)
-      }
-
-      await page.waitForTimeout(500)
-    }
+    await expect(page.locator('.app-sidebar')).toHaveCount(0)
+    await expect(page.locator('.app-topbar')).toBeVisible()
+    const submit = page.getByRole('button', { name: '提交' })
+    await submit.click()
+    await submit.click({ force: true })
+    await submit.click({ force: true })
+    await expect(page.getByText('已提交 1')).toBeVisible()
+    await expect(page.locator('.el-message').filter({ hasText: '提交成功' })).toHaveCount(1)
   })
 
   test('VC-L08-01: 详情抽屉模板 Tab 和按钮', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.waitForSelector('.list-demo, .app-layout')
-
-    const viewBtn = page.locator('button:has-text("查看")').first()
-    if (await viewBtn.isVisible()) {
-      await viewBtn.click()
-      await page.waitForTimeout(500)
-
-      const drawer = page.locator('.el-drawer, .detail-drawer').first()
-      if (await drawer.isVisible()) {
-        const header = drawer.locator('.el-drawer__header, .drawer-header').first()
-        await expect(header).toBeVisible()
-
-        const tabs = drawer.locator('.el-tabs')
-        if (await tabs.count() > 0) {
-          await expect(tabs.first()).toBeVisible()
-        }
-
-        const footer = drawer.locator('.el-drawer__footer, .drawer-footer')
-        if (await footer.count() > 0) {
-          await expect(footer.first()).toBeVisible()
-        }
-
-        await page.keyboard.press('Escape')
-      }
-    }
+    await page.getByRole('button', { name: '查看' }).first().click()
+    const drawer = page.locator('.el-drawer:visible')
+    await expect(drawer.locator('.el-drawer__header').first()).toBeVisible()
+    await expect(drawer.getByRole('tab', { name: '基本信息' })).toBeVisible()
+    await expect(drawer.getByRole('tab', { name: '操作记录' })).toBeVisible()
+    await expect(drawer.getByRole('button', { name: '关闭', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(drawer).toBeHidden()
   })
 })

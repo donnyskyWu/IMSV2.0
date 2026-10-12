@@ -11,125 +11,127 @@ test.describe('C33～C36. 文件组件', () => {
   })
 
   test('VC-C33-01: 文件格式前端拦截', async ({ page }) => {
-    const upload = page.locator('.el-upload, .file-upload').first()
-    if (await upload.isVisible()) {
-      const input = upload.locator('input[type="file"]')
-      if (await input.count() > 0) {
-        await input.setInputFiles({
-          name: 'test.exe',
-          mimeType: 'application/x-msdownload',
-          buffer: Buffer.from('fake exe content'),
-        })
-
-        await page.waitForTimeout(500)
-
-        const errorMsg = page.locator('.el-message--error, :text("格式")')
-        if (await errorMsg.count() > 0) {
-          await expect(errorMsg.first()).toBeVisible()
-        }
-      }
-    }
+    await page.locator('.limit-100 input[type="file"]').setInputFiles({
+      name: 'test.exe',
+      mimeType: 'application/x-msdownload',
+      buffer: Buffer.from('fake exe content'),
+    })
+    await expect(page.locator('.el-message').filter({ hasText: '文件格式不支持' })).toBeVisible()
+    await expect(page.getByText('test.exe')).toHaveCount(0)
   })
 
   test('VC-C33-02: 文件大小前端拦截', async ({ page }) => {
-    const upload = page.locator('.el-upload, .file-upload').first()
-    if (await upload.isVisible()) {
-      const input = upload.locator('input[type="file"]')
-      if (await input.count() > 0) {
-        await input.setInputFiles({
-          name: 'large.pdf',
-          mimeType: 'application/pdf',
-          buffer: Buffer.alloc(5 * 1024 * 1024),
-        })
-
-        await page.waitForTimeout(500)
-      }
-    }
+    let uploads = 0
+    await page.route('**/admin-api/**', async (route) => {
+      if (route.request().method() !== 'GET') uploads += 1
+      await route.continue()
+    })
+    await page.locator('.limit-100 input[type="file"]').setInputFiles({
+      name: 'large.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('not-really-100mb'),
+    })
+    await page.locator('.limit-100 input[type="file"]').evaluate((input) => {
+      const file = new File(['x'], 'large.pdf', { type: 'application/pdf' })
+      Object.defineProperty(file, 'size', { value: 101 * 1024 * 1024 })
+      const transfer = new DataTransfer()
+      transfer.items.add(file)
+      const target = input as HTMLInputElement
+      target.files = transfer.files
+      target.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await expect(page.locator('.el-message').filter({ hasText: '文件不能超过 100 MB' })).toBeVisible()
+    expect(uploads).toBe(0)
   })
 
   test('VC-C33-03: 伪造格式后端拦截', async ({ page }) => {
-    // 验证后端文件格式校验逻辑
-    // 此逻辑在后端实现，前端根据错误码显示提示
-    
-    const upload = page.locator('.el-upload, .file-upload').first()
-    if (await upload.count() > 0) {
-      await expect(upload).toBeVisible()
-    }
-    
-    // 通过代码审查确认:
-    // - 后端校验文件魔数确认真实格式
-    // - 返回错误码 1001 + 字段错误信息
+    await page.route('**/admin-api/ims/file/check', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 1001, msg: '文件格式与扩展名不符' }),
+      })
+    })
+    await page.getByRole('button', { name: '校验伪造格式' }).click()
+    await expect(page.locator('.el-message').filter({ hasText: '文件格式与扩展名不符' })).toBeVisible()
   })
 
   test('VC-C33-04: 上传进度条和预览删除', async ({ page }) => {
-    // 验证上传组件的进度条和预览功能
-    const upload = page.locator('.el-upload, .file-upload').first()
-    if (await upload.count() > 0) {
-      await expect(upload).toBeVisible()
-      
-      // 验证上传列表区域存在
-      const uploadList = page.locator('.el-upload-list')
-      if (await uploadList.count() > 0) {
-        // 上传列表组件已渲染
-      }
-    }
+    await page.locator('.limit-100 input[type="file"]').setInputFiles({
+      name: 'preview.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4'),
+    })
+    const item = page.locator('.el-upload-list__item').filter({ hasText: 'preview.pdf' })
+    await expect(item).toBeVisible()
+    await expect(item.locator('.el-progress, .el-icon--upload-success, .el-icon--close').first()).toBeVisible()
+    await item.hover()
+    await item.locator('.el-icon--close').click()
+    await expect(page.getByText('preview.pdf')).toHaveCount(0)
   })
 
   test('VC-C34-01: 图片页内预览 PDF 新标签', async ({ page }) => {
-    const filePreview = page.locator('.file-preview, .file-item').first()
-    if (await filePreview.isVisible()) {
-      await expect(filePreview).toBeVisible()
-    }
+    const popupPromise = page.waitForEvent('popup')
+    await page.getByText('合同文档.pdf').click()
+    const popup = await popupPromise
+    await expect(popup).toHaveURL(/contract\.pdf/)
+    await popup.close()
+    await page.getByText('产品图片.jpg').click()
+    await expect(page.locator('.el-dialog .preview-image')).toBeVisible()
   })
 
   test('VC-C34-02: 跨租户文件不可用', async ({ page }) => {
-    // 验证跨租户文件访问控制
-    // 后端返回 1008 (无权限) 或 1504 (资源不可用)
-    
-    // 通过代码审查确认:
-    // - 文件 URL 包含租户 ID
-    // - 后端校验租户权限
-    // - 前端显示不可用提示
+    await page.getByText('跨租户合同.pdf').click()
+    await expect(page.getByText('文件不可用')).toBeVisible()
   })
 
   test('VC-C35-01: 导入错误表显示行号列', async ({ page }) => {
-    // 验证导入错误表格式
-    // 后端返回错误详情包含行号和错误原因
-    
-    const importBtn = page.locator('button:has-text("导入")').first()
-    if (await importBtn.count() > 0) {
-      // 导入按钮存在
-      // 通过代码审查确认:
-      // - 导入结果包含 errors 数组
-      // - 每个 error 包含 row, field, message
-    }
+    await page.getByRole('button', { name: '打开导入对话框' }).click()
+    const dialog = page.locator('.el-dialog, .el-overlay').last()
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: 'bad-import.xlsx',
+      mimeType: 'application/vnd.ms-excel',
+      buffer: Buffer.from('bad'),
+    })
+    await page.getByRole('button', { name: '开始导入' }).click()
+    await expect(page.getByText('成功 8 行')).toBeVisible()
+    await expect(page.getByText('错误 2 行')).toBeVisible()
+    await expect(page.locator('.el-table__body').getByRole('cell', { name: '3', exact: true })).toBeVisible()
+    await expect(page.locator('.el-table__body').getByRole('cell', { name: '金额', exact: true })).toBeVisible()
+    await expect(page.getByText('金额格式错误')).toBeVisible()
+    await expect(page.getByRole('button', { name: '确认导入' })).toBeDisabled()
+    await expect(page.getByText('列表 0 条')).toBeVisible()
   })
 
   test('VC-C35-02: 导入成功后列表刷新', async ({ page }) => {
-    // 验证导入成功后自动刷新列表
-    
-    // 通过代码审查确认:
-    // - 导入成功后调用列表刷新函数
-    // - 保持当前筛选条件
+    await page.getByRole('button', { name: '打开导入对话框' }).click()
+    await page.locator('.el-dialog input[type="file"]').setInputFiles({
+      name: 'ok-import.xlsx',
+      mimeType: 'application/vnd.ms-excel',
+      buffer: Buffer.from('ok'),
+    })
+    await page.getByRole('button', { name: '开始导入' }).click()
+    await expect(page.getByRole('button', { name: '确认导入' })).toBeEnabled()
+    await page.getByRole('button', { name: '确认导入' }).click()
+    await expect(page.getByText('列表 10 条')).toBeVisible()
   })
 
   test('VC-C36-01: 导出下载条跨页面', async ({ page }) => {
-    // 验证导出下载进度条功能
-    
-    const exportBtn = page.locator('button:has-text("导出")').first()
-    if (await exportBtn.count() > 0) {
-      // 导出按钮存在
-      // 通过代码审查确认:
-      // - 导出创建异步任务
-      // - 下载进度条组件全局显示
-    }
+    await page.getByRole('button', { name: '导出', exact: true }).click()
+    await expect(page.locator('.el-message').filter({ hasText: '已开始导出' })).toBeVisible()
+    await expect(page.locator('.download-bar').first()).toBeVisible()
+    await page.locator('.el-sub-menu__title').filter({ hasText: '示例' }).last().click()
+    await page.getByRole('menuitem', { name: '列表演示' }).last().click()
+    await expect(page).toHaveURL(/\/demo\/list/)
+    await expect(page.locator('.download-bar').first()).toBeVisible()
+    await expect(page.locator('.download-bar').first()).toContainText('订单数据导出.xlsx')
   })
 
   test('VC-C36-02: 导出失败下载条显示原因', async ({ page }) => {
-    // 验证导出失败时的错误显示
-    
-    // 通过代码审查确认:
-    // - 导出失败返回错误消息
-    // - 下载条显示错误原因
+    await page.getByRole('button', { name: '导出失败' }).click()
+    const bar = page.locator('.download-bar').first()
+    await expect(bar).toBeVisible()
+    await expect(bar).toContainText('失败')
+    await expect(bar).toContainText('导出服务暂不可用')
   })
 })

@@ -11,17 +11,10 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C32-01: 远程选择器搜索和滚动加载', async ({ page }) => {
-    const remoteSelect = page.locator('.remote-select, .el-select').first()
-    if (await remoteSelect.isVisible()) {
-      await remoteSelect.click()
-      await page.waitForTimeout(300)
-
-      const input = remoteSelect.locator('input')
-      if (await input.isVisible()) {
-        await input.fill('张')
-        await page.waitForTimeout(500)
-      }
-    }
+    const select = page.locator('.remote-select').first()
+    await select.click()
+    await select.locator('input').fill('张')
+    await expect(page.getByRole('option', { name: /张三/ })).toBeVisible()
   })
 
   test('VC-C32-02: 已有值显示名称不显示 ID', async ({ page }) => {
@@ -33,8 +26,7 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C32-03: 已删除值显示已不可用', async ({ page }) => {
-    const unavailableTag = page.locator(':text("已不可用"), :text("不可用")')
-    // 此测试检查是否有已不可用的标记组件存在
+    await expect(page.getByTestId('gone-user').locator('input')).toHaveValue('（已不可用）')
   })
 
   test('VC-C21-01: 冻结离职人员灰显不可选', async ({ page }) => {
@@ -59,17 +51,10 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C22-01: 部门树选择搜索展开', async ({ page }) => {
-    const deptSelect = page.locator('.dept-tree-select, [data-testid="dept-select"]').first()
-    if (await deptSelect.isVisible()) {
-      await deptSelect.click()
-      await page.waitForTimeout(300)
-
-      const searchInput = page.locator('.el-cascader-panel input, .el-tree input').first()
-      if (await searchInput.isVisible()) {
-        await searchInput.fill('一组')
-        await page.waitForTimeout(500)
-      }
-    }
+    const dept = page.locator('.dept-tree-select').first()
+    await dept.click()
+    await dept.locator('input').fill('一组')
+    await expect(page.getByText('星河传媒 / 市场部 / 市场一组')).toBeVisible()
   })
 
   test('VC-C22-02: 停用部门和待分配不可选', async ({ page }) => {
@@ -116,24 +101,29 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C24-01: 实名人选择证件过期', async ({ page }) => {
-    const certExpiredTag = page.locator(':text("证件已过期"), .cert-expired')
-    // 此测试检查是否有证件过期标记
+    await page.getByTestId('realname').getByPlaceholder('实名人').click()
+    await page.getByRole('option', { name: '张三' }).click()
+    const expired = page.getByTestId('realname').getByText('证件已过期')
+    await expect(expired).toBeVisible()
+    const color = await expired.evaluate((el) => getComputedStyle(el).color)
+    expect(color).not.toBe('rgba(0, 0, 0, 0)')
+    expect(color).toMatch(/rgb\((1[5-9]\d|2[0-5]\d),\s*\d+,\s*\d+\)/)
   })
 
   test('VC-C24-02: IP 组选择大组小组', async ({ page }) => {
-    const ipGroupSelect = page.locator('.ip-group-select, [data-testid="ip-group-select"]').first()
-    if (await ipGroupSelect.isVisible()) {
-      await ipGroupSelect.click()
-      await page.waitForTimeout(300)
-    }
+    await page.getByTestId('ip-group').getByPlaceholder('搜索小组').click()
+    await page.getByTestId('ip-group').locator('input').fill('小组')
+    await expect(page.getByRole('option', { name: '大组 / 小组' })).toBeVisible()
   })
 
   test('VC-C24-03: 作者选择先账号再作者', async ({ page }) => {
-    const authorSelect = page.locator('.author-select, [data-testid="author-select"]').first()
-    if (await authorSelect.isVisible()) {
-      await authorSelect.click()
-      await page.waitForTimeout(300)
-    }
+    const author = page.getByTestId('author').getByPlaceholder('作者')
+    await expect(author).toBeDisabled()
+    await page.getByTestId('author').getByPlaceholder('先选账号').click()
+    await page.getByRole('option', { name: '账号甲' }).click()
+    await author.click()
+    await expect(page.getByRole('option', { name: '作者甲' })).toBeVisible()
+    await expect(page.getByRole('option', { name: '作者乙' })).toBeVisible()
   })
 
   test('VC-C29-01: 字典选择新建编辑查询模式', async ({ page }) => {
@@ -152,16 +142,18 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C30-01: 日期区间近 7 天周月和跨度', async ({ page }) => {
-    const dateRangePicker = page.locator('.date-range-picker, .el-date-editor--daterange').first()
-    if (await dateRangePicker.isVisible()) {
-      await dateRangePicker.click()
-      await page.waitForTimeout(300)
-
-      const shortcut = page.locator('.el-picker-panel__shortcut:has-text("近 7 天"), .shortcut:has-text("7天")').first()
-      if (await shortcut.isVisible()) {
-        await shortcut.click()
-        await page.waitForTimeout(300)
-      }
-    }
+    const picker = page.locator('.el-date-editor').first()
+    await picker.click()
+    await page.locator('.el-picker-panel__shortcut').filter({ hasText: '近 7 天' }).click()
+    const end = new Date()
+    const start = new Date(end)
+    start.setDate(end.getDate() - 6)
+    const fmt = (d: Date) => d.toISOString().slice(0, 10)
+    await expect(page.locator('.range-text')).toContainText(`${fmt(start)} ~ ${fmt(end)}`)
+    await page.getByRole('button', { name: '月' }).click()
+    await expect(page.locator('.range-text')).toContainText('2026-10')
+    await page.getByRole('button', { name: '超跨度' }).click()
+    await expect(page.getByText('超过最大跨度')).toBeVisible()
+    await expect(page.getByRole('button', { name: '确定' })).toBeDisabled()
   })
 })

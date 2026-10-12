@@ -7,15 +7,25 @@
  */
 import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { Menu, Bell, ArrowDown, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useDownloadStore } from '@/stores/download'
 import { useResponsive } from '@/utils/responsive'
+import DownloadBar from '@/components/file/DownloadBar.vue'
 import type { MenuItem } from '@/types'
+
+const props = withDefaults(defineProps<{ hideSidebar?: boolean }>(), { hideSidebar: false })
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const downloadStore = useDownloadStore()
 const { isMobile } = useResponsive()
+
+const showNoPerm = computed(
+  () => authStore.isLoggedIn && authStore.permCodes.length === 0,
+)
 
 // 侧栏状态
 const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
@@ -52,8 +62,19 @@ function toggleSidebar() {
   }
 }
 
-// 菜单点击
-function handleMenuSelect(path: string) {
+// 菜单点击。设计器有未保存修改时先确认 (VC-L06-01)
+async function handleMenuSelect(path: string) {
+  if (sessionStorage.getItem('ims_designer_dirty') === '1') {
+    try {
+      await ElMessageBox.confirm('有未保存修改', '提示', {
+        confirmButtonText: '离开',
+        cancelButtonText: '留下',
+      })
+      sessionStorage.removeItem('ims_designer_dirty')
+    } catch {
+      return
+    }
+  }
   router.push(path)
 }
 
@@ -94,7 +115,13 @@ function handleLogout() {
 </script>
 
 <template>
-  <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed && !isMobile }">
+  <div
+    class="app-layout"
+    :class="{
+      'sidebar-collapsed': sidebarCollapsed && !isMobile,
+      'has-download': downloadStore.visible && downloadStore.tasks.length > 0,
+    }"
+  >
     <!-- 移动端侧栏遮罩 (Q2) -->
     <div
       v-if="isMobile && mobileSidebarOpen"
@@ -104,6 +131,7 @@ function handleLogout() {
 
     <!-- 侧栏 -->
     <aside
+      v-if="!props.hideSidebar"
       class="sidebar app-sidebar"
       :class="{
         collapsed: sidebarCollapsed && !isMobile,
@@ -211,9 +239,18 @@ function handleLogout() {
 
       <!-- 内容区 -->
       <main class="app-content">
-        <slot />
+        <div v-if="showNoPerm" class="no-perm-panel">暂无权限查看此内容</div>
+        <slot v-else />
       </main>
     </div>
+
+    <Teleport to="body">
+      <DownloadBar
+        :tasks="downloadStore.tasks"
+        :visible="downloadStore.visible"
+        @close="downloadStore.hide()"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -404,6 +441,12 @@ function handleLogout() {
   @include mobile {
     // Q18: 手机下内边距 12px 16px
     padding: $content-padding-y-mobile $content-padding-x-mobile;
+  }
+}
+
+.app-layout.has-download .app-content {
+  @include mobile {
+    padding-bottom: 96px;
   }
 }
 

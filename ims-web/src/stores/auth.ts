@@ -41,6 +41,9 @@ export const useAuthStore = defineStore('auth', () => {
         setAccessToken(result.data.accessToken)
         setRefreshToken(result.data.refreshToken)
         await fetchUserInfo()
+        if (user.value && result.data.pwdResetRequired) {
+          user.value = { ...user.value, pwdResetRequired: true }
+        }
         return true
       }
       return false
@@ -120,6 +123,12 @@ export const useAuthStore = defineStore('auth', () => {
     return codes.every((code) => permCodes.value.includes(code))
   }
 
+  function clearPwdReset(): void {
+    if (user.value) {
+      user.value = { ...user.value, pwdResetRequired: false }
+    }
+  }
+
   function mockLogin(): void {
     setAccessToken('mock-access-token')
     setRefreshToken('mock-refresh-token')
@@ -145,12 +154,15 @@ export const useAuthStore = defineStore('auth', () => {
       ],
       dataScopeText: '全部',
     }
+    const narrow = sessionStorage.getItem('ims_menu_profile') === 'narrow'
     menus.value = [
       {
         id: '1',
         name: '示例',
         icon: 'Document',
-        children: [
+        children: narrow
+          ? [{ id: '13', name: '列表演示', path: '/demo/list', permCode: 'ims:demo:order:query' }]
+          : [
           { id: '11', name: 'Token 演示', path: '/demo/tokens', permCode: 'ims:demo:order:query' },
           { id: '12', name: '布局演示', path: '/demo/layout', permCode: 'ims:demo:order:query' },
           { id: '13', name: '列表演示', path: '/demo/list', permCode: 'ims:demo:order:query' },
@@ -202,5 +214,6 @@ export const useAuthStore = defineStore('auth', () => {
     hasAnyPerm,
     hasAllPerm,
     mockLogin,
+    clearPwdReset,
   }
 })

@@ -34,6 +34,7 @@ export const ErrorCode = {
   SUCCESS: 0,
   VALIDATION_FAILED: 1001,
   TOKEN_EXPIRED: 1002,
+  KICKED_OFFLINE: 1003,
   NO_PERMISSION: 1008,
   RESOURCE_NOT_FOUND: 1504,
   SYSTEM_ERROR: 5007,
@@ -109,16 +110,16 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-function redirectToLogin(): void {
+function redirectToLogin(message = '登录已失效，请重新登录'): void {
   clearTokens()
   const currentPath = router.currentRoute.value.fullPath
-  if (currentPath !== '/login') {
+  if (currentPath !== '/login' && !currentPath.startsWith('/login?')) {
     localStorage.setItem(REDIRECT_KEY, currentPath)
     router.push({
       path: '/login',
       query: { redirect: currentPath },
     })
-    ElMessage.warning('登录已失效，请重新登录')
+    ElMessage.warning(message)
   }
 }
 
@@ -175,8 +176,18 @@ function createRequest(): AxiosInstance {
         return response
       }
 
+      if (result.code === ErrorCode.KICKED_OFFLINE) {
+        redirectToLogin('您的账号已在其他设备登录，本设备已下线')
+        return Promise.reject(new Error(result.msg || 'kicked'))
+      }
+
       if (result.code === ErrorCode.TOKEN_EXPIRED) {
-        return Promise.reject({ response, isTokenExpired: true })
+        const expired = Object.assign(new Error('token expired'), {
+          isTokenExpired: true,
+          config: response.config,
+          response,
+        })
+        return Promise.reject(expired)
       }
 
       handleErrorCode(result.code, result.msg)

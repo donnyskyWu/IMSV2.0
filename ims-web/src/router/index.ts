@@ -96,6 +96,13 @@ const loginRoute: RouteRecordRaw = {
   meta: { title: '登录', public: true },
 }
 
+const changePasswordRoute: RouteRecordRaw = {
+  path: '/user/change-password',
+  name: 'ChangePassword',
+  component: () => import('@/views/ChangePassword.vue'),
+  meta: { title: '修改密码' },
+}
+
 // dev/test 注册示例页；生产构建不注册，/demo/* 回首页（§2.2 #9、§2.3 U4）
 const demoEnabled = import.meta.env.DEV || import.meta.env.MODE === 'test'
 
@@ -103,6 +110,7 @@ const routes: RouteRecordRaw[] = demoEnabled
   ? [
       { path: '/', redirect: '/demo/tokens' },
       loginRoute,
+      changePasswordRoute,
       ...demoRoutes,
     ]
   : [
@@ -113,6 +121,7 @@ const routes: RouteRecordRaw[] = demoEnabled
         meta: { title: '首页', public: true },
       },
       loginRoute,
+      changePasswordRoute,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
@@ -142,8 +151,9 @@ router.beforeEach(async (to, _from, next) => {
 
   // 未登录 → 跳登录页 (FP-R-07)
   if (!authStore.isLoggedIn) {
-    // 示例页自动登录 (模拟)
-    if (demoEnabled && to.path.startsWith('/demo')) {
+    const requireAuth = sessionStorage.getItem('ims_require_auth') === '1'
+    // 示例页自动登录 (模拟)。VC-R-15 写入 ims_require_auth 后走真实跳转。
+    if (demoEnabled && to.path.startsWith('/demo') && !requireAuth) {
       authStore.mockLogin()
       next()
       return

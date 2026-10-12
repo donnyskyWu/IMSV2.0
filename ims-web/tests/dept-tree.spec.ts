@@ -4,6 +4,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { setupApiMocks, setupErrorMock, ErrorCode, mockDeptTree } from './mocks/api-mocks'
+import { skipOnMobile } from './helpers/viewport'
 
 test.describe('C42. 部门树面板', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,6 +14,7 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-01: 部门树结构和展开层级', async ({ page }) => {
+    skipOnMobile(page, '手机下部门树在抽屉中，面板宽度另测')
     const tree = page.locator('.el-tree, .dept-tree').first()
     await expect(tree).toBeVisible()
 
@@ -25,18 +27,11 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-02: 部门人数和来源标识', async ({ page }) => {
-    const tree = page.locator('.el-tree, .dept-tree').first()
+    const tree = page.locator('.el-tree').first()
     await expect(tree).toBeVisible()
-
-    const nodeCount = tree.locator('.node-count, .dept-count').first()
-    if (await nodeCount.count() > 0) {
-      await expect(nodeCount).toBeVisible()
-    }
-
-    const localTag = tree.locator('.source-tag:has-text("本地"), .el-tag:has-text("本地")')
-    if (await localTag.count() > 0) {
-      await expect(localTag.first()).toBeVisible()
-    }
+    await expect(tree.locator('.node-count').first()).toBeVisible()
+    await expect(tree.locator('.node-count').first()).toContainText(/\(\d+\)/)
+    await expect(tree.locator('.source-tag').filter({ hasText: '钉钉' }).first()).toBeVisible()
   })
 
   test('VC-C42-03: 悬停提示直属含下级人数', async ({ page }) => {
@@ -82,14 +77,11 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-07: 加载失败重试', async ({ page }) => {
-    const errorState = page.locator('.load-error, :text("加载失败")')
-    if (await errorState.count() > 0) {
-      const retryBtn = page.locator('button:has-text("重试")')
-      if (await retryBtn.isVisible()) {
-        await retryBtn.click()
-        await page.waitForTimeout(500)
-      }
-    }
+    await page.getByRole('button', { name: '模拟加载失败' }).click()
+    await expect(page.getByText('加载失败，请稍后重试')).toBeVisible()
+    await page.getByRole('button', { name: '重试' }).click()
+    await expect(page.getByText('总公司').first()).toBeVisible()
+    await expect(page.getByText('加载失败，请稍后重试')).toHaveCount(0)
   })
 
   test('VC-C42-08: 搜索过滤高亮展开', async ({ page }) => {
@@ -106,14 +98,14 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-09: 清空搜索恢复展开状态', async ({ page }) => {
-    const searchInput = page.locator('.tree-search input, .el-input input').first()
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('一组')
-      await page.waitForTimeout(300)
-
-      await searchInput.clear()
-      await page.waitForTimeout(300)
-    }
+    await page.locator('.el-tree-node__content').filter({ hasText: '技术部' }).click()
+    await expect(page.locator('.el-tree-node.is-current')).toContainText('技术部')
+    const search = page.getByPlaceholder('搜索部门')
+    await search.fill('一组')
+    await expect(page.getByText('市场一组')).toBeVisible()
+    await search.clear()
+    await expect(page.locator('.el-tree-node.is-current')).toContainText('技术部')
+    await expect(page.getByText('市场一组')).toBeVisible()
   })
 
   test('VC-C42-10: 搜索无结果提示', async ({ page }) => {
@@ -225,6 +217,7 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-17: 新增下级部门', async ({ page }) => {
+    skipOnMobile(page, '手机下抽屉全屏，宽度另测')
     // 找到有新增下级菜单的部门节点
     const deptNode = page.locator('.el-tree-node:has-text("技术部") .el-tree-node__content').first()
     if (await deptNode.count() > 0) {
@@ -399,38 +392,18 @@ test.describe('C42. 部门树面板', () => {
   })
 
   test('VC-C42-22: 移动部门禁止规则', async ({ page }) => {
-    const deptNode = page.locator('.el-tree-node:has-text("技术部") .el-tree-node__content').first()
-    if (await deptNode.count() > 0) {
-      await deptNode.hover()
-      const moreBtn = deptNode.locator('.el-dropdown, .more-btn').first()
-      if (await moreBtn.isVisible()) {
-        await moreBtn.click()
-        await page.waitForTimeout(300)
-
-        const moveItem = page.locator('.el-dropdown-menu__item:has-text("移动")')
-        if (await moveItem.count() > 0) {
-          await moveItem.click()
-          await page.waitForTimeout(500)
-
-          // 验证打开选择器
-          const dialog = page.locator('.el-dialog, .el-drawer').first()
-          if (await dialog.isVisible()) {
-            // 验证自身不可选 (应该灰显)
-            const selfNode = dialog.locator(':text("技术部")')
-            if (await selfNode.count() > 0) {
-              // 自身节点应该禁用
-              const isDisabled = await selfNode.locator('..').evaluate((el) => {
-                return el.classList.contains('is-disabled') ||
-                  el.getAttribute('aria-disabled') === 'true'
-              }).catch(() => false)
-              // 允许不同实现方式
-            }
-
-            await page.keyboard.press('Escape')
-          }
-        }
-      }
+    const deptNode = page.locator('.el-tree-node__content').filter({ hasText: '产品中心' })
+    await deptNode.hover()
+    await deptNode.locator('.more-btn').click()
+    await page.locator('.el-dropdown-menu:visible').getByText('移动', { exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    for (const name of ['产品中心', '产品一部', '产品二部', '待分配']) {
+      await expect(dialog.locator('.move-option').filter({ hasText: name })).toHaveClass(/is-disabled/)
     }
+    const local = dialog.locator('.move-option').filter({ hasText: '运营部' })
+    await expect(local).toHaveClass(/is-disabled/)
+    await expect(local).toContainText('钉钉部门不能移到本地部门下')
   })
 
   test('VC-C42-23: 移动部门人数更新', async ({ page }) => {

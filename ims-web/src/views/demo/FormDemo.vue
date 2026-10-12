@@ -5,6 +5,9 @@
  * 包含: 各类表单控件、校验、提交
  */
 import { ref, reactive } from 'vue'
+import StepsWizard from '@/components/form/StepsWizard.vue'
+import FormDrawer from '@/components/form/FormDrawer.vue'
+import Modal from '@/components/form/Modal.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import FormField from '@/components/form/FormField.vue'
@@ -13,6 +16,7 @@ import DeptTreeSelect from '@/components/selector/DeptTreeSelect.vue'
 import DateRangePicker from '@/components/selector/DateRangePicker.vue'
 import FileUpload from '@/components/file/FileUpload.vue'
 import { toast } from '@/utils/toast'
+import type { DrawerSize } from '@/types'
 import type { FormInstance, FormRules } from 'element-plus'
 
 // 表单引用
@@ -63,6 +67,44 @@ const formRules: FormRules = {
 
 // 提交状态
 const submitting = ref(false)
+const wizardOpen = ref(false)
+const drawerSize = ref<DrawerSize>('M')
+const drawerOpen = ref(false)
+const modalTier = ref<'sm' | 'md' | 'lg'>('md')
+const modalOpen = ref(false)
+const voidOpen = ref(false)
+const voidReason = ref('')
+
+function openDrawer(size: DrawerSize) {
+  drawerSize.value = size
+  drawerOpen.value = true
+}
+
+function openModal(tier: 'sm' | 'md' | 'lg') {
+  modalTier.value = tier
+  modalOpen.value = true
+}
+
+function repeatToast() {
+  toast.success('同一条提示')
+}
+const wizardStep = ref(0)
+const wizardName = ref('')
+const wizardError = ref('')
+const wizardSteps = [
+  { title: '基本信息' },
+  { title: '确认' },
+  { title: '完成' },
+]
+
+function wizardNext() {
+  if (wizardStep.value === 0 && !wizardName.value.trim()) {
+    wizardError.value = '请填写必填项'
+    return
+  }
+  wizardError.value = ''
+  wizardStep.value += 1
+}
 
 // 提交表单
 async function handleSubmit() {
@@ -165,6 +207,7 @@ function handleReset() {
           </el-form-item>
 
           <el-form-item>
+            <el-button @click="wizardOpen = true">打开向导</el-button>
             <div class="form-actions">
               <el-button @click="handleReset">重置</el-button>
               <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
@@ -172,6 +215,46 @@ function handleReset() {
           </el-form-item>
         </el-form>
       </div>
+
+      <div class="demo-launchers">
+        <el-button @click="openDrawer('S')">打开小抽屉</el-button>
+        <el-button @click="openDrawer('M')">打开中抽屉</el-button>
+        <el-button @click="openDrawer('L')">打开大抽屉</el-button>
+        <el-button @click="openModal('sm')">打开小弹窗</el-button>
+        <el-button @click="openModal('md')">打开中弹窗</el-button>
+        <el-button @click="openModal('lg')">打开大弹窗</el-button>
+        <el-button @click="voidOpen = true">作废</el-button>
+        <el-button @click="repeatToast">重复提示</el-button>
+      </div>
+
+      <FormDrawer v-model:open="drawerOpen" title="示例抽屉" :size="drawerSize">
+        <el-input placeholder="抽屉内容" />
+      </FormDrawer>
+      <Modal v-model="modalOpen" :tier="modalTier" title="示例弹窗">
+        <p>弹窗内容</p>
+      </Modal>
+      <el-dialog v-model="voidOpen" title="作废">
+        <el-input v-model="voidReason" type="textarea" placeholder="请填写作废原因" />
+        <template #footer>
+          <el-button type="primary" :disabled="!voidReason.trim()">确定</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="wizardOpen" title="向导" width="640px">
+        <StepsWizard :steps="wizardSteps" :current="wizardStep">
+          <div v-if="wizardStep === 0">
+            <el-input v-model="wizardName" placeholder="请输入名称" />
+            <p v-if="wizardError" class="wizard-error">{{ wizardError }}</p>
+          </div>
+          <div v-else-if="wizardStep === 1">已填写：{{ wizardName }}</div>
+          <div v-else>请确认提交</div>
+          <template #footer>
+            <el-button v-if="wizardStep > 0" @click="wizardStep -= 1">上一步</el-button>
+            <el-button v-if="wizardStep < wizardSteps.length - 1" type="primary" @click="wizardNext">下一步</el-button>
+            <el-button v-else type="primary">完成</el-button>
+          </template>
+        </StepsWizard>
+      </el-dialog>
     </div>
   </AppLayout>
 </template>

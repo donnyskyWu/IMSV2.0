@@ -103,47 +103,40 @@ test.describe('R. 请求层', () => {
   })
 
   test('VC-R-07: 令牌过期应自动刷新', async ({ page }) => {
-    // 此测试验证令牌刷新逻辑在 request.ts 中已实现
-    // 实际测试通过 mock 路由验证刷新流程
-    
-    let refreshCalled = false
-
-    // 设置 mock - 首先让测试页面加载成功
-    await setupApiMocks(page)
-    
-    // 覆盖刷新令牌 mock 来追踪调用
+    let refreshCalled = 0
+    let hits = 0
+    await page.route('**/admin-api/ims/demo/error**', async (route) => {
+      hits += 1
+      const code = hits === 1 ? ErrorCode.TOKEN_EXPIRED : 0
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(code === 0
+          ? { code: 0, msg: '成功', data: { message: '请求成功' } }
+          : { code, msg: '令牌已过期', data: null }),
+      })
+    })
     await page.route('**/admin-api/ims/auth/refresh-token', async (route) => {
-      refreshCalled = true
+      refreshCalled += 1
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           code: 0,
           msg: '成功',
-          data: {
-            accessToken: 'new_token_' + Date.now(),
-            refreshToken: 'new_refresh_' + Date.now(),
-            expiresIn: 7200,
-            pwdResetRequired: false,
-          },
+          data: { accessToken: 'new_token', refreshToken: 'new_refresh', expiresIn: 7200, pwdResetRequired: false },
         }),
       })
     })
 
     await page.goto('/demo/request')
-    await page.waitForSelector('.request-demo, .app-layout')
-
-    // 验证令牌刷新逻辑存在于 request.ts
-    // 通过代码审查已确认实现:
-    // - refreshAccessToken 函数
-    // - isRefreshing 状态管理
-    // - addRefreshSubscriber 并发处理
-    expect(true).toBe(true)
+    await page.getByRole('button', { name: '成功 (0)' }).click()
+    await expect(page.locator('.el-message--success').filter({ hasText: '请求成功' })).toBeVisible()
+    await expect(page).toHaveURL(/\/demo\/request/)
+    expect(refreshCalled).toBe(1)
   })
 
   test('VC-R-08: 并发请求只刷新一次令牌', async ({ page }) => {
-    await clearApiMocks(page)
-    
     let refreshCount = 0
     let requestCount = 0
 
@@ -184,9 +177,6 @@ test.describe('R. 请求层', () => {
       })
     })
 
-    // 设置其他必要的 mock
-    await setupApiMocks(page)
-
     await page.addInitScript(() => {
       localStorage.setItem('ims_access_token', 'old_token')
       localStorage.setItem('ims_refresh_token', 'old_refresh_token')
@@ -195,58 +185,48 @@ test.describe('R. 请求层', () => {
     await page.goto('/demo/request')
     await page.waitForSelector('.request-demo, .app-layout')
 
-    // 并发发送多个请求
-    await Promise.all([
-      page.evaluate(() => {
-        // @ts-expect-error - fetch is available in browser context
-        window.fetch('/admin-api/ims/demo/error?code=0')
-      }),
-      page.evaluate(() => {
-        // @ts-expect-error - fetch is available in browser context
-        window.fetch('/admin-api/ims/demo/error?code=0')
-      }),
-      page.evaluate(() => {
-        // @ts-expect-error - fetch is available in browser context
-        window.fetch('/admin-api/ims/demo/error?code=0')
-      }),
-    ])
-
-    await page.waitForTimeout(1000)
-
-    // 验证刷新只被调用一次
-    expect(refreshCount).toBeLessThanOrEqual(1)
+    const burst = page.getByRole('button', { name: '并发 5 次' })
+    await burst.click()
+    await expect(page.locator('.el-message--success').filter({ hasText: '5 个请求都成功' })).toBeVisible()
+    expect(refreshCount).toBe(1)
+    expect(requestCount).toBeGreaterThanOrEqual(5)
   })
 
   test('VC-R-09: 刷新令牌失效应跳登录页', async ({ page }) => {
-    // 验证刷新令牌失效时的重定向逻辑
-    // 实现在 request.ts 的 redirectToLogin 函数中
-    
-    await setupApiMocks(page)
-    await page.goto('/demo/request')
-    await page.waitForSelector('.request-demo, .app-layout')
+    await page.route('**/admin-api/ims/demo/error**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: ErrorCode.TOKEN_EXPIRED, msg: '令牌已过期', data: null }),
+      })
+    })
+    await page.route('**/admin-api/ims/auth/refresh-token', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: ErrorCode.TOKEN_EXPIRED, msg: '刷新令牌失效', data: null }),
+      })
+    })
 
-    // 验证 redirectToLogin 函数实现:
-    // - clearTokens() 清除所有令牌
-    // - router.push({ path: '/login', query: { redirect: currentPath } })
-    // - ElMessage.warning('登录已失效，请重新登录')
-    
-    // 通过代码审查确认实现
-    expect(true).toBe(true)
+    await page.goto('/demo/request')
+    await page.getByRole('button', { name: '成功 (0)' }).click()
+    await expect(page).toHaveURL(/\/login\?/)
+    expect(decodeURIComponent(page.url())).toContain('/demo/request')
+    await expect(page.locator('.el-message').filter({ hasText: '登录已失效，请重新登录' })).toBeVisible()
   })
 
   test('VC-R-10: 多设备登录应提示下线', async ({ page }) => {
-    // 验证多设备登录检测逻辑
-    // 后端返回 1002 时前端应跳转登录页
-    
-    await setupApiMocks(page)
+    await page.route('**/admin-api/ims/demo/error**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 1003, msg: '下线', data: null }),
+      })
+    })
     await page.goto('/demo/request')
-    await page.waitForSelector('.request-demo, .app-layout')
-
-    // 通过代码审查确认 request.ts 实现:
-    // - TOKEN_EXPIRED (1002) 错误码处理
-    // - 尝试刷新 -> 失败 -> redirectToLogin
-    
-    expect(true).toBe(true)
+    await page.getByRole('button', { name: '成功 (0)' }).click()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.locator('.el-message').filter({ hasText: '您的账号已在其他设备登录，本设备已下线' })).toBeVisible()
   })
 
   test('VC-R-11: 跨标签页退出登录同步', async ({ page, context }) => {
@@ -270,18 +250,11 @@ test.describe('R. 请求层', () => {
     // 等待第一个页面响应 storage 事件
     await page.waitForTimeout(500)
 
-    // 验证第一个页面也跳转到登录页
-    const url = page.url()
-    // Storage 事件监听已实现，会触发跳转
-    expect(url).toBeDefined()
-
+    await expect(page).toHaveURL(/\/login/)
     await page2.close()
   })
 
   test('VC-R-12: 密码重置后必须改密', async ({ page }) => {
-    await clearApiMocks(page)
-
-    // 登录返回 pwdResetRequired: true
     await page.route('**/admin-api/ims/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
@@ -290,19 +263,24 @@ test.describe('R. 请求层', () => {
           code: 0,
           msg: '成功',
           data: {
-            accessToken: 'test_token',
-            refreshToken: 'test_refresh',
+            accessToken: 'reset_token',
+            refreshToken: 'reset_refresh',
             expiresIn: 7200,
             pwdResetRequired: true,
           },
         }),
       })
     })
-
     await page.goto('/login')
-    
-    // 此测试验证 pwdResetRequired 字段被正确处理
-    // 实际的密码重置流程在登录组件中实现
+    await page.getByPlaceholder('用户名').fill('qa_viewer')
+    await page.getByPlaceholder('密码').fill('new-pass')
+    await page.getByRole('button', { name: '登录' }).click()
+    await expect(page).toHaveURL(/\/user\/change-password/)
+    await page.getByRole('menuitem', { name: '人员管理' }).click()
+    await expect(page).toHaveURL(/\/user\/change-password/)
+    await page.getByPlaceholder('请输入新密码').fill('abcdef')
+    await page.getByRole('button', { name: '确认修改' }).click()
+    await expect(page).toHaveURL(/\/demo\/tokens/)
   })
 
   test('VC-R-13: 权限变更无感知刷新', async ({ page }) => {
@@ -319,61 +297,32 @@ test.describe('R. 请求层', () => {
   })
 
   test('VC-R-14: 字典变更实时生效', async ({ page }) => {
-    await setupApiMocks(page)
-
-    await page.goto('/demo/selectors')
-    await page.waitForSelector('.selectors-demo, .app-layout')
-
-    // 字典数据通过 dictApi.getDataList 获取
-    // 验证字典选择器组件存在
-    const dictSelect = page.locator('.dict-select, .el-select').first()
-    if (await dictSelect.count() > 0) {
-      await expect(dictSelect).toBeVisible()
-    }
-    
-    // 通过代码审查确认 dict store 实现:
-    // - fetchDictFromApi 函数调用 dictApi.getDataList
-    // - 字典缓存和实时获取机制
-    expect(true).toBe(true)
+    await page.goto('/demo/list')
+    await expect(page.locator('.status-label').filter({ hasText: '待审核' }).first()).toBeVisible()
+    await page.getByRole('button', { name: '刷新字典' }).click()
+    await expect(page.locator('.status-label').filter({ hasText: '测试名' }).first()).toBeVisible()
+    await expect(page.locator('.status-label').filter({ hasText: '待审核' })).toHaveCount(0)
   })
 
   test('VC-R-15: 未登录访问应跳登录页', async ({ page }) => {
-    await clearApiMocks(page)
-
-    // /me 返回 401
-    await page.route('**/admin-api/ims/auth/me', async (route) => {
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ code: 1002, msg: '未登录', data: null }),
-      })
-    })
-
-    // 确保没有 token
     await page.addInitScript(() => {
       localStorage.removeItem('ims_access_token')
       localStorage.removeItem('ims_refresh_token')
+      sessionStorage.setItem('ims_require_auth', '1')
     })
-
-    await page.goto('/demo/layout')
-
-    // 路由守卫应该重定向到登录页
-    // 当前实现可能需要路由守卫配合
-    await page.waitForTimeout(1000)
+    await page.goto('/demo/list')
+    await expect(page).toHaveURL(/\/login/)
+    expect(decodeURIComponent(page.url())).toContain('redirect=')
+    expect(decodeURIComponent(page.url())).toContain('/demo/list')
   })
 
   test('VC-R-16: 无权限账号应显示暂无权限', async ({ page }) => {
-    await setupApiMocks(page, { userType: 'noperm' })
-
     await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
-
-    // 无权限用户的菜单为空
-    // 验证页面可以正常加载，权限由组件层处理
-    const sidebar = page.locator('.sidebar, .app-sidebar')
-    if (await sidebar.count() > 0) {
-      const menuItems = sidebar.locator('.el-menu-item')
-      // 无权限用户菜单项可能为空或只有默认项
-    }
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await setupApiMocks(page, { userType: 'noperm' })
+    await page.reload()
+    await expect(page.getByText('您的账号尚未分配权限，请联系管理员')).toBeVisible()
+    await expect(page.getByText('暂无权限查看此内容')).toBeVisible()
+    await expect(page.locator('.app-content .el-table')).toHaveCount(0)
   })
 })

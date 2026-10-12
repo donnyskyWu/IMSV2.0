@@ -73,6 +73,7 @@ const mockDicts: Record<string, DictItem[]> = {
 export const useDictStore = defineStore('dict', () => {
   const cache = ref<Map<string, DictCache>>(new Map())
   const loading = ref<Map<string, Promise<DictItem[]>>>(new Map())
+  const revision = ref(0)
   const useMock = ref(import.meta.env.DEV || import.meta.env.MODE === 'test')
 
   async function fetchDictFromApi(type: string): Promise<DictItem[]> {
@@ -127,6 +128,7 @@ export const useDictStore = defineStore('dict', () => {
   }
 
   function label(type: string, value: string): string {
+    void revision.value
     const cached = cache.value.get(type)
     if (!cached) {
       getDict(type)
@@ -140,6 +142,7 @@ export const useDictStore = defineStore('dict', () => {
   }
 
   function color(type: string, value: string): ColorType | undefined {
+    void revision.value
     const cached = cache.value.get(type)
     if (!cached) {
       getDict(type)
@@ -156,6 +159,12 @@ export const useDictStore = defineStore('dict', () => {
 
   function refreshAll(): void {
     cache.value.clear()
+    revision.value++
+  }
+
+  function applyLocal(type: string, items: DictItem[]): void {
+    cache.value.set(type, { items, timestamp: Date.now() })
+    revision.value++
   }
 
   return {
@@ -164,6 +173,7 @@ export const useDictStore = defineStore('dict', () => {
     color,
     refresh,
     refreshAll,
+    applyLocal,
     useMock,
   }
 })

@@ -15,6 +15,7 @@ interface Props {
   title: string
   size?: DrawerSize
   loading?: boolean
+  submit?: () => Promise<unknown> | unknown
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -25,10 +26,13 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'update:open', val: boolean): void
   (e: 'save'): void
+  (e: 'saved'): void
   (e: 'closed'): void
 }>()
 
 const { isMobile } = useResponsive()
+
+const saving = ref(false)
 
 // 是否有未保存修改
 const isDirty = ref(false)
@@ -59,9 +63,19 @@ async function handleClose() {
   emit('closed')
 }
 
-// 保存
-function handleSave() {
-  emit('save')
+// 保存：提交未结束前忽略连点
+async function handleSave() {
+  if (saving.value || props.loading) return
+  saving.value = true
+  try {
+    if (props.submit) await props.submit()
+    emit('save')
+    isDirty.value = false
+    emit('update:open', false)
+    emit('saved')
+  } finally {
+    saving.value = false
+  }
 }
 
 // 保存成功后重置脏标记
@@ -91,7 +105,7 @@ defineExpose({
     :model-value="open"
     :title="title"
     :size="drawerWidth"
-    :close-on-click-modal="false"
+    :close-on-click-modal="true"
     :close-on-press-escape="!isDirty"
     :before-close="handleClose"
     direction="rtl"
@@ -111,7 +125,7 @@ defineExpose({
     <template #footer>
       <div class="drawer-footer">
         <el-button @click="handleClose">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="handleSave">
+        <el-button type="primary" :loading="loading || saving" @click="handleSave">
           保存
         </el-button>
       </div>

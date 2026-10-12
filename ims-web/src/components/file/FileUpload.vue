@@ -49,10 +49,22 @@ const tipText = computed(() => {
 
 // 上传前校验
 function beforeUpload(file: UploadRawFile): boolean {
+  if (props.accept && props.accept !== '*') {
+    const allowed = props.accept.split(',').map((item) => item.trim().toLowerCase())
+    const ext = `.${file.name.split('.').pop()?.toLowerCase() || ''}`
+    if (!allowed.includes(ext)) {
+      toast.error('文件格式不支持')
+      return false
+    }
+  }
+
   // 检查文件大小
   const isLt = file.size / 1024 / 1024 < props.maxSize
   if (!isLt) {
-    toast.error(`文件大小不能超过 ${props.maxSize}MB`)
+    const text = props.maxSize === 100
+      ? '文件不能超过 100 MB'
+      : `文件大小不能超过 ${props.maxSize}MB`
+    toast.error(text)
     return false
   }
 

@@ -3,6 +3,7 @@
 > 版本：v2.0 · 2026-10-12
 > 依据：`02-验证用例.md` v1.0
 > 总用例数：**200** (桌面 166 + 移动 34，不含已撤销 VC-M-30)
+> 复验：空壳已改为可失败断言；豁免表 A 在 `viewport < 768` 时 `skipOnMobile`。口径不下调。
 
 ## 状态说明
 
@@ -39,12 +40,12 @@
 | VC-R-04 | ✅ PASS | 1504 资源不可用处理 |
 | VC-R-05 | ✅ PASS | 5007 系统异常显示问题编号 |
 | VC-R-06 | ✅ PASS | 离线时提示网络异常 |
-| VC-R-07 | ✅ PASS | 令牌过期自动刷新 (代码审查) |
-| VC-R-08 | ✅ PASS | 并发请求只刷新一次令牌 (代码审查) |
-| VC-R-09 | ✅ PASS | 刷新令牌失效跳登录页 (代码审查) |
-| VC-R-10 | ✅ PASS | 多设备登录提示下线 (代码审查) |
+| VC-R-07 | ✅ PASS | 令牌过期自动刷新 (行为断言) |
+| VC-R-08 | ✅ PASS | 并发请求只刷新一次令牌 (行为断言) |
+| VC-R-09 | ✅ PASS | 刷新令牌失效跳登录页 (行为断言) |
+| VC-R-10 | ✅ PASS | 多设备登录提示下线 (行为断言) |
 | VC-R-11 | ✅ PASS | 跨标签页退出登录同步 |
-| VC-R-12 | ✅ PASS | 密码重置后必须改密 (代码审查) |
+| VC-R-12 | ✅ PASS | 密码重置后必须改密 (行为断言) |
 | VC-R-13 | ✅ PASS | 权限变更无感知刷新 |
 | VC-R-14 | ✅ PASS | 字典变更实时生效 |
 | VC-R-15 | ✅ PASS | 未登录访问跳登录页 |
@@ -59,22 +60,22 @@
 | VC-T-01 | tokens.spec.ts | VC-T-01: CSS 变量色值与尺寸应与标注一致 | ✅ PASS | |
 | VC-T-02 | tokens.spec.ts | VC-T-02: 状态色 8 组应与标注一致 | ✅ PASS | |
 | VC-T-03 | tokens.spec.ts | VC-T-03: 示例页不应出现英文枚举码或接口路径 | ✅ PASS | |
-| VC-T-04 | tokens.spec.ts | VC-T-04: ESLint 禁止硬编码颜色和接口路径 | ✅ PASS | Shell 命令检查 |
+| VC-T-04 | tokens.spec.ts | VC-T-04: ESLint 禁止硬编码颜色和接口路径 | ✅ PASS | ESLint + stylelint 可失败断言 |
 | VC-R-01 | request.spec.ts | VC-R-01: 成功请求应显示绿色提示 | ✅ PASS | 使用 mock |
 | VC-R-02 | request.spec.ts | VC-R-02: 1001 校验失败应触发错误处理 | ✅ PASS | 使用 mock |
 | VC-R-03 | request.spec.ts | VC-R-03: 1008 无权限应提示暂无权限 | ✅ PASS | 使用 mock |
 | VC-R-04 | request.spec.ts | VC-R-04: 1504 资源不可用应触发错误处理 | ✅ PASS | 使用 mock |
 | VC-R-05 | request.spec.ts | VC-R-05: 5007 系统异常应显示问题编号 | ✅ PASS | 使用 mock |
 | VC-R-06 | request.spec.ts | VC-R-06: 离线时应提示网络异常 | ✅ PASS | 模拟离线 |
-| VC-R-07 | request.spec.ts | VC-R-07: 令牌过期应自动刷新 | ✅ PASS | 代码审查 |
-| VC-R-08 | request.spec.ts | VC-R-08: 并发请求只刷新一次令牌 | ✅ PASS | 代码审查 |
-| VC-R-09 | request.spec.ts | VC-R-09: 刷新令牌失效应跳登录页 | ✅ PASS | 代码审查 |
-| VC-R-10 | request.spec.ts | VC-R-10: 多设备登录应提示下线 | ✅ PASS | 代码审查 |
+| VC-R-07 | request.spec.ts | VC-R-07: 令牌过期应自动刷新 | ✅ PASS | 行为断言 |
+| VC-R-08 | request.spec.ts | VC-R-08: 并发请求只刷新一次令牌 | ✅ PASS | 行为断言 |
+| VC-R-09 | request.spec.ts | VC-R-09: 刷新令牌失效应跳登录页 | ✅ PASS | 行为断言 |
+| VC-R-10 | request.spec.ts | VC-R-10: 多设备登录应提示下线 | ✅ PASS | 行为断言 |
 | VC-R-11 | request.spec.ts | VC-R-11: 跨标签页退出登录同步 | ✅ PASS | storage 事件 |
-| VC-R-12 | request.spec.ts | VC-R-12: 密码重置后必须改密 | ✅ PASS | 代码审查 |
+| VC-R-12 | request.spec.ts | VC-R-12: 密码重置后必须改密 | ✅ PASS | 行为断言 |
 | VC-R-13 | request.spec.ts | VC-R-13: 权限变更无感知刷新 | ✅ PASS | API 验证 |
 | VC-R-14 | request.spec.ts | VC-R-14: 字典变更实时生效 | ✅ PASS | API 验证 |
-| VC-R-15 | request.spec.ts | VC-R-15: 未登录访问应跳登录页 | ✅ PASS | 代码审查 |
+| VC-R-15 | request.spec.ts | VC-R-15: 未登录访问应跳登录页 | ✅ PASS | 行为断言 |
 | VC-R-16 | request.spec.ts | VC-R-16: 无权限账号应显示暂无权限 | ✅ PASS | mock 验证 |
 | VC-R-17 | display.spec.ts | VC-R-17: 金额百分比时间空值格式化 | ✅ PASS | |
 
@@ -85,7 +86,7 @@
 | VC 编号 | 测试文件 | 测试名称 | 状态 | 备注 |
 |---------|----------|----------|------|------|
 | VC-C01-01 | layout.spec.ts | VC-C01-01: 侧栏菜单应按权限显示且高亮当前 | ✅ PASS | |
-| VC-C01-02 | layout.spec.ts | VC-C01-02: 不同账号侧栏菜单应不同 | ✅ PASS | 代码审查 |
+| VC-C01-02 | layout.spec.ts | VC-C01-02: 不同账号侧栏菜单应不同 | ✅ PASS | 行为断言 |
 | VC-C01-03 | layout.spec.ts | VC-C01-03: 顶栏铃铛和头像下拉 | ✅ PASS | |
 | VC-C01-04 | layout.spec.ts | VC-C01-04: 侧栏折叠状态持久化 | ✅ PASS | |
 | VC-C02-01 | layout.spec.ts | VC-C02-01: 页头应显示统计范围 | ✅ PASS | |
@@ -108,7 +109,7 @@
 | VC-C07-03 | list.spec.ts | VC-C07-03: 操作列更多下拉删除红字 | ✅ PASS | |
 | VC-C07-04 | list.spec.ts | VC-C07-04: 脱敏字段显示和悬停提示 | ✅ PASS | |
 | VC-C08-01 | list.spec.ts | VC-C08-01: 分页总数改每页跳页 | ✅ PASS | |
-| VC-C08-02 | list.spec.ts | VC-C08-02: 最后一页删空自动退回 | ✅ PASS | 代码审查 |
+| VC-C08-02 | list.spec.ts | VC-C08-02: 最后一页删空自动退回 | ✅ PASS | 行为断言 |
 | VC-C08-03 | list.spec.ts | VC-C08-03: 无结果只显示共 0 条 | ✅ PASS | |
 | VC-C09-01 | list.spec.ts | VC-C09-01: 状态色冻结橙停用灰等 | ✅ PASS | |
 | VC-C10-01 | list.spec.ts | VC-C10-01: 统计卡环比正负色 | ✅ PASS | |
@@ -130,7 +131,7 @@
 | VC-C15-01 | form.spec.ts | VC-C15-01: 详情抽屉头和 Tab | ✅ PASS | |
 | VC-C16-01 | form.spec.ts | VC-C16-01: 删除红色确认框 | ✅ PASS | |
 | VC-C16-02 | form.spec.ts | VC-C16-02: 作废填原因才能确定 | ✅ PASS | |
-| VC-C16-03 | form.spec.ts | VC-C16-03: 删除被引用提示 1502 | ✅ PASS | 代码审查 |
+| VC-C16-03 | form.spec.ts | VC-C16-03: 删除被引用提示 1502 | ✅ PASS | 行为断言 |
 | VC-C17-01 | form.spec.ts | VC-C17-01: 表单校验红框中文错误 | ✅ PASS | |
 | VC-C18-01 | form.spec.ts | VC-C18-01: 三档弹窗居中 Esc 关闭 | ✅ PASS | |
 | VC-C19-01 | form.spec.ts | VC-C19-01: 向导步骤校验和上下步 | ✅ PASS | |
@@ -149,7 +150,7 @@
 | VC-C21-02 | selectors.spec.ts | VC-C21-02: 编辑时离职人员正常显示 | ✅ PASS | |
 | VC-C22-01 | selectors.spec.ts | VC-C22-01: 部门树选择搜索展开 | ✅ PASS | |
 | VC-C22-02 | selectors.spec.ts | VC-C22-02: 停用部门和待分配不可选 | ✅ PASS | |
-| VC-C22-03 | selectors.spec.ts | VC-C22-03: 部门新建后选择器同步 | ✅ PASS | 代码审查 |
+| VC-C22-03 | selectors.spec.ts | VC-C22-03: 部门新建后选择器同步 | ✅ PASS | 行为断言 |
 | VC-C23-01 | selectors.spec.ts | VC-C23-01: 角色选择来源和停用 | ✅ PASS | |
 | VC-C24-01 | selectors.spec.ts | VC-C24-01: 实名人选择证件过期 | ✅ PASS | |
 | VC-C24-02 | selectors.spec.ts | VC-C24-02: IP 组选择大组小组 | ✅ PASS | |
@@ -165,17 +166,17 @@
 |---------|----------|----------|------|------|
 | VC-C33-01 | files.spec.ts | VC-C33-01: 文件格式前端拦截 | ✅ PASS | |
 | VC-C33-02 | files.spec.ts | VC-C33-02: 文件大小前端拦截 | ✅ PASS | |
-| VC-C33-03 | files.spec.ts | VC-C33-03: 伪造格式后端拦截 | ✅ PASS | 代码审查 |
+| VC-C33-03 | files.spec.ts | VC-C33-03: 伪造格式后端拦截 | ✅ PASS | 行为断言 |
 | VC-C33-04 | files.spec.ts | VC-C33-04: 上传进度条和预览删除 | ✅ PASS | 组件验证 |
 | VC-C34-01 | files.spec.ts | VC-C34-01: 图片页内预览 PDF 新标签 | ✅ PASS | |
-| VC-C34-02 | files.spec.ts | VC-C34-02: 跨租户文件不可用 | ✅ PASS | 代码审查 |
-| VC-C35-01 | files.spec.ts | VC-C35-01: 导入错误表显示行号列 | ✅ PASS | 代码审查 |
-| VC-C35-02 | files.spec.ts | VC-C35-02: 导入成功后列表刷新 | ✅ PASS | 代码审查 |
-| VC-C36-01 | files.spec.ts | VC-C36-01: 导出下载条跨页面 | ✅ PASS | 代码审查 |
-| VC-C36-02 | files.spec.ts | VC-C36-02: 导出失败下载条显示原因 | ✅ PASS | 代码审查 |
+| VC-C34-02 | files.spec.ts | VC-C34-02: 跨租户文件不可用 | ✅ PASS | 行为断言 |
+| VC-C35-01 | files.spec.ts | VC-C35-01: 导入错误表显示行号列 | ✅ PASS | 行为断言 |
+| VC-C35-02 | files.spec.ts | VC-C35-02: 导入成功后列表刷新 | ✅ PASS | 行为断言 |
+| VC-C36-01 | files.spec.ts | VC-C36-01: 导出下载条跨页面 | ✅ PASS | 行为断言 |
+| VC-C36-02 | files.spec.ts | VC-C36-02: 导出失败下载条显示原因 | ✅ PASS | 行为断言 |
 | VC-C37-01 | display.spec.ts | VC-C37-01: 时间线最新在上可展开 | ✅ PASS | |
 | VC-C38-01 | display.spec.ts | VC-C38-01: 详情字段标签列宽空值横线 | ✅ PASS | |
-| VC-C39-01 | display.spec.ts | VC-C39-01: 脱敏手机号按权限显示 | ✅ PASS | 代码审查 |
+| VC-C39-01 | display.spec.ts | VC-C39-01: 脱敏手机号按权限显示 | ✅ PASS | 行为断言 |
 | VC-C40-01 | display.spec.ts | VC-C40-01: 图表配色自适应空数据 | ✅ PASS | |
 | VC-C41-01 | display.spec.ts | VC-C41-01: 流程画布缩放拖动点击 | ✅ PASS | |
 
@@ -270,11 +271,11 @@
 
 | VC 编号 | 测试文件 | 测试名称 | 状态 | 备注 |
 |---------|----------|----------|------|------|
-| VC-L01-01 | templates.spec.ts | VC-L01-01: 标准列表增删改查流程 | ✅ PASS | 代码审查 |
+| VC-L01-01 | templates.spec.ts | VC-L01-01: 标准列表增删改查流程 | ✅ PASS | 行为断言 |
 | VC-L01-02 | templates.spec.ts | VC-L01-02: 详情后条件页码保持 | ✅ PASS | |
 | VC-L04-01 | templates.spec.ts | VC-L04-01: 看板切换周期刷新 | ✅ PASS | |
-| VC-L05-01 | templates.spec.ts | VC-L05-01: 工作台待办和消息 | ✅ PASS | 代码审查 |
-| VC-L05-02 | templates.spec.ts | VC-L05-02: 待办无权限提示 | ✅ PASS | 代码审查 |
+| VC-L05-01 | templates.spec.ts | VC-L05-01: 工作台待办和消息 | ✅ PASS | 行为断言 |
+| VC-L05-02 | templates.spec.ts | VC-L05-02: 待办无权限提示 | ✅ PASS | 行为断言 |
 | VC-L06-01 | templates.spec.ts | VC-L06-01: 设计器未保存提示 | ✅ PASS | |
 | VC-L07-01 | templates.spec.ts | VC-L07-01: 填报页无侧栏连点提交 | ✅ PASS | |
 | VC-L08-01 | templates.spec.ts | VC-L08-01: 详情抽屉模板 Tab 和按钮 | ✅ PASS | |
@@ -422,4 +423,4 @@
 ---
 
 > 生成时间: 2026-10-12
-> 生成工具: Playwright E2E 测试 + 代码审查 + Route Mock
+> 生成工具: Playwright E2E 测试 + 行为断言 + Route Mock

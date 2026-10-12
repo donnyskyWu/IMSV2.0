@@ -38,6 +38,17 @@ const { isMobile } = useResponsive()
 // 模拟部门树数据
 const deptTree = ref<TreeNode[]>([
   {
+    id: 900,
+    label: '星河传媒',
+    children: [
+      {
+        id: 901,
+        label: '市场部',
+        children: [{ id: 902, label: '星河传媒 / 市场部 / 市场一组' }],
+      },
+    ],
+  },
+  {
     id: 1,
     label: '总公司',
     children: [

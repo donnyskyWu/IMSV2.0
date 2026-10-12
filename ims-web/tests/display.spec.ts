@@ -3,122 +3,68 @@
  * 依据: 02-验证用例.md VC-C37~C41, VC-R-17
  */
 import { test, expect } from '@playwright/test'
+import { skipOnMobile } from './helpers/viewport'
 
 test.describe('C37～C41. 展示组件', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/demo/display')
-    await page.waitForSelector('.display-demo, .app-layout')
+    await page.waitForSelector('.display-demo')
   })
 
   test('VC-R-17: 金额百分比时间空值格式化', async ({ page }) => {
-    const moneyText = page.locator('.money-text, :text("¥")').first()
-    if (await moneyText.isVisible()) {
-      const text = await moneyText.textContent()
-      expect(text).toMatch(/¥[\d,]+\.\d{2}/)
-    }
-
-    const negativeAmount = page.locator(':text("-¥"), :text("¥-")').first()
-    if (await negativeAmount.isVisible()) {
-      const color = await negativeAmount.evaluate((el) => getComputedStyle(el).color)
-      expect(color).toMatch(/rgb\(255,|#ff/)
-    }
-
-    const percentText = page.locator('.percent-text, :text("%")').first()
-    if (await percentText.isVisible()) {
-      const text = await percentText.textContent()
-      expect(text).toMatch(/\d+%/)
-    }
-
-    const emptyDash = page.locator(':text("—"), :text("-")').first()
-    if (await emptyDash.count() > 0) {
-      await expect(emptyDash).toBeVisible()
-    }
+    const money = page.locator('.money-text').first()
+    await expect(money).toBeVisible()
+    await expect(money).toContainText(/¥|￥/)
+    await expect(money).toContainText(/\d+\.\d{2}/)
+    const negative = page.locator('.money-text--negative')
+    await expect(negative).toBeVisible()
+    const color = await negative.evaluate((el) => getComputedStyle(el).color)
+    expect(color).toMatch(/rgb\(255,\s*59,\s*48\)/)
+    await expect(page.locator('.percent-text')).toContainText('85.5%')
+    await expect(page.locator('.description-list').getByText('—')).toBeVisible()
   })
 
   test('VC-C37-01: 时间线最新在上可展开', async ({ page }) => {
-    const timeline = page.locator('.el-timeline, .timeline').first()
-    if (await timeline.isVisible()) {
-      const items = timeline.locator('.el-timeline-item')
-      const count = await items.count()
-      expect(count).toBeGreaterThan(0)
-
-      const expandBtn = timeline.locator('.expand-btn, :text("展开")').first()
-      if (await expandBtn.isVisible()) {
-        await expandBtn.click()
-        await page.waitForTimeout(300)
-      }
-    }
+    const items = page.locator('.timeline-item')
+    await expect(items).toHaveCount(4)
+    await expect(items.first()).toContainText('审批完成')
+    await expect(items.last()).toContainText('订单创建')
+    await expect(items.first().locator('.timeline-body')).toBeVisible()
   })
 
   test('VC-C38-01: 详情字段标签列宽空值横线', async ({ page }) => {
-    const descriptionList = page.locator('.description-list, .el-descriptions').first()
-    if (await descriptionList.isVisible()) {
-      const labels = descriptionList.locator('.el-descriptions__label, .desc-label')
-      if (await labels.count() > 0) {
-        const firstLabel = labels.first()
-        const box = await firstLabel.boundingBox()
-        expect(box?.width).toBeGreaterThan(0)
-      }
-
-      const emptyValue = descriptionList.locator(':text("—")')
-      if (await emptyValue.count() > 0) {
-        await expect(emptyValue.first()).toBeVisible()
-      }
-    }
+    skipOnMobile(page, '手机下详情字段单列，标签列宽另测')
+    const list = page.locator('.description-list')
+    await expect(list).toBeVisible()
+    const label = list.locator('.desc-label').first()
+    const box = await label.boundingBox()
+    expect(box?.width).toBeCloseTo(120, 0)
+    await expect(list.getByText('—')).toBeVisible()
   })
 
   test('VC-C39-01: 脱敏手机号按权限显示', async ({ page }) => {
-    // 验证脱敏手机号显示逻辑
-    // 脱敏由后端返回的数据格式决定 (138****8888)
-    
-    const maskedPhone = page.locator(':text("****"), .masked-text').first()
-    if (await maskedPhone.count() > 0) {
-      // 脱敏格式已显示
-      await expect(maskedPhone).toBeVisible()
-    }
-    
-    // 通过代码审查确认:
-    // - 后端根据权限返回脱敏或明文手机号
-    // - 前端直接渲染返回值
+    await expect(page.locator('.description-list').getByText('138****5678')).toBeVisible()
+    await expect(page.locator('.masked-text, .description-list').getByText('138****5678').first()).toBeVisible()
   })
 
   test('VC-C40-01: 图表配色自适应空数据', async ({ page }) => {
-    const charts = page.locator('.chart, canvas, [data-echarts]')
-    const count = await charts.count()
-
-    if (count > 0) {
-      const chart = charts.first()
-      await expect(chart).toBeVisible()
-
-      const box = await chart.boundingBox()
-      if (box) {
-        expect(box.width).toBeGreaterThan(0)
-        expect(box.height).toBeGreaterThan(0)
-      }
-    }
-
-    const emptyChart = page.locator('.chart-empty, :text("暂无数据")')
-    if (await emptyChart.count() > 0) {
-      await expect(emptyChart.first()).toBeVisible()
-    }
+    const chart = page.locator('.chart').first()
+    await expect(chart).toBeVisible()
+    const box = await chart.boundingBox()
+    expect(box?.width).toBeGreaterThan(0)
+    expect(box?.height).toBeGreaterThan(0)
+    await expect(page.locator('.chart-empty')).toHaveText('暂无数据')
   })
 
   test('VC-C41-01: 流程画布缩放拖动点击', async ({ page }) => {
-    // §2.3 U5：手机视口豁免画布缩放；移动 WebKit 也不支持 mouse.wheel
-    test.skip((page.viewportSize()?.width ?? 0) < 768, '手机视口豁免画布缩放')
-
-    const canvas = page.locator('.trace-graph, .flow-canvas, canvas').first()
-    if (await canvas.isVisible()) {
-      await expect(canvas).toBeVisible()
-
-      await page.mouse.wheel(0, 100)
-      await page.waitForTimeout(300)
-
-      const nodeClick = page.locator('.graph-node, .flow-node').first()
-      if (await nodeClick.isVisible()) {
-        await nodeClick.click()
-        await page.waitForTimeout(300)
-      }
-    }
+    skipOnMobile(page, '手机视口豁免画布缩放')
+    const canvas = page.locator('.trace-graph')
+    await expect(canvas).toBeVisible()
+    await expect(canvas).toHaveAttribute('data-scale', '1')
+    await canvas.hover()
+    await page.mouse.wheel(0, -120)
+    await expect(canvas).toHaveAttribute('data-scale', '1.1')
+    await canvas.locator('.graph-node').first().click()
+    await expect(page.locator('.node-log')).toContainText('已点击')
   })
 })

@@ -4,7 +4,7 @@
  * 依据: UI-L06
  * 包含: 统计卡片、图表
  */
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import StatCard from '@/components/list/StatCard.vue'
@@ -13,6 +13,30 @@ import { useResponsive } from '@/utils/responsive'
 // ECharts 配置类型
 
 const { isMobile } = useResponsive()
+
+const todos = [
+  { id: 'a1', tab: '审批', title: '审批单甲', allowed: true },
+  { id: 'a2', tab: '审批', title: '审批单乙', allowed: true },
+  { id: 'w1', tab: '预警', title: '库存预警', allowed: false },
+]
+const todoTab = ref('审批')
+const todoTip = ref('')
+const period = ref('本月')
+const updatedAt = ref('2026-10-12 10:00')
+
+function changePeriod(value: string) {
+  updatedAt.value = value === '上月' ? '2026-09-30 23:59' : '2026-10-12 10:00'
+}
+const visibleTodos = computed(() => todos.filter((item) => item.tab === todoTab.value))
+
+function openTodo(item: { allowed: boolean; title: string }) {
+  if (!item.allowed) {
+    todoTip.value = '暂无权限'
+    return
+  }
+  todoTip.value = ''
+  window.location.hash = 'todo'
+}
 
 // 统计数据
 const stats = ref([
@@ -90,6 +114,23 @@ const barChartOption = ref({
   <AppLayout>
     <div class="workbench-demo">
       <PageHeader title="工作台演示" sub-title="FP-P-12 / UI-L06" />
+      <div class="period-row">
+        <el-select v-model="period" class="period-select" @change="changePeriod">
+          <el-option label="本月" value="本月" />
+          <el-option label="上月" value="上月" />
+        </el-select>
+        <span class="update-time">截至 {{ updatedAt }}</span>
+      </div>
+
+      <section class="todo-panel">
+        <el-badge :value="3" class="msg-unread">未读消息 3</el-badge>
+        <el-radio-group v-model="todoTab">
+          <el-radio-button value="审批">审批 2</el-radio-button>
+          <el-radio-button value="预警">预警 1</el-radio-button>
+        </el-radio-group>
+        <el-button v-for="item in visibleTodos" :key="item.id" @click="openTodo(item)">{{ item.title }}</el-button>
+        <p v-if="todoTip" class="todo-tip">{{ todoTip }}</p>
+      </section>
 
       <!-- 统计卡片 -->
       <StatCard :items="stats" :cols="4" />

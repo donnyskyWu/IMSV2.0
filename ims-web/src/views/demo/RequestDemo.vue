@@ -53,6 +53,11 @@ async function testErrorCode(code: number) {
   }
 }
 
+async function burstRequests() {
+  await Promise.all(Array.from({ length: 5 }, () => demoApi.triggerError({ code: 0 })))
+  toast.success('5 个请求都成功')
+}
+
 // 测试 Toast 去重
 function testToastDedupe() {
   // 连续调用相同内容
@@ -135,6 +140,7 @@ function testToastTypes() {
           >
             成功 (0)
           </el-button>
+          <el-button type="primary" @click="burstRequests">并发 5 次</el-button>
           <el-button
             type="warning"
             :loading="loading"

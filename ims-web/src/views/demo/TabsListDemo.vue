@@ -5,6 +5,7 @@
  * 包含: 标签页 + 列表
  */
 import { ref, computed } from 'vue'
+import StatCard from '@/components/list/StatCard.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import Tabs from '@/components/layout/Tabs.vue'
@@ -36,13 +37,28 @@ const mockTickets = Array.from({ length: 128 }, (_, i) => ({
 // 分页
 const pageNo = ref(1)
 const pageSize = ref(10)
+const tabKeyword = ref<Record<string, string>>({ all: '', pending: '', processing: '', completed: '', closed: '' })
+const keyword = computed({
+  get: () => tabKeyword.value[activeTab.value] || '',
+  set: (value: string) => {
+    tabKeyword.value = { ...tabKeyword.value, [activeTab.value]: value }
+  },
+})
+const stats = [
+  { title: '今日工单', value: 12, ratio: 3.2 },
+  { title: '超时', value: 2, ratio: -1.5 },
+  { title: '完成', value: 8, ratio: 0.4 },
+  { title: '待办', value: 4, ratio: 1 },
+]
 
 // 按标签过滤
 const filteredTickets = computed(() => {
-  if (activeTab.value === 'all') {
-    return mockTickets
-  }
-  return mockTickets.filter((t) => t.status === activeTab.value)
+  let data = activeTab.value === 'all'
+    ? mockTickets
+    : mockTickets.filter((t) => t.status === activeTab.value)
+  const q = tabKeyword.value[activeTab.value]
+  if (q) data = data.filter((t) => t.title.includes(q))
+  return data
 })
 
 const total = computed(() => filteredTickets.value.length)
@@ -71,12 +87,13 @@ function handleTabChange() {
       </PageHeader>
 
       <!-- 标签页 -->
+      <StatCard :items="stats" :cols="4" />
       <Tabs
-        v-model="activeTab"
-        :tabs="tabs"
-        show-count
+        v-model:active="activeTab"
+        :items="tabs.map((tab) => ({ key: tab.name, label: tab.label, count: tab.count }))"
         @change="handleTabChange"
       />
+      <el-input v-model="keyword" class="tab-keyword" placeholder="本页条件" @change="pageNo = 1" />
 
       <!-- 表格 -->
       <div class="table-wrap">

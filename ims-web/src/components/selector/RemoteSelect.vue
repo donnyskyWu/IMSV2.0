@@ -223,7 +223,7 @@ watch(
 }
 
 .options-container {
-  max-height: 274px;
+  max-height: 160px;
   overflow-y: auto;
 }
 
