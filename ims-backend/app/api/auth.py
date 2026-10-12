@@ -124,9 +124,12 @@ async def refresh_token(request: RefreshTokenRequest) -> CommonResult[LoginRespo
     """
     Refresh access token.
 
-    Rules per FP-D01-03:
+    Rules per FP-D01-03 / 裁定 24:
     - Valid refresh -> new access + new refresh (old refresh invalidated)
-    - Invalid/expired/reused refresh -> 1002 (HTTP 401)
+    - Rotation keeps the login-time session deadline; Redis TTL is the remainder
+    - Invalid, expired, or past the absolute 7 days -> 1002 (HTTP 401)
+    - Reused refresh -> 1002 and the whole session is revoked
+    - Tenant disabled or expired -> 1008
     """
     from app.services.auth import AuthService
 

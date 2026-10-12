@@ -181,12 +181,18 @@ def test_concurrent_refresh_exactly_one_succeeds(
     engine = db_session.get_bind()
     # 两个线程都走到 Lua 再一起执行，避免后到的请求被当成重放。
     at_claim = threading.Barrier(2)
+    # 两个 Lua 都返回之前，先到的线程不能继续跑完轮换并把锁删掉。
+    after_claim = threading.Barrier(2)
     real_eval = real_redis.eval
 
     def synced_eval(*args, **kwargs):
         script = args[0] if args else ""
         if isinstance(script, str) and "GETDEL" in script:
             at_claim.wait(timeout=5)
+            try:
+                return real_eval(*args, **kwargs)
+            finally:
+                after_claim.wait(timeout=5)
         return real_eval(*args, **kwargs)
 
     real_redis.eval = synced_eval
@@ -208,11 +214,13 @@ def test_concurrent_refresh_exactly_one_succeeds(
             results.append(value)
 
     threads = [threading.Thread(target=worker) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=30)
-    real_redis.eval = real_eval
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+    finally:
+        real_redis.eval = real_eval
 
     assert len(results) == 2
     oks = [item for item in results if isinstance(item, dict)]
@@ -376,6 +384,99 @@ def test_logout_without_refresh_index_and_revoke_missing_session(
     assert user.id
 
 
+def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
+    app_client, db_session, real_redis, test_context,
+):
+    """裁定 24：登录起满 7 天绝对失效。差 1 秒能刷新，过 1 秒失败。
+
+    用注入时钟，不 sleep。轮换后在真实 Redis 上读新 refresh 的 TTL，
+    必须等于剩余秒数，不能被重置成 7 天。
+    """
+    from app.core.cache import Cache
+    from app.core.clock import get_now, set_clock
+    from app.core.config import get_settings
+    from app.services.auth import AuthService
+
+    settings = get_settings()
+    full_ttl = settings.jwt.refresh_token_ttl
+    service = AuthService()
+    start = get_now()
+
+    def freeze(moment) -> None:
+        set_clock(lambda: moment)
+
+    near = _add_user(db_session, "abs_near")
+    late = _add_user(db_session, "abs_late")
+    legacy = _add_user(db_session, "abs_legacy")
+    blank = _add_user(db_session, "abs_blank")
+
+    freeze(start)
+    near_tokens = _login(app_client, near.username)
+    late_tokens = _login(app_client, late.username)
+    legacy_tokens = _login(app_client, legacy.username)
+    blank_tokens = _login(app_client, blank.username)
+
+    # 7 天差 1 秒：还能刷新，新 refresh 的 TTL 就是这 1 秒。
+    freeze(start + timedelta(seconds=full_ttl - 1))
+    refreshed = _refresh(app_client, near_tokens["refreshToken"])
+    assert refreshed.status_code == 200
+    refreshed_body = refreshed.json()
+    assert refreshed_body["code"] == 0, refreshed_body
+    new_access = refreshed_body["data"]["accessToken"]
+    new_refresh = refreshed_body["data"]["refreshToken"]
+    assert new_access
+    assert new_refresh != near_tokens["refreshToken"]
+    # 新 access 的 iat 跟着注入时钟走，会落到真实时间的未来。PyJWT 会拒掉 iat，
+    # 所以会话 id 从 Redis 的刷新索引读，不解码 JWT。TTL 要立刻读，剩余只有 1 秒。
+    session_id = real_redis.get(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
+    assert session_id
+    refresh_ttl = real_redis.ttl(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
+    session_ttl = real_redis.ttl(f"{service.SESSION_PREFIX}{session_id}")
+    assert refresh_ttl == 1
+    assert session_ttl == 1
+    assert refresh_ttl != full_ttl
+    assert session_ttl != full_ttl
+    stored = Cache.get_json(f"{service.SESSION_PREFIX}{session_id}")
+    assert stored["expires_at"] == (start + timedelta(seconds=full_ttl)).isoformat()
+
+    # 旧数据没有 expires_at 时，用登录时间 + 7 天，同样不续期。
+    legacy_sid = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{legacy_tokens['refreshToken']}")
+    legacy_key = f"{service.SESSION_PREFIX}{legacy_sid}"
+    legacy_data = Cache.get_json(legacy_key)
+    legacy_data.pop("expires_at", None)
+    legacy_data["created_at"] = start.isoformat()
+    Cache.set_json(legacy_key, legacy_data, ttl=full_ttl)
+    legacy_refreshed = _refresh(app_client, legacy_tokens["refreshToken"])
+    assert legacy_refreshed.status_code == 200
+    legacy_body = legacy_refreshed.json()
+    assert legacy_body["code"] == 0, legacy_body
+    legacy_new = legacy_body["data"]["refreshToken"]
+    assert real_redis.ttl(f"{service.REFRESH_INDEX_PREFIX}{legacy_new}") == 1
+
+    # 没有登录时间也没有到期时间：按已过期拒绝。
+    blank_sid = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{blank_tokens['refreshToken']}")
+    blank_key = f"{service.SESSION_PREFIX}{blank_sid}"
+    blank_data = Cache.get_json(blank_key)
+    blank_data.pop("expires_at", None)
+    blank_data.pop("created_at", None)
+    Cache.set_json(blank_key, blank_data, ttl=full_ttl)
+    blank_resp = _refresh(app_client, blank_tokens["refreshToken"])
+    assert blank_resp.status_code == 401
+    assert blank_resp.json()["code"] == 1002
+
+    # 过 1 秒：刷新失败，访问令牌也失效。
+    freeze(start + timedelta(seconds=full_ttl + 1))
+    late_resp = _refresh(app_client, late_tokens["refreshToken"])
+    assert late_resp.status_code == 401
+    assert late_resp.json()["code"] == 1002
+    late_me = app_client.get(
+        "/admin-api/ims/auth/me",
+        headers=_auth(late_tokens["accessToken"]),
+    )
+    assert late_me.status_code == 401
+    assert late_me.json()["code"] == 1002
+
+
 def test_me_menu_nodes_return_seed_leaf_paths(app_client, db_session, test_context):
     """/me 的 MENU 节点带回主干种子里的 path，字段仍是 path，不新造工作台路由。"""
     from app.domains.sys.models import Menu
@@ -406,11 +507,32 @@ def test_me_menu_nodes_return_seed_leaf_paths(app_client, db_session, test_conte
         for menu in created
         if menu.type == "MENU"
     }
+    # 裁定 23：叶子 path 按 01 功能点清单。不造工作台路由。
+    # 侧栏断言用组织同步和岗位规则这两条，而不是另写一条工作台 path。
+    sidebar = (
+        ("ims:auth:org:query", "组织架构同步", "/ims/auth/org"),
+        ("ims:auth:position:query", "岗位-角色供给规则", "/ims/auth/position"),
+    )
+    for perm_code, name, path in sidebar:
+        menu = add(db_session, Menu(
+            tenant_id=1,
+            parent_id=0,
+            type="MENU",
+            name=name,
+            perm_code=perm_code,
+            path=path,
+            status="ENABLED",
+            sort=0,
+            visible=True,
+        ))
+        created.append(menu)
+        expected[perm_code] = path
+
     assert expected
     assert all(path and path.strip() for path in expected.values())
     assert "/ims/workbench" not in expected.values()
-    assert "/ims/auth/org" not in expected.values()
-    assert "/ims/auth/position" not in expected.values()
+    assert expected["ims:auth:org:query"] == "/ims/auth/org"
+    assert expected["ims:auth:position:query"] == "/ims/auth/position"
 
     person = _add_user(db_session, "menu_path_user")
     granted = role(db_session, "menu_path_role", "菜单路径")

@@ -12,7 +12,7 @@ Implements:
 """
 
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -20,13 +20,57 @@ import bcrypt
 import jwt
 
 from app.core.cache import Cache
-from app.core.clock import get_now
+from app.core.clock import get_now, parse_datetime
 from app.core.config import get_settings
 from app.core.context import DataScope, ctx
 from app.core.errors import BizError
 from app.db.session import get_db_session
 
 settings = get_settings()
+
+# 租户停用 / 过期时登录和刷新都用这一句，避免两处文案或条件不一致。
+TENANT_UNAVAILABLE_MSG = "所属组织已停用"
+
+
+def reject_unavailable_tenant(tenant_id: int) -> None:
+    """登录和刷新共用的租户校验（FP-B04-04 / UT-B04-14）。
+
+    没有租户行时不拦截。行一旦存在：状态不是 ENABLED，或到期时间已到
+    （含等于当前时刻），返回 1008。
+    """
+    from app.domains.sys.models import Tenant
+
+    session = get_db_session()
+    tenant = session.query(Tenant).filter(Tenant.id == int(tenant_id)).first()
+    if tenant is None:
+        return
+    if tenant.status != "ENABLED" or _tenant_expire_reached(tenant.expire_time):
+        raise BizError(1008, msg=TENANT_UNAVAILABLE_MSG)
+
+
+def _tenant_expire_reached(expire_time: Optional[datetime]) -> bool:
+    """到期时间已到视为过期。库存时间不带时区，按钟面比较。"""
+    if expire_time is None:
+        return False
+    return get_now().replace(tzinfo=None) >= expire_time.replace(tzinfo=None)
+
+
+def session_remaining_seconds(session_data: dict[str, Any]) -> int:
+    """会话剩余秒数。到期时间在登录时写定，轮换不得把它往后推。
+
+    优先用 expires_at。旧会话没有该字段时，用 created_at 加刷新有效期。
+    两个时间都没有时返回 0，调用方按已过期拒绝。
+    """
+    raw = session_data.get("expires_at")
+    if raw:
+        deadline = parse_datetime(str(raw))
+    else:
+        created_raw = session_data.get("created_at")
+        if not created_raw:
+            return 0
+        created = parse_datetime(str(created_raw))
+        deadline = created + timedelta(seconds=settings.jwt.refresh_token_ttl)
+    return int((deadline - get_now()).total_seconds())
 
 
 class AuthService:
@@ -97,8 +141,8 @@ class AuthService:
         if user.status in ("FROZEN", "RESIGNED"):
             raise BizError(1216)
 
-        # Check tenant
-        # TODO: Verify tenant status
+        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。
+        reject_unavailable_tenant(user.tenant_id)
 
         # Clear failure count
         Cache.delete(lock_key)
@@ -173,6 +217,8 @@ class AuthService:
 
         # Refresh token (random string)
         refresh_token = secrets.token_urlsafe(32)
+        # 绝对 7 天：到期时间在登录时写定，后面轮换只换令牌，不改这个时刻。
+        deadline = now + timedelta(seconds=settings.jwt.refresh_token_ttl)
 
         # Store session in Redis
         session_data = {
@@ -180,13 +226,14 @@ class AuthService:
             "tenant_id": user.tenant_id,
             "refresh_token": refresh_token,
             "created_at": now.isoformat(),
+            "expires_at": deadline.isoformat(),
         }
         Cache.set_json(
             f"{self.SESSION_PREFIX}{session_id}",
             session_data,
             ttl=settings.jwt.refresh_token_ttl,
         )
-        # 反向索引，刷新时不必扫描全部会话。
+        # 反向索引，刷新时不必扫描全部会话。TTL 与会话同时到期。
         Cache.set(
             f"{self.REFRESH_INDEX_PREFIX}{refresh_token}",
             session_id,
@@ -261,6 +308,9 @@ class AuthService:
         # Check if session is still valid
         session_data = Cache.get_json(f"{self.SESSION_PREFIX}{session_id}")
         if not session_data:
+            raise BizError(1002)
+        # 会话从登录起绝对 7 天，到点后访问令牌也失效（不靠 Redis 滑动续期）。
+        if session_remaining_seconds(session_data) <= 0:
             raise BizError(1002)
 
         # Check blacklist
@@ -391,8 +441,14 @@ class AuthService:
         ).first()
         if user is None or user.status in ("FROZEN", "RESIGNED"):
             raise BizError(1002)
+        # 停用或过期租户不能靠刷新续命，与登录共用同一校验。
+        reject_unavailable_tenant(user.tenant_id)
 
         now = get_now()
+        # 剩余时长沿用登录时的 expires_at。到点拒绝，不再把 TTL 重置成 7 天。
+        remaining = session_remaining_seconds(session_data)
+        if remaining <= 0:
+            raise BizError(1002)
         new_refresh = secrets.token_urlsafe(32)
         access_payload = {
             "sub": str(user.id),
@@ -408,14 +464,15 @@ class AuthService:
             algorithm=settings.jwt.algorithm,
         )
         session_data["refresh_token"] = new_refresh
-        Cache.set_json(session_key, session_data, ttl=settings.jwt.refresh_token_ttl)
+        Cache.set_json(session_key, session_data, ttl=remaining)
         Cache.set(
             f"{self.REFRESH_INDEX_PREFIX}{new_refresh}",
             session_id,
-            ttl=settings.jwt.refresh_token_ttl,
+            ttl=remaining,
         )
         # 新令牌落库之后才标记旧令牌。重放旧令牌时凭这个标记吊销整段会话。
-        Cache.set(used_key, session_id, ttl=settings.jwt.refresh_token_ttl)
+        # 已轮换标记的 TTL 同样用剩余时长，不重新给满 7 天。
+        Cache.set(used_key, session_id, ttl=remaining)
         return {
             "access_token": access_token,
             "refresh_token": new_refresh,
@@ -429,6 +486,10 @@ class AuthService:
 
         旧刷新令牌用 Redis Lua（SET NX + GETDEL）一次领走：
         - 领到会话：签发新的 access 与 refresh，旧 refresh 立即失效
+        - 轮换不滑动续期：到期时间沿用登录时写入的 expires_at，
+          新 refresh 的 Redis TTL 等于剩余秒数
+        - 登录起满 7 天（剩余 <= 0）→ 1002
+        - 租户停用或过期 → 1008（与登录共用 reject_unavailable_tenant）
         - 同一枚令牌并发领取：只有一个成功，另一个 1002，且不吊销会话
         - GETDEL 为空且没有已轮换记录：1002
         - 重放已经轮换过的刷新令牌：1002，并吊销整段会话
