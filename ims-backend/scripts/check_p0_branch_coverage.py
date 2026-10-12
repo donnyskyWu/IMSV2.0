@@ -2,15 +2,24 @@
 """P0 Service 分支覆盖门禁。
 
 名单只维护在同目录的 p0_services.txt。
-pytest 必须带 --cov-branch（或 pyproject 里 branch = true），本脚本只读 .coverage。
+pytest 必须带 --cov-branch（或 pyproject 里 branch = true）。
+
+本脚本调用公开命令 `coverage json`，只读
+files[].summary.covered_branches / num_branches。
+不使用 coverage 的私有分析接口。
 
 coverage report --fail-under 用的是语句和分支加在一起的 Cover 列。
-这里只看分支：Numbers.pc_branches = 已执行分支 / 分支总数。
-任一文件低于 90，退出码 2。请在 ims-backend 目录下运行。
+语句 100%、分支 80% 时合计列仍可能高于 90，这里必须失败。
+任一文件的分支覆盖率低于 90，退出码 2。
+
+文件按解析后的绝对路径相等匹配，不用路径后缀。
+请在 ims-backend 目录下运行。
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -36,45 +45,121 @@ def fails_branch_gate(branch_percent: float, fail_under: float = FAIL_UNDER) -> 
     return branch_percent < fail_under
 
 
-def _load_coverage():
-    """读 .coverage，并拒绝没有分支弧的数据。"""
-    from coverage import Coverage
-    from coverage.exceptions import CoverageException
+def branch_percent(summary: dict) -> float:
+    """分支覆盖率 = covered_branches / num_branches。没有分支时视为 100。"""
+    num = int(summary["num_branches"])
+    covered = int(summary["covered_branches"])
+    if num == 0:
+        return 100.0
+    return 100.0 * covered / num
 
-    try:
-        cov = Coverage(data_file=str(ROOT / ".coverage"))
-        cov.load()
-    except CoverageException as exc:
-        print(
-            "ERROR: 读不到覆盖率数据（请先在 ims-backend 下跑带 --cov-branch 的 pytest）："
-            f"{exc}",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from exc
 
-    if not cov.get_data().has_arcs():
+def resolve_report_path(key: str, root: Path = ROOT) -> Path:
+    """把 coverage JSON 的文件键解析成绝对路径。相对键相对 ims-backend 根目录。"""
+    path = Path(key)
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
+def index_report_files(report: dict, root: Path = ROOT) -> dict[Path, dict]:
+    """按绝对路径索引 JSON 里的文件。同路径后者覆盖前者。"""
+    indexed: dict[Path, dict] = {}
+    for key, payload in (report.get("files") or {}).items():
+        indexed[resolve_report_path(str(key), root)] = payload
+    return indexed
+
+
+def load_coverage_report() -> dict:
+    """用公开的 coverage json 读 .coverage。--fail-under=0 避免把 80% 行门槛算进本脚本。"""
+    data_file = ROOT / ".coverage"
+    if not data_file.is_file():
         print(
-            "ERROR: .coverage 没有分支数据。请用 pytest --cov=app --cov-branch 重新测量。",
+            "ERROR: 读不到覆盖率数据（请先在 ims-backend 下跑带 --cov-branch 的 pytest）",
             file=sys.stderr,
         )
         raise SystemExit(1)
-    return cov
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "json",
+            "--data-file",
+            str(data_file),
+            "-o",
+            "-",
+            "-q",
+            "--fail-under=0",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        detail = (proc.stderr or proc.stdout).strip()
+        print(f"ERROR: coverage json 失败：{detail}", file=sys.stderr)
+        raise SystemExit(1)
+    try:
+        report = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        print(f"ERROR: coverage json 输出不是 JSON：{exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    if not isinstance(report, dict):
+        print("ERROR: coverage json 根节点不是对象", file=sys.stderr)
+        raise SystemExit(1)
+    return report
 
 
-def _measured_by_suffix(cov) -> dict[str, str]:
-    """用仓库相对路径的结尾对应 coverage 记录的绝对路径。"""
-    found: dict[str, str] = {}
-    for name in cov.get_data().measured_files():
-        found[Path(name).as_posix()] = name
-    return found
+def evaluate_report(report: dict, relatives: list[str], root: Path = ROOT) -> int:
+    """按分支覆盖率检查名单。返回 0 通过，1 数据无效，2 未达门槛。"""
+    meta = report.get("meta") or {}
+    if not meta.get("branch_coverage"):
+        print(
+            "ERROR: coverage JSON 没有分支数据。请用 pytest --cov=app --cov-branch 重新测量。",
+            file=sys.stderr,
+        )
+        return 1
 
+    measured = index_report_files(report, root)
+    failed: list[str] = []
+    print(f"{'file':<28} {'branches':>8} {'covered':>8} {'branch%':>8}")
 
-def _match(measured: dict[str, str], relative: str) -> str | None:
-    suffix = "/" + relative.replace("\\", "/")
-    for path, original in measured.items():
-        if path.endswith(suffix):
-            return original
-    return None
+    for relative in relatives:
+        expected = (root / relative).resolve()
+        payload = measured.get(expected)
+        if payload is None:
+            print(f"{relative:<28} {'—':>8} {'—':>8} {'MISSING':>8}")
+            failed.append(relative)
+            continue
+
+        summary = payload.get("summary") or {}
+        if "num_branches" not in summary or "covered_branches" not in summary:
+            print(
+                f"ERROR: {relative} 的 summary 缺少 num_branches/covered_branches",
+                file=sys.stderr,
+            )
+            return 1
+
+        percent = branch_percent(summary)
+        num = int(summary["num_branches"])
+        covered = int(summary["covered_branches"])
+        print(f"{relative:<28} {num:8d} {covered:8d} {percent:7.1f}%")
+        if fails_branch_gate(percent):
+            missing = payload.get("missing_branches") or []
+            print(f"  未覆盖分支: {missing}", file=sys.stderr)
+            failed.append(relative)
+
+    if failed:
+        print(
+            f"ERROR: P0 分支覆盖未达到 {FAIL_UNDER:.0f}%: " + ", ".join(failed),
+            file=sys.stderr,
+        )
+        return 2
+    print(f"P0 Service 分支覆盖率达到 {FAIL_UNDER:.0f}%")
+    return 0
 
 
 def main() -> int:
@@ -89,36 +174,7 @@ def main() -> int:
         print("ERROR: 名单中的文件不存在：" + ", ".join(missing), file=sys.stderr)
         return 1
 
-    cov = _load_coverage()
-    measured = _measured_by_suffix(cov)
-    failed: list[str] = []
-    print(f"{'file':<28} {'branches':>8} {'covered':>8} {'branch%':>8}")
-
-    for relative in files:
-        original = _match(measured, relative)
-        if original is None:
-            print(f"{relative:<28} {'—':>8} {'—':>8} {'MISSING':>8}")
-            failed.append(relative)
-            continue
-        numbers = cov._analyze(original).numbers
-        percent = numbers.pc_branches
-        print(
-            f"{relative:<28} {numbers.n_branches:8d} "
-            f"{numbers.n_executed_branches:8d} {percent:7.1f}%"
-        )
-        if fails_branch_gate(percent):
-            arcs = cov._analyze(original).missing_branch_arcs()
-            print(f"  未覆盖分支: {arcs}", file=sys.stderr)
-            failed.append(relative)
-
-    if failed:
-        print(
-            f"ERROR: P0 分支覆盖未达到 {FAIL_UNDER:.0f}%: " + ", ".join(failed),
-            file=sys.stderr,
-        )
-        return 2
-    print(f"P0 Service 分支覆盖率达到 {FAIL_UNDER:.0f}%")
-    return 0
+    return evaluate_report(load_coverage_report(), files)
 
 
 if __name__ == "__main__":
