@@ -8,10 +8,11 @@ These tests exercise service methods to increase coverage on:
 """
 import os
 
-os.environ["IMS_ENV"] = "test"
-os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
-os.environ["IMS_REDIS_URL"] = ""
-os.environ["IMS_JWT_SECRET"] = "test-jwt-secret-key-for-testing-only"
+# Only set defaults if not already set (CI provides MySQL/Redis)
+os.environ.setdefault("IMS_ENV", "test")
+os.environ.setdefault("IMS_DB_URL", "sqlite:///:memory:")
+os.environ.setdefault("IMS_REDIS_URL", "")
+os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 
 import asyncio
 
@@ -461,9 +462,13 @@ class TestUserServiceUpdateUserDepts:
             )
         )
 
-    @pytest.mark.skip(reason="Service handles empty string incorrectly")
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
     def test_update_user_depts_empty_assigns_system(self, user_service, role_user_data, db_session, test_context):
         """Test updating user with no depts assigns to system dept."""
+        # When dept_ids is empty and main_dept_id is empty, assigns to system dept
         run_async(
             user_service.update_user_depts(
                 str(role_user_data["user2_id"]),

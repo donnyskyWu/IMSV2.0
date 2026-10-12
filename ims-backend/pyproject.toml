@@ -60,17 +60,16 @@ branch = true
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
-    "app/db/repository.py",  # Generic repository - coverage via service layer integration tests
-    "app/services/org_sync.py",  # DingTalk org sync stub - external integration not testable in CI
+    # External integration stubs per 01-功能点清单.md FP-H04-01:
+    # "外部系统(钉钉、足球直播、AI训练)仅适配器+存根"
+    "app/integrations/dingtalk/*",  # FP-D02, FP-D07: DingTalk SSO and org sync - external API
+    "app/integrations/football_live/*",  # FP-H04-01: Football live data - external API
+    "app/integrations/train_ai/*",  # FP-H04-01: AI training integration - external API
+    "app/services/org_sync.py",  # FP-D07-04: DingTalk org reconciliation - requires DingTalk API
 ]
 
 [tool.coverage.report]
-# Target: 80% for production. Temporarily at 70% due to:
-# - Redis operations not testable in CI without live Redis
-# - External integrations (DingTalk, etc.) are stubs
-# - Infrastructure code (db/session, transaction) requires real DB connections
-# TODO: Increase to 80% after B1 integration tests are added
-fail_under = 70
+fail_under = 80
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

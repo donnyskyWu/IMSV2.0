@@ -14,10 +14,10 @@ Uses TestClient to test full request/response cycle.
 """
 import os
 
-os.environ["IMS_ENV"] = "test"
+os.environ.setdefault("IMS_ENV", "test")
 os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
-os.environ["IMS_REDIS_URL"] = ""
-os.environ["IMS_JWT_SECRET"] = "test-jwt-secret-key-for-testing-only"
+os.environ.setdefault("IMS_REDIS_URL", "")
+os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 
 import pytest
 from fastapi.testclient import TestClient

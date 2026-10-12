@@ -379,8 +379,7 @@ class UserService:
         if not user:
             raise BizError(1504)
 
-        dept_id_ints = [int(d) for d in dept_ids]
-        main_dept_id_int = int(main_dept_id)
+        dept_id_ints = [int(d) for d in dept_ids if d]
 
         # If no depts provided, assign to "待分配"
         if not dept_id_ints:
@@ -392,9 +391,14 @@ class UserService:
 
             if system_dept:
                 dept_id_ints = [system_dept.id]
-                main_dept_id_int = system_dept.id
+                main_dept_id = str(system_dept.id)
             else:
                 raise BizError(1001, msg="未找到系统部门")
+
+        # Parse main_dept_id after potential reassignment
+        if not main_dept_id:
+            raise BizError(1001, msg="主部门ID不能为空")
+        main_dept_id_int = int(main_dept_id)
 
         # Main dept must be in dept list
         if main_dept_id_int not in dept_id_ints:

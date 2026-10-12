@@ -16,12 +16,12 @@ from typing import Generator
 import pytest
 
 # Set test environment BEFORE importing app modules
-os.environ["IMS_ENV"] = "test"
+os.environ.setdefault("IMS_ENV", "test")
 # Use MySQL if IMS_DB_URL is set (e.g., CI), otherwise fallback to SQLite
 if "IMS_DB_URL" not in os.environ:
     os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
 if "IMS_REDIS_URL" not in os.environ:
-    os.environ["IMS_REDIS_URL"] = ""  # Disable Redis for tests if not set
+    os.environ.setdefault("IMS_REDIS_URL", "")  # Disable Redis for tests if not set
 os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 os.environ.setdefault("IMS_JWT_ACCESS_TOKEN_TTL", "7200")
 os.environ.setdefault("IMS_JWT_REFRESH_TOKEN_TTL", "604800")
