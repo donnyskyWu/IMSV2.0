@@ -42,3 +42,87 @@ jobs:
           name: playwright-report
           path: ims-web/playwright-report/
           retention-days: 30
+
+  # 真起 MySQL + FastAPI，再经 Vite 代理跑联通用例。代理或后端不通时本 job 变红。
+  live-proxy:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: testpass
+          MYSQL_DATABASE: ims_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      IMS_ENV: dev
+      IMS_DB_URL: mysql+pymysql://root:testpass@127.0.0.1:3306/ims_test?charset=utf8mb4
+      IMS_REDIS_URL: ""
+      IMS_JWT_SECRET: test-jwt-secret-for-ci
+      VITE_API_PROXY_TARGET: http://127.0.0.1:8000
+      E2E_SEED_USERNAME: qa_admin
+      E2E_SEED_PASSWORD: Test1234
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "./ims-backend"
+
+      - name: Create tables and seed login user
+        run: python ims-web/scripts/prepare_live_proxy_db.py
+
+      - name: Start API
+        working-directory: ims-backend
+        run: |
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8000/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "API responded: $code"
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to start"
+          cat /tmp/uvicorn.log
+          exit 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ims-web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ims-web
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: ims-web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live proxy test
+        working-directory: ims-web
+        run: npm run test:live-proxy
+
+      - name: Upload live proxy report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-proxy-report
+          path: ims-web/playwright-report/
+          retention-days: 30

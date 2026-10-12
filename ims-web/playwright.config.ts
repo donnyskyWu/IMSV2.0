@@ -9,6 +9,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  // 真后端联通在 playwright.live.config.ts 里单独跑，避免没起 API 时把组件用例打红
+  testIgnore: /live-proxy\.spec\.ts/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
