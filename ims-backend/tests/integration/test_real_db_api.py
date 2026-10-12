@@ -34,40 +34,75 @@ def _shared_url(tmp_path: Path) -> tuple[str, str]:
     return original, original
 
 
-def test_real_login_me_and_health(tmp_path):
-    """种子用户登录后 /me 返回菜单，/health 的 db 为 UP，登录时间已提交。"""
+def _prepare_real_db(tmp_path: Path) -> tuple[str, str, object]:
+    """建表并执行 e2e 种子。不替换 get_db，也不预置请求会话。"""
     from app.db.base import Base
     from app.db.session import _db_session
     from app.domains.sys import models  # noqa: F401
-    from app.domains.sys.models import User
     from app.main import app
-    from tools.seed.users import E2E_PASSWORD, E2E_USERNAME
 
-    # 不能靠夹具预先塞会话，否则拆掉 get_db 这条测试仍会通过。
     assert app.dependency_overrides == {}
     context_token = _db_session.set(None)
     db_url, original_url = _shared_url(tmp_path)
     schema_engine = create_engine(db_url)
+    Base.metadata.create_all(schema_engine)
+    schema_engine.dispose()
+
+    env = os.environ.copy()
+    env["IMS_DB_URL"] = db_url
+    env.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
+    # e2e 启动校验要求 redis.url 非空；种子本身不连 Redis。
+    if not env.get("IMS_REDIS_URL"):
+        env["IMS_REDIS_URL"] = "redis://127.0.0.1:6379/0"
+    seeded = subprocess.run(
+        [sys.executable, "-m", "tools.seed", "--env", "e2e"],
+        cwd=BACKEND_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert seeded.returncode == 0, seeded.stdout + "\n" + seeded.stderr
+    return db_url, original_url, context_token
+
+
+def _release_real_db(original_url: str, context_token: object) -> None:
+    from app.core.config import get_settings
+    from app.db.session import _db_session
+
+    get_settings().db.url = original_url
+    _db_session.reset(context_token)
+
+
+def _login_me(client: TestClient, username: str, password: str) -> dict:
+    """真实登录后请求 /me。不伪造令牌，也不替换依赖。"""
+    login = client.post(
+        "/admin-api/ims/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login.status_code == 200
+    login_body = login.json()
+    assert login_body["code"] == 0, login_body
+    token = login_body["data"]["accessToken"]
+    assert isinstance(token, str) and token.count(".") == 2
+    me = client.get(
+        "/admin-api/ims/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert me.status_code == 200
+    me_body = me.json()
+    assert me_body["code"] == 0, me_body
+    return me_body
+
+
+def test_real_login_me_and_health(tmp_path):
+    """种子用户登录后 /me 返回菜单，/health 的 db 为 UP，登录时间已提交。"""
+    from app.domains.sys.models import User
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD, E2E_USERNAME
+
+    db_url, original_url, context_token = _prepare_real_db(tmp_path)
     try:
-        Base.metadata.create_all(schema_engine)
-        schema_engine.dispose()
-
-        env = os.environ.copy()
-        env["IMS_DB_URL"] = db_url
-        env.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
-        # e2e 启动校验要求 redis.url 非空；种子本身不连 Redis。
-        if not env.get("IMS_REDIS_URL"):
-            env["IMS_REDIS_URL"] = "redis://127.0.0.1:6379/0"
-        seeded = subprocess.run(
-            [sys.executable, "-m", "tools.seed", "--env", "e2e"],
-            cwd=BACKEND_ROOT,
-            env=env,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert seeded.returncode == 0, seeded.stdout + "\n" + seeded.stderr
-
         with TestClient(app) as client:
             health = client.get("/health")
             assert health.status_code == 200
@@ -76,23 +111,7 @@ def test_real_login_me_and_health(tmp_path):
             assert health_body["data"]["db"] == "UP"
             assert db_url not in health.text
 
-            login = client.post(
-                "/admin-api/ims/auth/login",
-                json={"username": E2E_USERNAME, "password": E2E_PASSWORD},
-            )
-            assert login.status_code == 200
-            login_body = login.json()
-            assert login_body["code"] == 0, login_body
-            token = login_body["data"]["accessToken"]
-            assert isinstance(token, str) and token.count(".") == 2
-
-            me = client.get(
-                "/admin-api/ims/auth/me",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            assert me.status_code == 200
-            me_body = me.json()
-            assert me_body["code"] == 0, me_body
+            me_body = _login_me(client, E2E_USERNAME, E2E_PASSWORD)
             assert me_body["data"]["user"]["username"] == E2E_USERNAME
             menus = me_body["data"]["menus"]
             assert isinstance(menus, list)
@@ -109,7 +128,21 @@ def test_real_login_me_and_health(tmp_path):
             check.close()
             check_engine.dispose()
     finally:
-        from app.core.config import get_settings
+        _release_real_db(original_url, context_token)
 
-        get_settings().db.url = original_url
-        _db_session.reset(context_token)
+
+def test_test_admin_me_includes_system_and_auth_menus(tmp_path):
+    """test_admin 真实登录后，/me 同时包含系统管理和权限管理。"""
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            me_body = _login_me(client, "test_admin", E2E_PASSWORD)
+            assert me_body["data"]["user"]["username"] == "test_admin"
+            names = {item["name"] for item in me_body["data"]["menus"]}
+            assert "系统管理" in names
+            assert "权限管理" in names
+    finally:
+        _release_real_db(original_url, context_token)

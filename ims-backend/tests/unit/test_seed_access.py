@@ -1,6 +1,7 @@
 """默认套餐、R1 菜单授权和 e2e 账号的种子。
 
-只断言 main 上已经存在的菜单，不要求 B1 权限码或 R2/R4/R10 授权。
+access 只补套餐和 R1，不给 R2/R4/R10 授权。
+菜单种子里的 B1 菜单会随「全部已有菜单」进套餐。
 """
 
 from app.domains.sys.models import (
@@ -57,9 +58,10 @@ def test_package_and_r1_grants_are_idempotent(db_session):
         role = db_session.query(Role).filter(Role.role_key == role_key, Role.deleted == 0).one()
         assert db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).count() == 0
 
-    # 不新增菜单，也不写入 B1 权限码。
+    # access 不新增菜单。菜单种子本身已含 B1 的 ims:auth:*。
     assert _perm_codes(db_session) == before_codes
-    assert all(code.startswith("ims:system:") for code in before_codes)
+    assert "ims:system:user:query" in before_codes
+    assert "ims:auth:position-rule:query" in before_codes
 
     package.name = "已改名"
     package.status = "DISABLED"
@@ -97,7 +99,8 @@ def test_e2e_user_keeps_existing_password(db_session):
 
     seed_tenant(env="e2e")
     seed_roles(env="e2e")
-    assert seed_users(env="e2e") == 2  # 用户 + R1 关联
+    # e2e_admin（用户 + R1）、test_r10、test_t2。有部门名的账号要等部门种子。
+    assert seed_users(env="e2e") == 4
 
     user = db_session.query(User).filter(User.username == E2E_USERNAME).one()
     assert user.nickname == "测试-管理员"

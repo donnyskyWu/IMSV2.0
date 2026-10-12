@@ -28,7 +28,7 @@ def main():
         "--only",
         type=str,
         default=None,
-        help="Comma-separated list: tenant,dicts,params,menus,roles,grants,depts,users"
+        help="Comma-separated list: tenant,dicts,params,menus,roles,grants,depts,access,users"
     )
     parser.add_argument(
         "--dry-run",

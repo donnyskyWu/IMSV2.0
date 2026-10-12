@@ -263,11 +263,16 @@ class TestSeedIdempotentAndPreserve:
         assert menu.name == "我的同步"
 
     def test_missing_database_url_fails(self, db_session, monkeypatch):
+        from app.core.config import get_settings
+        from app.db import session as session_mod
         from app.db.session import _db_session
         from tools.seed.runner import run_seeds
 
         monkeypatch.delenv("IMS_DB_URL", raising=False)
         monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.setattr(get_settings().db, "url", "")
+        monkeypatch.setattr(session_mod, "SessionLocal", None)
+        monkeypatch.setattr(session_mod, "engine", None)
         token = _db_session.set(None)
         try:
             assert run_seeds(env="test", only=["tenant"]) is False
