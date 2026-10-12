@@ -203,16 +203,26 @@ async function handleLogout() {
   width: 100%;
 }
 
+/* 标签在输入框上方，避免窄屏下和输入框叠在一起 */
+:deep(.el-form-item) {
+  display: block;
+}
+
 :deep(.el-form-item__label) {
   display: flex;
-  justify-content: flex-start;
+  width: 100% !important;
   height: auto;
+  justify-content: flex-start;
   margin-bottom: 6px;
+  padding: 0;
   line-height: 1.4;
+  text-align: left;
 }
 
 :deep(.el-form-item__content) {
+  display: block;
   width: 100%;
+  margin-left: 0 !important;
 }
 
 :deep(.el-input) {

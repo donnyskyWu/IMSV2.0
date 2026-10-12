@@ -93,6 +93,11 @@ test.describe('B1 账号登录与改密', () => {
     const card = page.getByTestId('login-card')
     const box = await card.boundingBox()
     expect(box).not.toBeNull()
+    const labelBox = await page.locator('.login-card .el-form-item__label').first().boundingBox()
+    const inputBox = await page.getByPlaceholder('请输入用户名').boundingBox()
+    expect(labelBox).not.toBeNull()
+    expect(inputBox).not.toBeNull()
+    expect(labelBox!.y + labelBox!.height).toBeLessThanOrEqual(inputBox!.y + 1)
     if (width <= 390) {
       await expectNoHOverflow(page, 390)
       expect(box!.width).toBeLessThanOrEqual(390)
