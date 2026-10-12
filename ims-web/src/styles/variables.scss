@@ -1,0 +1,57 @@
+/**
+ * SCSS 变量文件 - 映射 CSS Token
+ * 用于 Vite 全局注入
+ * 依据: 00-工作包 §2.1 Q1~Q21
+ */
+
+// 响应式断点 (§2.1 Q1: 只有两档, <768px 手机, >=768px 桌面)
+$bp-mobile: 768px;
+
+// 响应式 mixin
+@mixin mobile {
+  @media (max-width: #{$bp-mobile - 1px}) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: $bp-mobile) {
+    @content;
+  }
+}
+
+// 触控尺寸 (§2.1 Q10, §2.3 U1)
+$min-touch-size: 44px;
+$touch-target-gap: 8px; // 普通相邻元素间距
+$small-btn-gap: 18px; // 小号按钮之间的视觉间距 ≥18px (U1)
+
+// 尺寸变量
+$sidebar-width: 232px;
+$sidebar-collapsed-width: 64px;
+$mobile-sidebar-width: 240px; // Q2
+$topbar-height: 56px; // Q3: 手机下保持 56px
+$content-padding-y: 28px;
+$content-padding-x: 32px;
+$content-padding-y-mobile: 12px; // Q18
+$content-padding-x-mobile: 16px; // Q18
+$content-max-width: 1240px;
+$drawer-s: 480px;
+$drawer-m: 720px;
+$drawer-l: 880px;
+$left-tree-width: 240px;
+
+// 触控热区扩展 mixin (§2.1 Q10)
+// 视觉尺寸可以更小，但热区要用伪元素扩大到 44px
+@mixin touch-target($visual-size: auto) {
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: $min-touch-size;
+    min-height: $min-touch-size;
+    transform: translate(-50%, -50%);
+  }
+}

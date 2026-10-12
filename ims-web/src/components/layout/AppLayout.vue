@@ -1,0 +1,419 @@
+<script setup lang="ts">
+/**
+ * AppLayout 应用框架
+ * 依据: FP-C01-01, 00-工作包 §2.1 Q2/Q3
+ * 结构: 侧栏(232px) + 顶栏(56px) + 内容区
+ * 手机: 侧栏改为左侧抽屉 240px, 带遮罩, 点菜单项后自动收起
+ */
+import { ref, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Menu, Bell, ArrowDown, Fold, Expand } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { useResponsive } from '@/utils/responsive'
+import type { MenuItem } from '@/types'
+
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
+const { isMobile } = useResponsive()
+
+// 侧栏状态
+const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
+const mobileSidebarOpen = ref(false)
+
+// 未读消息数 (模拟)
+const unreadCount = ref(3)
+
+// 计算属性
+const currentPath = computed(() => route.path)
+const hasMenus = computed(() => authStore.menus.length > 0)
+
+// 保存折叠状态
+watch(sidebarCollapsed, (val) => {
+  localStorage.setItem('sidebarCollapsed', String(val))
+})
+
+// 路由变化时关闭移动端侧栏 (Q2: 点菜单项后自动收起)
+watch(
+  () => route.path,
+  () => {
+    if (isMobile.value) {
+      mobileSidebarOpen.value = false
+    }
+  }
+)
+
+// 切换侧栏折叠
+function toggleSidebar() {
+  if (isMobile.value) {
+    mobileSidebarOpen.value = !mobileSidebarOpen.value
+  } else {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+  }
+}
+
+// 菜单点击
+function handleMenuSelect(path: string) {
+  router.push(path)
+}
+
+// 判断菜单是否激活
+function isMenuActive(item: MenuItem): boolean {
+  if (item.path === currentPath.value) return true
+  if (item.children) {
+    return item.children.some((child) => child.path === currentPath.value)
+  }
+  return false
+}
+
+// 获取激活的菜单路径 (用于展开)
+function getActiveMenuPaths(): string[] {
+  const paths: string[] = []
+  function traverse(items: MenuItem[], parentPath: string[] = []) {
+    for (const item of items) {
+      const currentPaths = [...parentPath, item.id]
+      if (item.path === currentPath.value) {
+        paths.push(...currentPaths)
+        return true
+      }
+      if (item.children && traverse(item.children, currentPaths)) {
+        return true
+      }
+    }
+    return false
+  }
+  traverse(authStore.menus)
+  return paths
+}
+
+// 退出登录
+function handleLogout() {
+  authStore.clearSession()
+  router.push('/login')
+}
+</script>
+
+<template>
+  <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed && !isMobile }">
+    <!-- 移动端侧栏遮罩 (Q2) -->
+    <div
+      v-if="isMobile && mobileSidebarOpen"
+      class="sidebar-overlay"
+      @click="mobileSidebarOpen = false"
+    />
+
+    <!-- 侧栏 -->
+    <aside
+      class="app-sidebar"
+      :class="{
+        collapsed: sidebarCollapsed && !isMobile,
+        'mobile-open': isMobile && mobileSidebarOpen,
+        'mobile-hidden': isMobile && !mobileSidebarOpen,
+      }"
+      data-testid="app-sidebar"
+    >
+      <div class="sidebar-header">
+        <span v-if="!sidebarCollapsed || isMobile" class="logo-text">IMS</span>
+        <span v-else class="logo-icon">I</span>
+      </div>
+
+      <!-- 菜单 -->
+      <el-scrollbar class="sidebar-menu-wrap">
+        <el-menu
+          :default-active="currentPath"
+          :default-openeds="getActiveMenuPaths()"
+          :collapse="sidebarCollapsed && !isMobile"
+          :collapse-transition="false"
+          @select="handleMenuSelect"
+        >
+          <template v-for="item in authStore.menus" :key="item.id">
+            <!-- 有子菜单 -->
+            <el-sub-menu v-if="item.children?.length" :index="item.id">
+              <template #title>
+                <el-icon v-if="item.icon">
+                  <component :is="item.icon" />
+                </el-icon>
+                <span>{{ item.name }}</span>
+              </template>
+              <el-menu-item
+                v-for="child in item.children"
+                :key="child.id"
+                :index="child.path || child.id"
+              >
+                {{ child.name }}
+              </el-menu-item>
+            </el-sub-menu>
+
+            <!-- 无子菜单 -->
+            <el-menu-item v-else :index="item.path || item.id">
+              <el-icon v-if="item.icon">
+                <component :is="item.icon" />
+              </el-icon>
+              <span>{{ item.name }}</span>
+            </el-menu-item>
+          </template>
+        </el-menu>
+
+        <!-- 无权限提示 -->
+        <div v-if="!hasMenus" class="no-menu-tip">
+          您的账号尚未分配权限，请联系管理员
+        </div>
+      </el-scrollbar>
+    </aside>
+
+    <!-- 主区域 -->
+    <div class="app-main">
+      <!-- 顶栏 (Q3: 高度保持 56px) -->
+      <header class="app-topbar">
+        <!-- 左侧: 菜单按钮 -->
+        <div class="topbar-left">
+          <el-button class="menu-btn touch-target" text @click="toggleSidebar">
+            <el-icon :size="20">
+              <Menu v-if="isMobile" />
+              <Fold v-else-if="!sidebarCollapsed" />
+              <Expand v-else />
+            </el-icon>
+          </el-button>
+        </div>
+
+        <!-- 右侧 (Q3: 只保留未读消息和用户菜单) -->
+        <div class="topbar-right">
+          <!-- 未读消息 -->
+          <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="msg-badge">
+            <el-button class="topbar-btn touch-target" text>
+              <el-icon :size="20"><Bell /></el-icon>
+            </el-button>
+          </el-badge>
+
+          <!-- 用户菜单 -->
+          <el-dropdown trigger="click" @command="handleLogout">
+            <div class="user-dropdown touch-target">
+              <el-avatar :size="32">
+                {{ authStore.user?.nickname?.charAt(0) || 'U' }}
+              </el-avatar>
+              <span v-if="!isMobile" class="user-name">{{ authStore.user?.nickname }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <!-- Q3: 手机下"统计范围"移到用户菜单里 -->
+                <el-dropdown-item v-if="isMobile && authStore.dataScopeText" disabled>
+                  统计范围：{{ authStore.dataScopeText }}
+                </el-dropdown-item>
+                <el-dropdown-item v-if="isMobile && authStore.dataScopeText" divided />
+                <el-dropdown-item>个人中心</el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </header>
+
+      <!-- 内容区 -->
+      <main class="app-content">
+        <slot />
+      </main>
+    </div>
+  </div>
+</template>
+
+<style lang="scss" scoped>
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg);
+}
+
+// 侧栏遮罩 (Q2)
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 999;
+}
+
+// 侧栏
+.app-sidebar {
+  width: var(--sidebar-width);
+  min-height: 100vh;
+  background-color: var(--card);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s;
+  z-index: 1000;
+
+  &.collapsed {
+    width: var(--sidebar-collapsed-width);
+  }
+
+  // 手机端样式 (Q2)
+  @include mobile {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: var(--mobile-sidebar-width);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+
+    &.mobile-open {
+      transform: translateX(0);
+    }
+
+    &.mobile-hidden {
+      transform: translateX(-100%);
+    }
+  }
+}
+
+.sidebar-header {
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--blue);
+}
+
+.logo-icon {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--blue);
+}
+
+.sidebar-menu-wrap {
+  flex: 1;
+  overflow: hidden;
+}
+
+// 菜单样式
+:deep(.el-menu) {
+  border-right: none;
+
+  .el-menu-item,
+  .el-sub-menu__title {
+    height: 44px;
+    line-height: 44px;
+    font-size: 13px;
+
+    @include mobile {
+      // Q10: 最小触控尺寸 44px
+      min-height: 44px;
+    }
+  }
+
+  .el-sub-menu .el-menu-item {
+    padding-left: 52px !important;
+    font-size: 12.5px;
+  }
+
+  .el-menu-item.is-active {
+    background-color: var(--blue-bg);
+    color: var(--blue);
+  }
+}
+
+.no-menu-tip {
+  padding: 20px;
+  text-align: center;
+  color: var(--text2);
+  font-size: 13px;
+}
+
+// 主区域
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+// 顶栏 (Q3)
+.app-topbar {
+  height: var(--topbar-height);
+  background-color: var(--card);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-btn,
+.topbar-btn {
+  padding: 8px;
+}
+
+.msg-badge {
+  :deep(.el-badge__content) {
+    top: 6px;
+    right: 6px;
+  }
+}
+
+.user-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-s);
+
+  &:hover {
+    background-color: var(--bg);
+  }
+}
+
+.user-name {
+  font-size: 14px;
+  color: var(--text);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 内容区
+.app-content {
+  flex: 1;
+  padding: var(--content-padding-y) var(--content-padding-x);
+  max-width: var(--content-max-width);
+  width: 100%;
+  margin: 0 auto;
+  overflow-x: hidden;
+
+  @include mobile {
+    // Q18: 手机下内边距 12px 16px
+    padding: $content-padding-y-mobile $content-padding-x-mobile;
+  }
+}
+
+// 侧栏折叠时调整
+.sidebar-collapsed {
+  .app-sidebar {
+    width: var(--sidebar-collapsed-width);
+  }
+}
+</style>

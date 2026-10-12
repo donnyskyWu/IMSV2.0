@@ -1,0 +1,325 @@
+/**
+ * Element Plus 主题覆盖
+ * 依据: 02-前端基础层清单 §1.2, §1.3, §1.4
+ */
+
+// Element Plus 主色覆盖
+:root {
+  // 主题色
+  --el-color-primary: var(--blue);
+  --el-color-primary-light-3: #4da3ff;
+  --el-color-primary-light-5: #80c1ff;
+  --el-color-primary-light-7: #b3d9ff;
+  --el-color-primary-light-8: #cce6ff;
+  --el-color-primary-light-9: #e6f2ff;
+  --el-color-primary-dark-2: #005bb5;
+
+  // 成功色
+  --el-color-success: var(--green);
+  --el-color-success-light-3: #6fdc8c;
+  --el-color-success-light-5: #9ae6ab;
+  --el-color-success-light-7: #c4f0cb;
+  --el-color-success-light-8: #d9f5dd;
+  --el-color-success-light-9: #ecfaee;
+  --el-color-success-dark-2: #2aa04c;
+
+  // 警告色
+  --el-color-warning: var(--orange);
+  --el-color-warning-light-3: #ffb84d;
+  --el-color-warning-light-5: #ffcf80;
+  --el-color-warning-light-7: #ffe5b3;
+  --el-color-warning-light-8: #ffeece;
+  --el-color-warning-light-9: #fff7e6;
+  --el-color-warning-dark-2: #cc7a00;
+
+  // 危险色
+  --el-color-danger: var(--red);
+  --el-color-danger-light-3: #ff6f66;
+  --el-color-danger-light-5: #ff9f99;
+  --el-color-danger-light-7: #ffcfcc;
+  --el-color-danger-light-8: #ffe2e0;
+  --el-color-danger-light-9: #fff2f0;
+  --el-color-danger-dark-2: #cc2f26;
+
+  // 信息色
+  --el-color-info: var(--gray);
+  --el-color-info-light-3: #aeaeb2;
+  --el-color-info-light-5: #c8c8ca;
+  --el-color-info-light-7: #e1e1e2;
+  --el-color-info-light-8: #ebebeb;
+  --el-color-info-light-9: #f5f5f5;
+  --el-color-info-dark-2: #727276;
+
+  // 文字颜色
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text);
+  --el-text-color-secondary: var(--text2);
+  --el-text-color-placeholder: var(--text2);
+  --el-text-color-disabled: var(--text2);
+
+  // 边框颜色
+  --el-border-color: var(--line2);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: var(--line);
+  --el-border-color-extra-light: var(--line);
+
+  // 背景色
+  --el-bg-color: var(--card);
+  --el-bg-color-page: var(--bg);
+  --el-bg-color-overlay: var(--card);
+
+  // 字体
+  --el-font-family: var(--font);
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+
+  // 圆角
+  --el-border-radius-base: var(--r-s);
+  --el-border-radius-small: var(--r-xs);
+  --el-border-radius-round: var(--r);
+
+  // 阴影
+  --el-box-shadow: var(--sh);
+  --el-box-shadow-light: var(--sh);
+  --el-box-shadow-lighter: var(--sh);
+  --el-box-shadow-dark: var(--sh-h);
+}
+
+// === 按钮样式覆盖 (§1.4) ===
+.el-button {
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--r-s);
+
+  &--small {
+    height: 26px;
+    padding: 0 11px;
+    font-size: 12px;
+    border-radius: var(--r-xs);
+  }
+
+  &--primary {
+    background-color: var(--blue);
+    border-color: var(--blue);
+
+    &:hover,
+    &:focus {
+      background-color: var(--blue-h);
+      border-color: var(--blue-h);
+    }
+  }
+
+  &--default {
+    border-color: var(--line2);
+
+    &:hover,
+    &:focus {
+      color: var(--blue);
+      border-color: var(--blue);
+      background-color: transparent;
+    }
+  }
+
+  &--text {
+    color: var(--blue);
+    padding: 0 4px;
+    height: auto;
+
+    &:hover {
+      color: var(--blue-h);
+      background-color: transparent;
+    }
+  }
+
+  &--danger.is-text {
+    color: var(--red);
+
+    &:hover {
+      color: #e02f24;
+    }
+  }
+}
+
+// === 输入框样式覆盖 ===
+.el-input {
+  --el-input-height: 34px;
+
+  &__wrapper {
+    border-radius: var(--r-s);
+    box-shadow: 0 0 0 1px var(--line2) inset;
+
+    &:hover {
+      box-shadow: 0 0 0 1px var(--blue) inset;
+    }
+
+    &.is-focus {
+      box-shadow: 0 0 0 1px var(--blue) inset,
+        0 0 0 3px rgba(0, 113, 227, 0.12) !important;
+    }
+  }
+
+  &__inner {
+    font-size: 13px;
+  }
+}
+
+// 查询栏输入框
+.query-bar .el-input {
+  --el-input-height: 30px;
+
+  .el-input__inner {
+    font-size: 12.5px;
+  }
+}
+
+// === 表格样式覆盖 ===
+.el-table {
+  --el-table-header-bg-color: #fafafc;
+  --el-table-border-color: rgba(0, 0, 0, 0.05);
+  --el-table-row-hover-bg-color: #fafafa;
+
+  th.el-table__cell {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    padding: 10px 12px;
+  }
+
+  td.el-table__cell {
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+}
+
+// === 分页样式覆盖 ===
+.el-pagination {
+  --el-pagination-button-height: 26px;
+  --el-pagination-border-radius: 6px;
+  padding: 9px 12px;
+
+  .el-pager li {
+    min-width: 26px;
+    height: 26px;
+    line-height: 26px;
+    border-radius: 6px;
+
+    &.is-active {
+      background-color: var(--blue);
+      color: #fff;
+    }
+  }
+
+  button {
+    min-width: 26px;
+    height: 26px;
+    border-radius: 6px;
+  }
+}
+
+// === 抽屉样式覆盖 ===
+.el-drawer {
+  --el-drawer-padding-primary: 0;
+
+  &__header {
+    padding: 16px 20px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  &__body {
+    padding: 20px;
+  }
+
+  &__footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+}
+
+// === 对话框覆盖 ===
+.el-dialog {
+  border-radius: var(--r);
+
+  &__header {
+    padding: 16px 20px;
+    margin-right: 0;
+  }
+
+  &__body {
+    padding: 20px;
+  }
+
+  &__footer {
+    padding: 12px 20px;
+  }
+}
+
+// === 消息提示覆盖 ===
+.el-message {
+  border-radius: var(--r-s);
+  padding: 10px 16px;
+}
+
+// === 标签页覆盖 ===
+.el-tabs {
+  &__item {
+    padding: 8px 14px;
+    font-size: 13px;
+
+    &.is-active {
+      color: var(--blue);
+    }
+  }
+
+  &__active-bar {
+    background-color: var(--blue);
+    height: 2px;
+  }
+}
+
+// === 开关覆盖 ===
+.el-switch {
+  --el-switch-on-color: var(--blue);
+  height: 23px;
+  width: 38px;
+
+  .el-switch__core {
+    height: 23px;
+    width: 38px;
+    border-radius: 12px;
+
+    .el-switch__action {
+      width: 19px;
+      height: 19px;
+    }
+  }
+}
+
+// === 表单项覆盖 ===
+.el-form-item {
+  &__label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text2);
+  }
+
+  &__error {
+    font-size: 12px;
+  }
+
+  &.is-required:not(.is-no-asterisk) > .el-form-item__label-wrap > .el-form-item__label::before,
+  &.is-required:not(.is-no-asterisk) > .el-form-item__label::before {
+    color: var(--red);
+  }
+}
+
+// === 遮罩层覆盖 ===
+.el-overlay {
+  background-color: rgba(0, 0, 0, 0.4);
+}

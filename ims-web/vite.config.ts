@@ -1,0 +1,78 @@
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import type { Plugin } from 'vite'
+
+/**
+ * FP-R-09: /__routes 端点 (§2.2 #9)
+ * 仅在 test 构建中提供，不需要鉴权
+ * 返回格式: [{path, name, meta}]
+ */
+function routesEndpointPlugin(): Plugin {
+  return {
+    name: 'routes-endpoint',
+    configureServer(server) {
+      server.middlewares.use('/__routes', (_req, res) => {
+        // 返回路由清单 (实际值在运行时由前端获取)
+        // 这里返回静态定义，因为 SSR 不可用
+        const routes = [
+          { path: '/demo/tokens', name: 'DemoTokens', meta: { title: 'Token 演示' } },
+          { path: '/demo/layout', name: 'DemoLayout', meta: { title: '布局演示' } },
+          { path: '/demo/list', name: 'DemoList', meta: { title: '列表演示' } },
+          { path: '/demo/tabs-list', name: 'DemoTabsList', meta: { title: 'Tab 列表演示' } },
+          { path: '/demo/form', name: 'DemoForm', meta: { title: '表单演示' } },
+          { path: '/demo/selectors', name: 'DemoSelectors', meta: { title: '选择器演示' } },
+          { path: '/demo/files', name: 'DemoFiles', meta: { title: '文件演示' } },
+          { path: '/demo/display', name: 'DemoDisplay', meta: { title: '展示组件' } },
+          { path: '/demo/dept-tree', name: 'DemoDeptTree', meta: { title: '部门树' } },
+          { path: '/demo/left-tree-right-table', name: 'DemoLeftTreeRightTable', meta: { title: '左树右表' } },
+          { path: '/demo/workbench', name: 'DemoWorkbench', meta: { title: '工作台', menuless: true } },
+          { path: '/demo/fill', name: 'DemoFill', meta: { title: '填报页', menuless: true } },
+          { path: '/demo/request', name: 'DemoRequest', meta: { title: '请求演示' } },
+        ]
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(routes))
+      })
+    },
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  const isTest = mode === 'test' || mode === 'development'
+
+  return {
+    plugins: [
+      vue(),
+      AutoImport({
+        imports: ['vue', 'vue-router', 'pinia'],
+        resolvers: [ElementPlusResolver()],
+        dts: 'src/auto-imports.d.ts',
+      }),
+      Components({
+        resolvers: [ElementPlusResolver()],
+        dts: 'src/components.d.ts',
+      }),
+      // FP-R-09: 仅 test 构建提供 /__routes
+      ...(isTest ? [routesEndpointPlugin()] : []),
+    ],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, 'src'),
+      },
+    },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          additionalData: `@use "@/styles/variables.scss" as *;`,
+        },
+      },
+    },
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
+  }
+})

@@ -1,0 +1,120 @@
+/**
+ * IMS 全局设计 Token
+ * 版本: v1.0
+ * 依据: 02-前端基础层清单 §1.1~1.3, 00-工作包 §2.1 手机适配规格 Q1~Q21
+ */
+:root {
+  /* === 颜色 Token (§1.1) === */
+  --bg: #f5f5f7;
+  --card: #fff;
+  --text: #1d1d1f;
+  --text2: #86868b;
+  --blue: #0071e3;
+  --blue-h: #0077ed;
+  --blue-bg: #e8f2fe;
+  --green: #34c759;
+  --orange: #ff9500;
+  --red: #ff3b30;
+  --gray: #8e8e93;
+  --cyan: #5ac8fa;
+  --purple: #af52da;
+  --yellow: #ffcc00;
+  --line: rgba(0, 0, 0, 0.08);
+  --line2: rgba(0, 0, 0, 0.12);
+  --sh: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --sh-h: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* === 字体 Token (§1.2) === */
+  --font: -apple-system, 'SF Pro Text', BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei',
+    sans-serif;
+
+  /* === 圆角 Token (§1.2) === */
+  --r: 12px;
+  --r-s: 8px;
+  --r-xs: 5px;
+
+  /* === 尺寸 Token (§1.3) === */
+  --sidebar-width: 232px;
+  --sidebar-collapsed-width: 64px;
+  --topbar-height: 56px;
+  --content-padding-y: 28px;
+  --content-padding-x: 32px;
+  --content-max-width: 1240px;
+  --drawer-s: 480px;
+  --drawer-m: 720px;
+  --drawer-l: 880px;
+  --left-tree-width: 240px;
+
+  /* === 响应式断点 Token (§2.1 Q1) === */
+  /* 只有两档: <768px 手机布局, >=768px 桌面布局; 无平板档 */
+  /* Q11: 横屏 844×390 宽度 >=768px，按桌面布局处理 */
+  --bp-mobile: 768px;
+
+  /* === 触控尺寸 Token (§2.1 Q10) === */
+  /* 最小触控尺寸 44×44px，视觉尺寸可以更小但热区要扩大到 44px */
+  /* 相邻目标间距至少 8px */
+  --min-touch-size: 44px;
+  --touch-target-gap: 8px;
+
+  /* === 手机侧栏 Token (§2.1 Q2) === */
+  --mobile-sidebar-width: 240px;
+
+  /* === 状态色 8 组 (§1.5, FP-T-03) === */
+  /* primary (进行中/已提交) - 蓝 */
+  --status-primary-text: #0071e3;
+  --status-primary-bg: rgba(0, 113, 227, 0.12);
+
+  /* success (完成/正常) - 绿 */
+  --status-success-text: #1e8e3e;
+  --status-success-bg: rgba(52, 199, 89, 0.12);
+
+  /* warning (待办/警示) - 橙 */
+  --status-warning-text: #c46a00;
+  --status-warning-bg: rgba(255, 149, 0, 0.12);
+
+  /* danger (失败/严重) - 红 */
+  --status-danger-text: #d70015;
+  --status-danger-bg: rgba(255, 59, 48, 0.12);
+
+  /* neutral (中性/终止) - 灰 */
+  --status-neutral-text: #6d6d72;
+  --status-neutral-bg: rgba(142, 142, 147, 0.12);
+
+  /* info (信息) - 青 */
+  --status-info-text: #0e7fb8;
+  --status-info-bg: rgba(90, 200, 250, 0.12);
+
+  /* purple (分类) - 紫 */
+  --status-purple-text: #8944ab;
+  --status-purple-bg: rgba(175, 82, 218, 0.12);
+
+  /* yellow (等级) - 黄 */
+  --status-yellow-text: #a07d00;
+  --status-yellow-bg: rgba(255, 204, 0, 0.12);
+}
+
+/**
+ * 移动端响应式调整 (§2.1 Q1~Q21)
+ * 断点: <768px 为手机布局
+ */
+@media (max-width: 767px) {
+  :root {
+    /* Q2: 侧栏改为左侧抽屉 240px, 默认收起不占用内容区宽度 */
+    --sidebar-width: 0px;
+
+    /* Q3: 顶栏高度保持 56px (不变) */
+
+    /* Q6: 三档抽屉手机下都是 100% 全屏 */
+    --drawer-s: 100%;
+    --drawer-m: 100%;
+    --drawer-l: 100%;
+
+    /* Q18: 手机下内容区内边距 12px 16px */
+    --content-padding-y: 12px;
+    --content-padding-x: 16px;
+
+    /* §2.2 #5: 左树抽屉宽 280px (不超过 100vw - 56px) */
+    --left-tree-drawer-width: min(280px, calc(100vw - 56px));
+  }
+}
