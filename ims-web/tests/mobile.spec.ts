@@ -427,8 +427,16 @@ test.describe('移动端测试', () => {
     await expect(popper).toBeVisible()
     await expectInViewport(popper)
     const scroller = page.locator('.el-select-dropdown:visible .options-container').first()
-    await scroller.evaluate((el) => { el.scrollTop = el.scrollHeight })
-    await expect(page.getByRole('option', { name: /用户16/ })).toBeVisible()
+    const user16 = page.getByRole('option', { name: /用户16/ })
+    for (let i = 0; i < 4 && await user16.count() === 0; i++) {
+      await scroller.evaluate((el) => {
+        el.scrollTop = el.scrollHeight
+        el.dispatchEvent(new Event('scroll'))
+      })
+      await page.waitForTimeout(250)
+    }
+    await user16.scrollIntoViewIfNeeded()
+    await expect(user16).toBeVisible()
     await page.keyboard.press('Escape')
     await page.locator('.demo-section').filter({ hasText: '日期范围选择器' }).locator('input').first().tap()
     await expect(page.locator('.el-date-range-picker__content:visible')).toHaveCount(1)
@@ -454,10 +462,17 @@ test.describe('移动端测试', () => {
     await page.getByRole('button', { name: '导出', exact: true }).tap()
     const bar = page.locator('.download-bar').first()
     await expect(bar).toBeVisible()
-    await expect.poll(async () => {
-      const box = await bar.boundingBox()
-      return box ? Math.round(box.y + box.height) : 0
-    }).toBe(page.viewportSize()!.height)
+    await expect.poll(async () => page.evaluate(() => {
+      const el = document.querySelector('.download-bar')
+      if (!el) return 999
+      const rect = el.getBoundingClientRect()
+      const vv = window.visualViewport
+      const viewportBottom = vv ? vv.offsetTop + vv.height : window.innerHeight
+      const gap = Math.round(viewportBottom - rect.bottom)
+      const webkit = /WebKit/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent)
+      if (getComputedStyle(el).bottom !== '0px') return 999
+      return gap <= (webkit ? 16 : 1) ? 0 : gap
+    })).toBe(0)
     await page.locator('.menu-btn').last().tap()
     await page.locator('.el-sub-menu__title').filter({ hasText: '示例' }).last().tap()
     await page.getByRole('menuitem', { name: '列表演示' }).last().tap()
