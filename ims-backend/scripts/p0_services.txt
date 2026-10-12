@@ -1,0 +1,12 @@
+# P0 Service 分支覆盖名单。门槛看分支覆盖率，不是语句+分支的合计列。
+# 一行一个路径，相对 ims-backend 根目录。井号后面是注释。
+# 增删文件只改本文件。
+#
+# 《IMS-整体测试方案》点名的 P0 Service 是：权限同步、分成计算、场次 ID、风控评分、机密拦截。
+# 这些业务服务在当前 main 还没有可测实现。模块工作包也没有逐文件标 P0。
+# 本名单是已落地的认证、权限依赖、权限判定、用户和请求会话，供评审确认。
+app/services/auth.py
+app/api/deps.py
+app/services/access.py
+app/services/user.py
+app/db/session.py
