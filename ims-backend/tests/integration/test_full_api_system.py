@@ -298,3 +298,122 @@ class TestOrgSyncEndpoints:
         """Test org sync latest batch endpoint requires permission."""
         response = app_client.get("/admin-api/ims/system/org-sync/latest-batch")
         assert assert_auth_required(response)
+
+
+class TestUserCRUDEndpoints:
+    """Integration tests for user CRUD endpoints."""
+
+    def test_user_get_by_id_without_auth_fails(self, app_client):
+        """Test user get by ID requires auth."""
+        response = app_client.get("/admin-api/ims/system/user/1")
+        assert assert_auth_required(response)
+
+    def test_user_create_without_auth_fails(self, app_client):
+        """Test user create requires auth."""
+        response = app_client.post("/admin-api/ims/system/user", json={})
+        assert assert_auth_required(response)
+
+    def test_user_update_without_auth_fails(self, app_client):
+        """Test user update requires auth."""
+        response = app_client.put("/admin-api/ims/system/user/1", json={})
+        assert assert_auth_required(response)
+
+    def test_user_delete_without_auth_fails(self, app_client):
+        """Test user delete requires auth."""
+        response = app_client.delete("/admin-api/ims/system/user/1")
+        assert assert_auth_required(response)
+
+
+class TestDeptCRUDEndpoints:
+    """Integration tests for dept CRUD endpoints."""
+
+    def test_dept_get_by_id_without_auth_fails(self, app_client):
+        """Test dept get by ID requires auth."""
+        response = app_client.get("/admin-api/ims/system/dept/1")
+        assert assert_auth_required(response)
+
+    def test_dept_create_without_auth_fails(self, app_client):
+        """Test dept create requires auth."""
+        response = app_client.post("/admin-api/ims/system/dept", json={})
+        assert assert_auth_required(response)
+
+    def test_dept_update_without_auth_fails(self, app_client):
+        """Test dept update requires auth."""
+        response = app_client.put("/admin-api/ims/system/dept/1", json={})
+        assert assert_auth_required(response)
+
+    def test_dept_delete_without_auth_fails(self, app_client):
+        """Test dept delete requires auth."""
+        response = app_client.delete("/admin-api/ims/system/dept/1")
+        assert assert_auth_required(response)
+
+
+class TestRoleCRUDEndpoints:
+    """Integration tests for role CRUD endpoints."""
+
+    def test_role_get_by_id_without_auth_fails(self, app_client):
+        """Test role get by ID requires auth."""
+        response = app_client.get("/admin-api/ims/system/role/1")
+        assert assert_auth_required(response)
+
+    def test_role_create_without_auth_fails(self, app_client):
+        """Test role create requires auth."""
+        response = app_client.post("/admin-api/ims/system/role", json={})
+        assert assert_auth_required(response)
+
+    def test_role_update_without_auth_fails(self, app_client):
+        """Test role update requires auth."""
+        response = app_client.put("/admin-api/ims/system/role/1", json={})
+        assert assert_auth_required(response)
+
+
+class TestMenuCRUDEndpoints:
+    """Integration tests for menu CRUD endpoints."""
+
+    def test_menu_get_by_id_without_auth_fails(self, app_client):
+        """Test menu get by ID requires auth."""
+        response = app_client.get("/admin-api/ims/system/menu/1")
+        assert assert_auth_required(response)
+
+    def test_menu_create_without_auth_fails(self, app_client):
+        """Test menu create requires auth."""
+        response = app_client.post("/admin-api/ims/system/menu", json={})
+        assert assert_auth_required(response)
+
+    def test_menu_update_without_auth_fails(self, app_client):
+        """Test menu update requires auth."""
+        response = app_client.put("/admin-api/ims/system/menu/1", json={})
+        assert assert_auth_required(response)
+
+
+class TestDictCRUDEndpoints:
+    """Integration tests for dict CRUD endpoints."""
+
+    def test_dict_type_get_by_id_without_auth_fails(self, app_client):
+        """Test dict type get by ID requires auth."""
+        response = app_client.get("/admin-api/ims/system/dict-type/1")
+        assert assert_auth_required(response)
+
+    def test_dict_type_create_without_auth_fails(self, app_client):
+        """Test dict type create requires auth."""
+        response = app_client.post("/admin-api/ims/system/dict-type", json={})
+        assert assert_auth_required(response)
+
+    def test_dict_data_page_without_auth_fails(self, app_client):
+        """Test dict data page requires auth."""
+        response = app_client.get("/admin-api/ims/system/dict-data/page?dictType=test")
+        assert assert_auth_required(response)
+
+
+class TestSysParamEndpoints:
+    """Integration tests for system param endpoints."""
+
+    def test_sys_param_list_without_auth_fails(self, app_client):
+        """Test sys param list requires auth."""
+        response = app_client.get("/admin-api/ims/system/sys-param")
+        assert assert_auth_required(response)
+
+    def test_sys_param_update_without_auth_fails(self, app_client):
+        """Test sys param update requires auth."""
+        response = app_client.put("/admin-api/ims/system/sys-param/test_key", json={})
+        assert assert_auth_required(response)

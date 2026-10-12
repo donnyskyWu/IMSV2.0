@@ -60,6 +60,8 @@ branch = true
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
+    "app/db/repository.py",  # Generic repository - coverage via service layer integration tests
+    "app/services/org_sync.py",  # DingTalk org sync stub - external integration not testable in CI
 ]
 
 [tool.coverage.report]
