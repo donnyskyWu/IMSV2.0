@@ -88,14 +88,7 @@ jobs:
           for _ in $(seq 1 30); do
             code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8000/health || true)
             if [ "$code" = "200" ]; then
-              python - <<'PY'
-import json
-body = json.load(open("/tmp/health.json"))
-db = (body.get("data") or {}).get("db")
-print("API responded: 200 db=%s" % db)
-if body.get("code") != 0 or db != "UP":
-    raise SystemExit(1)
-PY
+              python -c 'import json; body=json.load(open("/tmp/health.json")); db=(body.get("data") or {}).get("db"); print("API responded: 200 db=%s" % db); raise SystemExit(0 if body.get("code")==0 and db=="UP" else 1)'
               exit 0
             fi
             sleep 2
