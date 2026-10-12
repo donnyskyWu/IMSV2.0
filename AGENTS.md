@@ -1,0 +1,1 @@
+- 进度看板：`docs/ims-v2-rewrite/看板.md`。每完成一项，在同一个 PR 里更新自己那一行；合并后由 Grok Bot 核对。
