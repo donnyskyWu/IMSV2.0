@@ -3,6 +3,7 @@
  * 依据: 02-验证用例.md VC-C33~C36
  */
 import { test, expect } from '@playwright/test'
+import { isNarrow } from './helpers/viewport'
 
 test.describe('C33～C36. 文件组件', () => {
   test.beforeEach(async ({ page }) => {
@@ -120,6 +121,9 @@ test.describe('C33～C36. 文件组件', () => {
     await page.getByRole('button', { name: '导出', exact: true }).click()
     await expect(page.locator('.el-message').filter({ hasText: '已开始导出' })).toBeVisible()
     await expect(page.locator('.download-bar').first()).toBeVisible()
+    if (isNarrow(page)) {
+      await page.locator('.menu-btn').last().tap()
+    }
     await page.locator('.el-sub-menu__title').filter({ hasText: '示例' }).last().click()
     await page.getByRole('menuitem', { name: '列表演示' }).last().click()
     await expect(page).toHaveURL(/\/demo\/list/)

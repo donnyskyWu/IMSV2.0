@@ -29,7 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
   const permCodes = ref<string[]>([])
   const loading = ref(false)
 
-  const isLoggedIn = computed(() => !!getAccessToken())
+  const tokenVersion = ref(0)
+  const isLoggedIn = computed(() => tokenVersion.value >= 0 && !!getAccessToken())
   const dataScopeText = computed(() => user.value?.dataScopeText || '')
   const pwdResetRequired = computed(() => user.value?.pwdResetRequired || false)
 
@@ -40,8 +41,12 @@ export const useAuthStore = defineStore('auth', () => {
       if (result.code === 0 && result.data) {
         setAccessToken(result.data.accessToken)
         setRefreshToken(result.data.refreshToken)
+        tokenVersion.value += 1
+        if (result.data.pwdResetRequired) {
+          sessionStorage.setItem('ims_pwd_reset', '1')
+        }
         await fetchUserInfo()
-        if (user.value && result.data.pwdResetRequired) {
+        if (user.value && (result.data.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1')) {
           user.value = { ...user.value, pwdResetRequired: true }
         }
         return true
@@ -106,6 +111,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearSession(): void {
     clearTokens()
+    tokenVersion.value += 1
     user.value = null
     menus.value = []
     permCodes.value = []
@@ -124,6 +130,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearPwdReset(): void {
+    sessionStorage.removeItem('ims_pwd_reset')
     if (user.value) {
       user.value = { ...user.value, pwdResetRequired: false }
     }
@@ -132,6 +139,7 @@ export const useAuthStore = defineStore('auth', () => {
   function mockLogin(): void {
     setAccessToken('mock-access-token')
     setRefreshToken('mock-refresh-token')
+    tokenVersion.value += 1
     user.value = {
       id: '1',
       username: 'qa_admin',

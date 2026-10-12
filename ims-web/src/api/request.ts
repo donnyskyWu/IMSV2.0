@@ -42,14 +42,14 @@ export const ErrorCode = {
 } as const
 
 let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
+let refreshSubscribers: Array<(token: string | null) => void> = []
 
-function onRefreshed(token: string) {
+function onRefreshed(token: string | null) {
   refreshSubscribers.forEach((callback) => callback(token))
   refreshSubscribers = []
 }
 
-function addRefreshSubscriber(callback: (token: string) => void) {
+function addRefreshSubscriber(callback: (token: string | null) => void) {
   refreshSubscribers.push(callback)
 }
 
@@ -123,6 +123,40 @@ function redirectToLogin(message = '登录已失效，请重新登录'): void {
   }
 }
 
+async function handleTokenExpired(
+  instance: AxiosInstance,
+  originalRequest: InternalAxiosRequestConfig & { _retry?: boolean },
+) {
+  if (originalRequest._retry) {
+    redirectToLogin()
+    throw new Error('token expired')
+  }
+  originalRequest._retry = true
+
+  if (isRefreshing) {
+    const token = await new Promise<string | null>((resolve) => {
+      addRefreshSubscriber(resolve)
+    })
+    if (!token) throw new Error('token expired')
+    originalRequest.headers.Authorization = `Bearer ${token}`
+    return instance(originalRequest)
+  }
+
+  isRefreshing = true
+  try {
+    const newToken = await refreshAccessToken()
+    onRefreshed(newToken)
+    if (!newToken) {
+      redirectToLogin()
+      throw new Error('token expired')
+    }
+    originalRequest.headers.Authorization = `Bearer ${newToken}`
+    return instance(originalRequest)
+  } finally {
+    isRefreshing = false
+  }
+}
+
 function handleErrorCode(code: number, msg: string): void {
   switch (code) {
     case ErrorCode.VALIDATION_FAILED:
@@ -182,52 +216,13 @@ function createRequest(): AxiosInstance {
       }
 
       if (result.code === ErrorCode.TOKEN_EXPIRED) {
-        const expired = Object.assign(new Error('token expired'), {
-          isTokenExpired: true,
-          config: response.config,
-          response,
-        })
-        return Promise.reject(expired)
+        return handleTokenExpired(instance, response.config)
       }
 
       handleErrorCode(result.code, result.msg)
       return Promise.reject(new Error(result.msg || '请求失败'))
     },
-    async (error: AxiosError & { isTokenExpired?: boolean }) => {
-      const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
-
-      if (error.isTokenExpired && originalRequest && !originalRequest._retry) {
-        if (isRefreshing) {
-          return new Promise((resolve) => {
-            addRefreshSubscriber((token) => {
-              if (originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${token}`
-              }
-              resolve(instance(originalRequest))
-            })
-          })
-        }
-
-        originalRequest._retry = true
-        isRefreshing = true
-
-        try {
-          const newToken = await refreshAccessToken()
-          if (newToken) {
-            onRefreshed(newToken)
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${newToken}`
-            }
-            return instance(originalRequest)
-          } else {
-            redirectToLogin()
-            return Promise.reject(error)
-          }
-        } finally {
-          isRefreshing = false
-        }
-      }
-
+    async (error: AxiosError) => {
       if (error.response?.status === 401) {
         redirectToLogin()
         return Promise.reject(error)

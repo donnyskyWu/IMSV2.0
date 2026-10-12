@@ -26,7 +26,7 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C32-03: 已删除值显示已不可用', async ({ page }) => {
-    await expect(page.getByTestId('gone-user').locator('input')).toHaveValue('（已不可用）')
+    await expect(page.getByTestId('gone-user')).toContainText('（已不可用）')
   })
 
   test('VC-C21-01: 冻结离职人员灰显不可选', async ({ page }) => {
@@ -101,7 +101,9 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C24-01: 实名人选择证件过期', async ({ page }) => {
-    await page.getByTestId('realname').getByPlaceholder('实名人').click()
+    const realname = page.getByTestId('realname')
+    await realname.scrollIntoViewIfNeeded()
+    await realname.locator('.el-select').click()
     await page.getByRole('option', { name: '张三' }).click()
     const expired = page.getByTestId('realname').getByText('证件已过期')
     await expect(expired).toBeVisible()
@@ -111,15 +113,19 @@ test.describe('C21～C32. 选择器', () => {
   })
 
   test('VC-C24-02: IP 组选择大组小组', async ({ page }) => {
-    await page.getByTestId('ip-group').getByPlaceholder('搜索小组').click()
-    await page.getByTestId('ip-group').locator('input').fill('小组')
+    const ipGroup = page.getByTestId('ip-group')
+    await ipGroup.scrollIntoViewIfNeeded()
+    await ipGroup.locator('.el-select').click()
+    await ipGroup.locator('input').fill('小组')
     await expect(page.getByRole('option', { name: '大组 / 小组' })).toBeVisible()
   })
 
   test('VC-C24-03: 作者选择先账号再作者', async ({ page }) => {
-    const author = page.getByTestId('author').getByPlaceholder('作者')
-    await expect(author).toBeDisabled()
-    await page.getByTestId('author').getByPlaceholder('先选账号').click()
+    const authorSection = page.getByTestId('author')
+    await authorSection.scrollIntoViewIfNeeded()
+    const author = authorSection.locator('.el-select').nth(1)
+    await expect(author.locator('.el-select__wrapper')).toHaveClass(/is-disabled/)
+    await authorSection.locator('.el-select').first().click()
     await page.getByRole('option', { name: '账号甲' }).click()
     await author.click()
     await expect(page.getByRole('option', { name: '作者甲' })).toBeVisible()
@@ -150,7 +156,7 @@ test.describe('C21～C32. 选择器', () => {
     start.setDate(end.getDate() - 6)
     const fmt = (d: Date) => d.toISOString().slice(0, 10)
     await expect(page.locator('.range-text')).toContainText(`${fmt(start)} ~ ${fmt(end)}`)
-    await page.getByRole('button', { name: '月' }).click()
+    await page.getByRole('button', { name: '月', exact: true }).click()
     await expect(page.locator('.range-text')).toContainText('2026-10')
     await page.getByRole('button', { name: '超跨度' }).click()
     await expect(page.getByText('超过最大跨度')).toBeVisible()

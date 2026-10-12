@@ -355,6 +355,8 @@ watch(pageNo, persist)
                 <el-button text type="primary" size="small">更多</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item v-if="isMobile" @click="handleView(row)">查看</el-dropdown-item>
+                    <el-dropdown-item v-if="isMobile" @click="handleCreate">编辑</el-dropdown-item>
                     <el-dropdown-item>复制</el-dropdown-item>
                     <el-dropdown-item divided @click="handleDelete(row)">
                       <span class="danger-text">删除</span>

@@ -3,6 +3,7 @@
  * 依据: 02-验证用例.md VC-C14~C20
  */
 import { test, expect } from '@playwright/test'
+import { isNarrow } from './helpers/viewport'
 
 test.describe('C14～C20. 表单与弹层', () => {
   test.beforeEach(async ({ page }) => {
@@ -76,7 +77,12 @@ test.describe('C14～C20. 表单与弹层', () => {
 
   test('VC-C15-01: 详情抽屉头和 Tab', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.getByRole('button', { name: '查看' }).first().click()
+    if (isNarrow(page)) {
+      await page.locator('.list-demo .el-table').getByRole('button', { name: '更多' }).first().click()
+      await page.locator('.el-dropdown-menu:visible').getByText('查看', { exact: true }).click()
+    } else {
+      await page.getByRole('button', { name: '查看' }).first().click()
+    }
     const drawer = page.locator('.el-drawer:visible')
     await expect(drawer).toBeVisible()
     await expect(drawer.locator('.el-tabs')).toBeVisible()

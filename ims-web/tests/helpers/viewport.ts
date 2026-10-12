@@ -4,3 +4,7 @@ import { test, type Page } from '@playwright/test'
 export function skipOnMobile(page: Page, reason = '手机视口豁免桌面布局') {
   test.skip((page.viewportSize()?.width ?? 0) < 768, reason)
 }
+
+export function isNarrow(page: Page) {
+  return (page.viewportSize()?.width ?? 1440) < 768
+}

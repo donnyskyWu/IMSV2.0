@@ -3,17 +3,24 @@
  * 依据: 02-验证用例.md VC-L01, VC-L04~L08
  */
 import { test, expect } from '@playwright/test'
-import { skipOnMobile } from './helpers/viewport'
+import { isNarrow, skipOnMobile } from './helpers/viewport'
 
 test.describe('其他模板', () => {
   test('VC-L01-01: 标准列表增删改查流程', async ({ page }) => {
     await page.goto('/demo/list')
     await expect(page.locator('.el-table')).toBeVisible()
     await expect(page.getByRole('button', { name: '新建' }).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: '编辑' }).first()).toBeVisible()
+    if (isNarrow(page)) {
+      await page.locator('.list-demo .el-table').getByRole('button', { name: '更多' }).first().click()
+      await expect(page.locator('.el-dropdown-menu:visible').getByText('编辑', { exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+    } else {
+      await expect(page.getByRole('button', { name: '编辑' }).first()).toBeVisible()
+    }
     await page.getByRole('button', { name: '新建' }).first().click()
-    await page.locator('.el-drawer').getByPlaceholder('请输入名称').fill('标准新增')
-    await page.locator('.el-drawer').getByRole('button', { name: '保存' }).click()
+    const drawer = page.locator('.el-drawer:visible')
+    await drawer.getByPlaceholder('请输入名称').fill('标准新增')
+    await drawer.getByRole('button', { name: '保存' }).click()
     await expect(page.getByText('标准新增')).toBeVisible()
     await expect(page.locator('.el-message').filter({ hasText: '保存成功' })).toBeVisible()
   })
@@ -23,7 +30,12 @@ test.describe('其他模板', () => {
     const searchInput = page.getByPlaceholder('请输入名称')
     await searchInput.fill('示例订单')
     await page.getByRole('button', { name: '查询' }).click()
-    await page.getByRole('button', { name: '查看' }).first().click()
+    if (isNarrow(page)) {
+      await page.locator('.list-demo .el-table').getByRole('button', { name: '更多' }).first().click()
+      await page.locator('.el-dropdown-menu:visible').getByText('查看', { exact: true }).click()
+    } else {
+      await page.getByRole('button', { name: '查看' }).first().click()
+    }
     await expect(page.locator('.el-drawer:visible')).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(page.locator('.el-drawer:visible')).toHaveCount(0)
@@ -85,7 +97,12 @@ test.describe('其他模板', () => {
 
   test('VC-L08-01: 详情抽屉模板 Tab 和按钮', async ({ page }) => {
     await page.goto('/demo/list')
-    await page.getByRole('button', { name: '查看' }).first().click()
+    if (isNarrow(page)) {
+      await page.locator('.list-demo .el-table').getByRole('button', { name: '更多' }).first().click()
+      await page.locator('.el-dropdown-menu:visible').getByText('查看', { exact: true }).click()
+    } else {
+      await page.getByRole('button', { name: '查看' }).first().click()
+    }
     const drawer = page.locator('.el-drawer:visible')
     await expect(drawer.locator('.el-drawer__header').first()).toBeVisible()
     await expect(drawer.getByRole('tab', { name: '基本信息' })).toBeVisible()

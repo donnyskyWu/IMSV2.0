@@ -149,8 +149,16 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  // 未登录 → 跳登录页 (FP-R-07)
-  if (!authStore.isLoggedIn) {
+  // 密码被重置后只能停留在改密页（登录响应可能先于用户信息）
+  const mustReset = authStore.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1'
+  if (mustReset && to.path !== '/user/change-password') {
+    next('/user/change-password')
+    return
+  }
+
+  // 未登录 → 跳登录页 (FP-R-07)。令牌在 localStorage，不能用无依赖的 computed。
+  const loggedIn = !!localStorage.getItem('ims_access_token')
+  if (!loggedIn) {
     const requireAuth = sessionStorage.getItem('ims_require_auth') === '1'
     // 示例页自动登录 (模拟)。VC-R-15 写入 ims_require_auth 后走真实跳转。
     if (demoEnabled && to.path.startsWith('/demo') && !requireAuth) {

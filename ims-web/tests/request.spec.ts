@@ -4,7 +4,8 @@
  * 使用 B0a OpenAPI 契约的 mock 数据
  */
 import { test, expect } from '@playwright/test'
-import { setupApiMocks, ErrorCode, setupTokenExpiredMock, clearApiMocks } from './mocks/api-mocks'
+import { setupApiMocks, ErrorCode } from './mocks/api-mocks'
+import { isNarrow } from './helpers/viewport'
 
 test.describe('R. 请求层', () => {
   test.beforeEach(async ({ page }) => {
@@ -105,6 +106,8 @@ test.describe('R. 请求层', () => {
   test('VC-R-07: 令牌过期应自动刷新', async ({ page }) => {
     let refreshCalled = 0
     let hits = 0
+    await page.unroute('**/admin-api/ims/demo/error**')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
     await page.route('**/admin-api/ims/demo/error**', async (route) => {
       hits += 1
       const code = hits === 1 ? ErrorCode.TOKEN_EXPIRED : 0
@@ -140,7 +143,8 @@ test.describe('R. 请求层', () => {
     let refreshCount = 0
     let requestCount = 0
 
-    // 所有请求先返回 1002，然后在刷新后返回成功
+    await page.unroute('**/admin-api/ims/demo/error**')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
     await page.route('**/admin-api/ims/demo/error**', async (route) => {
       requestCount++
       if (refreshCount === 0) {
@@ -193,6 +197,8 @@ test.describe('R. 请求层', () => {
   })
 
   test('VC-R-09: 刷新令牌失效应跳登录页', async ({ page }) => {
+    await page.unroute('**/admin-api/ims/demo/error**')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
     await page.route('**/admin-api/ims/demo/error**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -255,6 +261,7 @@ test.describe('R. 请求层', () => {
   })
 
   test('VC-R-12: 密码重置后必须改密', async ({ page }) => {
+    await page.unroute('**/admin-api/ims/auth/login')
     await page.route('**/admin-api/ims/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
@@ -276,8 +283,14 @@ test.describe('R. 请求层', () => {
     await page.getByPlaceholder('密码').fill('new-pass')
     await page.getByRole('button', { name: '登录' }).click()
     await expect(page).toHaveURL(/\/user\/change-password/)
-    await page.getByRole('menuitem', { name: '人员管理' }).click()
+    if (isNarrow(page)) {
+      await page.locator('.menu-btn').last().tap()
+    }
+    await page.getByRole('menuitem', { name: '人员管理' }).last().click()
     await expect(page).toHaveURL(/\/user\/change-password/)
+    if (isNarrow(page)) {
+      await page.mouse.click(380, 400)
+    }
     await page.getByPlaceholder('请输入新密码').fill('abcdef')
     await page.getByRole('button', { name: '确认修改' }).click()
     await expect(page).toHaveURL(/\/demo\/tokens/)
@@ -299,7 +312,13 @@ test.describe('R. 请求层', () => {
   test('VC-R-14: 字典变更实时生效', async ({ page }) => {
     await page.goto('/demo/list')
     await expect(page.locator('.status-label').filter({ hasText: '待审核' }).first()).toBeVisible()
-    await page.getByRole('button', { name: '刷新字典' }).click()
+    const narrow = (page.viewportSize()?.width ?? 1440) < 768
+    if (narrow) {
+      await page.locator('.page-header .header-actions .el-dropdown').click()
+      await page.locator('.el-dropdown-menu:visible').getByRole('button', { name: '刷新字典' }).click()
+    } else {
+      await page.getByRole('button', { name: '刷新字典' }).click()
+    }
     await expect(page.locator('.status-label').filter({ hasText: '测试名' }).first()).toBeVisible()
     await expect(page.locator('.status-label').filter({ hasText: '待审核' })).toHaveCount(0)
   })

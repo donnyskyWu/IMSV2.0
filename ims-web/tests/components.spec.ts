@@ -162,7 +162,7 @@ test.describe('FormDrawer 组件 (FP-C-10)', () => {
     await createBtn.click()
     
     // 抽屉应打开
-    const drawer = page.locator('.el-drawer')
+    const drawer = page.locator('.el-drawer:visible')
     await expect(drawer).toBeVisible()
     
     // 应有表单
@@ -178,7 +178,7 @@ test.describe('FormDrawer 组件 (FP-C-10)', () => {
     const createBtn = page.locator('button:has-text("新建")').first()
     await createBtn.click()
     
-    const drawer = page.locator('.el-drawer')
+    const drawer = page.locator('.el-drawer:visible')
     await expect(drawer).toBeVisible()
     
     // 点击取消
@@ -186,7 +186,7 @@ test.describe('FormDrawer 组件 (FP-C-10)', () => {
     await cancelBtn.click()
     
     // 抽屉应关闭
-    await expect(drawer).not.toBeVisible()
+    await expect(page.locator('.el-drawer:visible')).toHaveCount(0)
   })
 })
 

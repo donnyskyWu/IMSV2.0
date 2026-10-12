@@ -145,7 +145,7 @@ test.describe('Modal/Drawer 移动端全屏 (Q5, Q6)', () => {
     await createBtn.click()
     
     // 等待抽屉打开
-    const drawer = page.locator('.el-drawer')
+    const drawer = page.locator('.el-drawer:visible')
     await expect(drawer).toBeVisible()
     
     // 移动端应全屏

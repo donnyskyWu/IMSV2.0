@@ -24,6 +24,10 @@ async function handleLogin() {
       ElMessage.error('用户名或密码错误')
       return
     }
+    if (sessionStorage.getItem('ims_pwd_reset') === '1' || authStore.pwdResetRequired) {
+      router.push('/user/change-password')
+      return
+    }
     const redirect = (route.query.redirect as string) || '/demo/tokens'
     router.push(redirect)
   } catch {
