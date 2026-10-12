@@ -3,7 +3,7 @@
 
 不替换 get_db，也不 mock AuthService。
 并发与原子性断言只打真实 Redis，不用 fakeredis。
-叶子 path 取主干 tools/seed/menus.py，不另造工作台或 B1 路由。
+侧栏两条叶子由本用例按 01 功能点清单的权限码写入，不把主干种子的 path 当成裁定 23 的结果。
 """
 import asyncio
 import threading
@@ -390,7 +390,8 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     """裁定 24：登录起满 7 天绝对失效。差 1 秒能刷新，过 1 秒失败。
 
     用注入时钟，不 sleep。轮换后在真实 Redis 上读新 refresh 的 TTL，
-    必须等于剩余秒数，不能被重置成 7 天。
+    等于剩余秒数（整数秒，允许读到 0 或 1），不能被重置成 7 天。
+    满 7 天后的 /me 用临近到期时换发的新 access，这枚 access 的 JWT 尚未过期。
     """
     from app.core.cache import Cache
     from app.core.clock import get_now, set_clock
@@ -416,7 +417,19 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     legacy_tokens = _login(app_client, legacy.username)
     blank_tokens = _login(app_client, blank.username)
 
-    # 7 天差 1 秒：还能刷新，新 refresh 的 TTL 就是这 1 秒。
+    # 提前 3 分钟换发 late 的 access。满 7 天时这枚 JWT 还有将近 2 小时，
+    # 之后 /me 的 1002 只能来自会话剩余时间，不是登录时那枚 2 小时 access 自己过期。
+    freeze(start + timedelta(seconds=full_ttl - 180))
+    rotated_late = _refresh(app_client, late_tokens["refreshToken"])
+    assert rotated_late.status_code == 200
+    rotated_late_body = rotated_late.json()
+    assert rotated_late_body["code"] == 0, rotated_late_body
+    fresh_access = rotated_late_body["data"]["accessToken"]
+    fresh_refresh = rotated_late_body["data"]["refreshToken"]
+    assert fresh_access
+    assert fresh_refresh != late_tokens["refreshToken"]
+
+    # 7 天差 1 秒：还能刷新。Redis TTL 是整数秒，立刻读可能是 0 或 1，但不能回到 7 天。
     freeze(start + timedelta(seconds=full_ttl - 1))
     refreshed = _refresh(app_client, near_tokens["refreshToken"])
     assert refreshed.status_code == 200
@@ -426,14 +439,14 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     new_refresh = refreshed_body["data"]["refreshToken"]
     assert new_access
     assert new_refresh != near_tokens["refreshToken"]
-    # 新 access 的 iat 跟着注入时钟走，会落到真实时间的未来。PyJWT 会拒掉 iat，
-    # 所以会话 id 从 Redis 的刷新索引读，不解码 JWT。TTL 要立刻读，剩余只有 1 秒。
+    # 新 access 的 iat 跟着注入时钟走，会落到真实时间的未来。PyJWT 默认用墙钟，
+    # 所以会话 id 从 Redis 的刷新索引读，不解码 JWT。TTL 要立刻读。
     session_id = real_redis.get(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
     assert session_id
     refresh_ttl = real_redis.ttl(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
     session_ttl = real_redis.ttl(f"{service.SESSION_PREFIX}{session_id}")
-    assert refresh_ttl == 1
-    assert session_ttl == 1
+    assert refresh_ttl in (0, 1)
+    assert session_ttl in (0, 1)
     assert refresh_ttl != full_ttl
     assert session_ttl != full_ttl
     stored = Cache.get_json(f"{service.SESSION_PREFIX}{session_id}")
@@ -451,7 +464,9 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     legacy_body = legacy_refreshed.json()
     assert legacy_body["code"] == 0, legacy_body
     legacy_new = legacy_body["data"]["refreshToken"]
-    assert real_redis.ttl(f"{service.REFRESH_INDEX_PREFIX}{legacy_new}") == 1
+    legacy_ttl = real_redis.ttl(f"{service.REFRESH_INDEX_PREFIX}{legacy_new}")
+    assert legacy_ttl in (0, 1)
+    assert legacy_ttl != full_ttl
 
     # 没有登录时间也没有到期时间：按已过期拒绝。
     blank_sid = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{blank_tokens['refreshToken']}")
@@ -464,35 +479,60 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     assert blank_resp.status_code == 401
     assert blank_resp.json()["code"] == 1002
 
-    # 过 1 秒：刷新失败，访问令牌也失效。
+    # 过 1 秒：临近到期换发的 refresh 不能再换，那枚新 access 调 /me 也是 1002。
+    # 先打 /me。若先重放旧 refresh，会走吊销分支，1002 就不是剩余时间到点。
     freeze(start + timedelta(seconds=full_ttl + 1))
-    late_resp = _refresh(app_client, late_tokens["refreshToken"])
-    assert late_resp.status_code == 401
-    assert late_resp.json()["code"] == 1002
+    fresh_claims = jwt.decode(
+        fresh_access,
+        settings.jwt.secret,
+        algorithms=[settings.jwt.algorithm],
+        options={"verify_exp": False, "verify_iat": False},
+    )
+    assert fresh_claims["exp"] > get_now().timestamp()
     late_me = app_client.get(
         "/admin-api/ims/auth/me",
-        headers=_auth(late_tokens["accessToken"]),
+        headers=_auth(fresh_access),
     )
     assert late_me.status_code == 401
     assert late_me.json()["code"] == 1002
+    late_resp = _refresh(app_client, fresh_refresh)
+    assert late_resp.status_code == 401
+    assert late_resp.json()["code"] == 1002
 
 
-def test_me_menu_nodes_return_seed_leaf_paths(app_client, db_session, test_context):
-    """/me 的 MENU 节点带回主干种子里的 path，字段仍是 path，不新造工作台路由。"""
+def test_me_menu_paths_use_feature_list_codes_inserted_by_test(
+    app_client, db_session, test_context,
+):
+    """/me 的 MENU 节点带回 path。裁定 23：不新造工作台路由。
+
+    下面两条侧栏不是主干种子里的 path，是本用例自己写入的占位。
+    B1 种子落地前，权限码用 01 功能点清单里的码，path 仍是清单路由：
+    - ims:system:org-sync:query → /ims/auth/org
+    - ims:auth:position-rule:query → /ims/auth/position
+    组织同步在种子模板里已有同名权限码（path 为 /system/org-sync）。
+    本用例插入时把 path 改成清单占位，避免 perm_code 唯一约束冲突。
+    岗位规则种子里没有，由本用例额外插入。
+    """
     from app.domains.sys.models import Menu
     from tests.support.rows import add, bind_menu, bind_role, role
     from tools.seed.menus import MENUS
 
+    # 插入种子模板时改掉组织同步的 path。权限码保持清单里的 ims:system:org-sync:query。
+    placeholder_path = {
+        "ims:system:org-sync:query": "/ims/auth/org",
+    }
+
     def insert(nodes: list, parent_id: int) -> list:
         created: list = []
         for node in nodes:
+            perm_code = node.get("perm_code")
             menu = add(db_session, Menu(
                 tenant_id=1,
                 parent_id=parent_id,
                 type=node["type"],
                 name=node["name"],
-                perm_code=node.get("perm_code"),
-                path=node.get("path"),
+                perm_code=perm_code,
+                path=placeholder_path.get(perm_code, node.get("path")),
                 status="ENABLED",
                 sort=node.get("sort", 0),
                 visible=True,
@@ -507,32 +547,26 @@ def test_me_menu_nodes_return_seed_leaf_paths(app_client, db_session, test_conte
         for menu in created
         if menu.type == "MENU"
     }
-    # 裁定 23：叶子 path 按 01 功能点清单。不造工作台路由。
-    # 侧栏断言用组织同步和岗位规则这两条，而不是另写一条工作台 path。
-    sidebar = (
-        ("ims:auth:org:query", "组织架构同步", "/ims/auth/org"),
-        ("ims:auth:position:query", "岗位-角色供给规则", "/ims/auth/position"),
-    )
-    for perm_code, name, path in sidebar:
-        menu = add(db_session, Menu(
-            tenant_id=1,
-            parent_id=0,
-            type="MENU",
-            name=name,
-            perm_code=perm_code,
-            path=path,
-            status="ENABLED",
-            sort=0,
-            visible=True,
-        ))
-        created.append(menu)
-        expected[perm_code] = path
+    # 岗位规则不在主干种子里，本用例自己插入。权限码用清单里的 ims:auth:position-rule:query。
+    position_rule = add(db_session, Menu(
+        tenant_id=1,
+        parent_id=0,
+        type="MENU",
+        name="岗位-角色供给规则",
+        perm_code="ims:auth:position-rule:query",
+        path="/ims/auth/position",
+        status="ENABLED",
+        sort=0,
+        visible=True,
+    ))
+    created.append(position_rule)
+    expected[position_rule.perm_code] = position_rule.path
 
     assert expected
     assert all(path and path.strip() for path in expected.values())
     assert "/ims/workbench" not in expected.values()
-    assert expected["ims:auth:org:query"] == "/ims/auth/org"
-    assert expected["ims:auth:position:query"] == "/ims/auth/position"
+    assert expected["ims:system:org-sync:query"] == "/ims/auth/org"
+    assert expected["ims:auth:position-rule:query"] == "/ims/auth/position"
 
     person = _add_user(db_session, "menu_path_user")
     granted = role(db_session, "menu_path_role", "菜单路径")

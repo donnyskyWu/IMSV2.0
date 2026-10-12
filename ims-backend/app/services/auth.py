@@ -73,6 +73,22 @@ def session_remaining_seconds(session_data: dict[str, Any]) -> int:
     return int((deadline - get_now()).total_seconds())
 
 
+def _access_token_time_rejected(payload: dict[str, Any]) -> bool:
+    """access 的 exp / iat 跟注入时钟比，不跟机器墙钟比。
+
+    PyJWT 默认用 time.time()。单测把时钟拨到登录后将近 7 天时，
+    刚换发的 access 的 iat 会落在墙钟的未来，被误判成尚未生效，
+    从而盖住「会话剩余时间到点」这条校验。
+    """
+    now = get_now()
+    now_ts = now.timestamp()
+    exp = payload.get("exp")
+    if exp is not None and now_ts >= float(exp):
+        return True
+    iat = payload.get("iat")
+    return iat is not None and now_ts < float(iat)
+
+
 class AuthService:
     """Authentication and authorization service."""
 
@@ -288,16 +304,18 @@ class AuthService:
         Returns dict with user_id, tenant_id, perm_codes, data_scopes, etc.
         """
         try:
+            # exp/iat 交给 _access_token_time_rejected，跟 get_now() 比。
             payload = jwt.decode(
                 token,
                 settings.jwt.secret,
                 algorithms=[settings.jwt.algorithm],
+                options={"verify_exp": False, "verify_iat": False},
             )
-        except jwt.ExpiredSignatureError as e:
-            raise BizError(1002) from e
         except jwt.InvalidTokenError as e:
             raise BizError(1002) from e
 
+        if _access_token_time_rejected(payload):
+            raise BizError(1002)
         if payload.get("type") != "access":
             raise BizError(1002)
 
@@ -442,6 +460,7 @@ class AuthService:
         if user is None or user.status in ("FROZEN", "RESIGNED"):
             raise BizError(1002)
         # 停用或过期租户不能靠刷新续命，与登录共用同一校验。
+        # 调用方 refresh() 已经 GETDEL 领走旧令牌。这里返回 1008 时旧 refresh 不会退回，必须重新登录。
         reject_unavailable_tenant(user.tenant_id)
 
         now = get_now()
@@ -489,7 +508,8 @@ class AuthService:
         - 轮换不滑动续期：到期时间沿用登录时写入的 expires_at，
           新 refresh 的 Redis TTL 等于剩余秒数
         - 登录起满 7 天（剩余 <= 0）→ 1002
-        - 租户停用或过期 → 1008（与登录共用 reject_unavailable_tenant）
+        - 先 GETDEL 领走旧 refresh，再校验租户。租户停用或过期 → 1008
+          （与登录共用 reject_unavailable_tenant）。1008 时旧 refresh 已消耗，必须重新登录
         - 同一枚令牌并发领取：只有一个成功，另一个 1002，且不吊销会话
         - GETDEL 为空且没有已轮换记录：1002
         - 重放已经轮换过的刷新令牌：1002，并吊销整段会话
@@ -501,6 +521,8 @@ class AuthService:
         lock_key = f"{self.REFRESH_LOCK_PREFIX}{refresh_token}"
         index_key = f"{self.REFRESH_INDEX_PREFIX}{refresh_token}"
         used_key = f"{self.REFRESH_USED_PREFIX}{refresh_token}"
+        # 先领走旧 refresh，再进 _issue_rotated_tokens 校验租户。
+        # 租户停用或过期返回 1008 时，旧令牌已经消耗，调用方必须重新登录。
         # status: ok / concurrent / reuse / missing（GETDEL 为空且不是重放）
         session_id, status = Cache.claim_refresh(lock_key, index_key, used_key, lock_ttl=10)
         try:
