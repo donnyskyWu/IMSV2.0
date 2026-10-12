@@ -112,7 +112,8 @@ jobs:
         working-directory: ims-web
         run: npx playwright install --with-deps chromium
 
-      - name: Start Vite and warm / and /login
+      # 就绪检查：确认 Vite 已在 3000 响应 / 与 /login，再交给 Playwright。
+      - name: Vite 就绪检查
         working-directory: ims-web
         run: |
           nohup npm run dev > /tmp/vite.log 2>&1 &
@@ -131,6 +132,16 @@ jobs:
       - name: Run live proxy test
         working-directory: ims-web
         run: npm run test:live-proxy
+
+      - name: Print Vite log and fail on reload
+        if: always()
+        run: |
+          echo "===== /tmp/vite.log ====="
+          cat /tmp/vite.log
+          if grep -q "reloading" /tmp/vite.log; then
+            echo "Vite 日志出现 reloading"
+            exit 1
+          fi
 
       - name: Upload live proxy report
         uses: actions/upload-artifact@v4
