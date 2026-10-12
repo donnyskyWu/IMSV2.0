@@ -56,7 +56,8 @@ class TestDatabaseHealth:
         from app.db.session import DatabaseHealth, init_db
         init_db()
         result = DatabaseHealth.check_ims()
-        assert isinstance(result, bool)
+        # 裸字符串 SELECT 在 SQLAlchemy 2 会抛错并被吞掉，结果变成 False。
+        assert result is True
 
     def test_check_football_returns_tuple(self):
         """Test check_football returns (bool, str) tuple."""
@@ -93,15 +94,16 @@ class TestGetDbSession:
 class TestGetDb:
     """Tests for get_db dependency."""
 
-    def test_get_db_generator(self):
-        """Test get_db is a generator function."""
+    async def test_get_db_generator(self):
+        """get_db 是异步生成器，这样 ContextVar 才能留在请求任务里。"""
         from app.db.session import get_db, init_db
 
         init_db()
         gen = get_db()
-        assert hasattr(gen, "__next__")
+        assert hasattr(gen, "__anext__")
+        await gen.aclose()
 
-    def test_get_db_yields_session(self):
+    async def test_get_db_yields_session(self):
         """Test get_db yields a Session object."""
         from sqlalchemy.orm import Session
 
@@ -109,13 +111,11 @@ class TestGetDb:
 
         init_db()
         gen = get_db()
-        session = next(gen)
+        session = await anext(gen)
         assert isinstance(session, Session)
+        await gen.aclose()
 
-        # Cleanup - exhaust generator
-        gen.close()
-
-    def test_get_db_session_available_during_request(self):
+    async def test_get_db_session_available_during_request(self):
         """Test get_db_session works during request context."""
         from sqlalchemy.orm import Session
 
@@ -123,15 +123,13 @@ class TestGetDb:
 
         init_db()
         gen = get_db()
-        request_session = next(gen)
+        request_session = await anext(gen)
 
         # Now get_db_session should work
         ctx_session = get_db_session()
         assert ctx_session is request_session
         assert isinstance(ctx_session, Session)
-
-        # Cleanup - exhaust generator
-        gen.close()
+        await gen.aclose()
 
 
 class TestInitDb:
@@ -152,3 +150,51 @@ class TestInitDb:
         init_db()
         from app.db.session import SessionLocal
         assert SessionLocal is not None
+
+
+class TestUseDbSession:
+    """请求会话的提交、回滚，以及借用已有会话。"""
+
+    def test_borrowed_session_is_not_closed(self, db_session):
+        """夹具已经绑过会话时，请求边界不能把它关掉。"""
+        from app.db.session import use_db_session
+        from app.domains.sys.models import Tenant
+
+        with use_db_session() as session:
+            assert session is db_session
+        assert db_session.query(Tenant).count() >= 0
+
+    def test_commit_persists_and_rollback_discards(self, db_engine):
+        """新建会话成功则提交，异常则回滚。"""
+        from sqlalchemy.orm import sessionmaker
+
+        import app.db.session as sess
+        from app.domains.sys.models import Tenant
+
+        token = sess._db_session.set(None)
+        previous_local = sess.SessionLocal
+        previous_engine = sess.engine
+        sess.engine = db_engine
+        sess.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+        try:
+            with sess.use_db_session() as session:
+                session.add(Tenant(tenant_id=1, name="提交探针", status="ENABLED"))
+
+            with sess.use_db_session() as session:
+                saved = session.query(Tenant).filter(Tenant.name == "提交探针").one()
+                assert saved.id is not None
+                session.delete(saved)
+
+            with pytest.raises(RuntimeError, match="boom"):
+                with sess.use_db_session() as session:
+                    session.add(Tenant(tenant_id=1, name="回滚探针", status="ENABLED"))
+                    session.flush()
+                    raise RuntimeError("boom")
+
+            with sess.use_db_session() as session:
+                assert session.query(Tenant).filter(Tenant.name == "回滚探针").first() is None
+                assert session.query(Tenant).filter(Tenant.name == "提交探针").first() is None
+        finally:
+            sess.SessionLocal = previous_local
+            sess.engine = previous_engine
+            sess._db_session.reset(token)

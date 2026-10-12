@@ -6,12 +6,14 @@ Orchestrates all seed operations in correct order.
 
 from typing import Optional
 
+from tools.seed.access import seed_access
 from tools.seed.depts import seed_depts
 from tools.seed.dicts import seed_dicts
 from tools.seed.menus import seed_menus
 from tools.seed.params import seed_params
 from tools.seed.roles import seed_roles
 from tools.seed.tenant import seed_tenant
+from tools.seed.users import seed_users
 
 
 def run_seeds(
@@ -29,6 +31,8 @@ def run_seeds(
     4. menus - Menu tree with permission codes
     5. roles - Standard roles with menu assignments
     6. depts - Root and system departments
+    7. access - Default package, package menus, R1 role menus
+    8. users - E2E login account (only --env e2e)
     
     Args:
         env: Environment (dev/test/e2e/prod)
@@ -38,7 +42,10 @@ def run_seeds(
     Returns:
         True if all seeds succeeded
     """
-    all_seeds = ["tenant", "dicts", "params", "menus", "roles", "depts"]
+    # access 依赖菜单和角色；users 只在 e2e 生成测试账号。
+    all_seeds = ["tenant", "dicts", "params", "menus", "roles", "depts", "access"]
+    if env == "e2e":
+        all_seeds.append("users")
 
     # Determine which seeds to run
     seeds_to_run = only if only else all_seeds
@@ -64,22 +71,38 @@ def run_seeds(
         "menus": seed_menus,
         "roles": seed_roles,
         "depts": seed_depts,
+        "access": seed_access,
+        "users": seed_users,
     }
 
-    results = {}
-    for seed_name in all_seeds:
-        if seed_name not in seeds_to_run:
-            continue
+    # 种子函数通过 get_db_session() 取会话，脚本进程里必须先绑上。
+    from app.db.session import init_db, use_db_session
 
-        print(f"--- Seeding {seed_name} ---")
-        try:
+    if not dry_run:
+        init_db()
+
+    def _execute() -> dict[str, int]:
+        executed: dict[str, int] = {}
+        for seed_name in all_seeds:
+            if seed_name not in seeds_to_run:
+                continue
+            print(f"--- Seeding {seed_name} ---")
             func = seed_functions[seed_name]
             count = func(env=env, dry_run=dry_run)
-            results[seed_name] = count
+            executed[seed_name] = count
             print(f"  {seed_name}: {count} records")
-        except Exception as e:
-            print(f"  ERROR: {e}")
-            return False
+        return executed
+
+    try:
+        # dry-run 不连库。真实执行包在同一会话里，失败整体回滚未提交的写入。
+        if dry_run:
+            results = _execute()
+        else:
+            with use_db_session():
+                results = _execute()
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        return False
 
     print()
     print("=== Seed Summary ===")

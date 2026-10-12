@@ -10,8 +10,6 @@ import argparse
 import os
 import sys
 
-from tools.seed.runner import run_seeds
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -37,8 +35,9 @@ def main():
 
     args = parser.parse_args()
 
-    # Set environment
+    # 先写环境再导入种子，避免 get_settings() 按旧环境缓存。
     os.environ["IMS_ENV"] = args.env
+    from tools.seed.runner import run_seeds
 
     # Parse --only list
     only = None
