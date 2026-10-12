@@ -9,6 +9,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  // 真后端联通在 playwright.live.config.ts 里单独跑，避免没起 API 时把组件用例打红
+  testIgnore: /live-proxy\.spec\.ts/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -73,13 +75,14 @@ export default defineConfig({
   // 开发服务器供桌面/移动用例；独立的 production preview 供 VC-M-34
   webServer: [
     {
-      command: 'npm run dev',
+      // 组件用例自己 mock 网络。关掉代理，避免没起后端时 502 变成 console.error
+      command: 'VITE_API_PROXY_TARGET=off npm run dev',
       url: 'http://127.0.0.1:3000',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
     {
-      command: 'npm run build && npm run preview',
+      command: 'VITE_API_PROXY_TARGET=off npm run build && VITE_API_PROXY_TARGET=off npm run preview',
       url: 'http://127.0.0.1:4173',
       reuseExistingServer: !process.env.CI,
       timeout: 300_000,

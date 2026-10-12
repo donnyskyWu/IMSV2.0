@@ -11,6 +11,7 @@
     "lint:eslint": "eslint . --fix",
     "lint:stylelint": "stylelint \"src/**/*.{css,scss,vue}\" --fix",
     "test": "playwright test",
+    "test:live-proxy": "playwright test --config=playwright.live.config.ts",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report"
   },

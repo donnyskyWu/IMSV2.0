@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -40,8 +40,27 @@ function routesEndpointPlugin(): Plugin {
   }
 }
 
+/**
+ * 开发服务器和 preview 共用的后端代理。
+ * 浏览器访问 /admin-api、/health 时转到 FastAPI。
+ * 目标地址用 VITE_API_PROXY_TARGET 覆盖，默认 http://127.0.0.1:8000。
+ * 不配代理时这两个前缀会落到 Vite 自己，开发环境前后端对不上。
+ */
+function backendProxy(mode: string): Record<string, { target: string; changeOrigin: boolean }> | undefined {
+  const fileEnv = loadEnv(mode, process.cwd(), '')
+  const raw = process.env.VITE_API_PROXY_TARGET ?? fileEnv.VITE_API_PROXY_TARGET
+  // off：只给「不连后端」的组件用例用。不设或设成地址时才转发。
+  if (raw === 'off') return undefined
+  const target = raw || 'http://127.0.0.1:8000'
+  return {
+    '/admin-api': { target, changeOrigin: true },
+    '/health': { target, changeOrigin: true },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const isTest = mode === 'test' || mode === 'development'
+  const proxy = backendProxy(mode)
 
   return {
     plugins: [
@@ -61,7 +80,7 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, 'src'),
+        '@': path.resolve(import.meta.dirname, 'src'),
       },
     },
     css: {
@@ -73,15 +92,55 @@ export default defineConfig(({ mode }) => {
     },
     // 开发服务器与生产构建并行时分开缓存目录，避免互相覆盖
     cacheDir: mode === 'development' ? 'node_modules/.vite' : 'node_modules/.vite-build',
+    // 登录页和布局是懒加载的。冷缓存第一次打开时，这些依赖不在入口扫描里，
+    // Vite 会临时预构建并整页重载，把正在进行的登录导航打断。
+    optimizeDeps: {
+      include: [
+        'vue',
+        'vue-router',
+        'pinia',
+        'axios',
+        'element-plus',
+        'element-plus/es',
+        'element-plus/es/locale/lang/zh-cn',
+        '@element-plus/icons-vue',
+        // 冷启动日志里实际触发 reloading 的样式，以及登录/布局直接用到的消息组件
+        ...[
+          'avatar',
+          'badge',
+          'base',
+          'button',
+          'dropdown',
+          'dropdown-item',
+          'dropdown-menu',
+          'form',
+          'form-item',
+          'icon',
+          'input',
+          'menu',
+          'menu-item',
+          'message',
+          'message-box',
+          'progress',
+          'scrollbar',
+          'sub-menu',
+          'table',
+          'table-column',
+        ].map((name) => `element-plus/es/components/${name}/style/css`),
+      ],
+    },
     server: {
       port: 3000,
       host: '127.0.0.1',
       strictPort: true,
+      // 与 preview 使用同一份代理，避免预览环境和开发环境行为不一致
+      ...(proxy ? { proxy } : {}),
     },
     preview: {
       port: 4173,
       host: '127.0.0.1',
       strictPort: true,
+      ...(proxy ? { proxy } : {}),
     },
   }
 })
