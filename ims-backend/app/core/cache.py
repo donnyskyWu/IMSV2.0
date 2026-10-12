@@ -24,10 +24,10 @@ _cache_mode: str = "MEMORY"  # MEMORY or REDIS
 def init_cache() -> None:
     """Initialize cache backend."""
     global _redis_client, _cache_mode
-    
+
     from app.core.config import get_settings
     settings = get_settings()
-    
+
     # Try to connect to Redis
     if settings.redis.url:
         try:
@@ -62,30 +62,30 @@ def init_cache() -> None:
 
 class CacheHealth:
     """Cache health check utilities."""
-    
+
     @staticmethod
     def check() -> tuple[bool, str]:
         """
         Check cache health.
-        
+
         Returns:
             (is_up, status): status is UP/DOWN/MEMORY
         """
         global _redis_client, _cache_mode
-        
+
         if _redis_client is not None:
             try:
                 _redis_client.ping()
                 return True, "UP"
             except Exception:
                 return False, "DOWN"
-        
+
         return True, _cache_mode
 
 
 class Cache:
     """Cache interface with Redis and memory fallback."""
-    
+
     @staticmethod
     def get(key: str) -> Optional[str]:
         """Get value from cache."""
@@ -105,7 +105,7 @@ class Cache:
                 del _memory_cache[key]
                 return None
             return value
-    
+
     @staticmethod
     def set(key: str, value: str, ttl: Optional[int] = None) -> bool:
         """Set value in cache with optional TTL (seconds)."""
@@ -124,7 +124,7 @@ class Cache:
             expires_at = time.time() + ttl if ttl else None
             _memory_cache[key] = (value, expires_at)
             return True
-    
+
     @staticmethod
     def delete(key: str) -> bool:
         """Delete key from cache."""
@@ -138,7 +138,7 @@ class Cache:
         else:
             _memory_cache.pop(key, None)
             return True
-    
+
     @staticmethod
     def setnx(key: str, value: str, ttl: Optional[int] = None) -> bool:
         """Set if not exists (for locks). Returns True if set."""
@@ -158,7 +158,7 @@ class Cache:
                 _memory_cache[key] = (value, expires_at)
                 return True
             return False
-    
+
     @staticmethod
     def incr(key: str) -> int:
         """Increment counter. Returns new value."""
@@ -177,7 +177,7 @@ class Cache:
             new_val = int(value) + 1
             _memory_cache[key] = (str(new_val), expires_at)
             return new_val
-    
+
     @staticmethod
     def get_json(key: str) -> Optional[Any]:
         """Get JSON value from cache."""
@@ -188,12 +188,12 @@ class Cache:
             return json.loads(value)
         except json.JSONDecodeError:
             return None
-    
+
     @staticmethod
     def set_json(key: str, value: Any, ttl: Optional[int] = None) -> bool:
         """Set JSON value in cache."""
         return Cache.set(key, json.dumps(value), ttl)
-    
+
     @staticmethod
     def getdel(key: str) -> Optional[str]:
         """Get and delete (atomic for Redis)."""
@@ -208,7 +208,7 @@ class Cache:
             if item is None:
                 return None
             return item[0]
-    
+
     @staticmethod
     def sadd(key: str, *members: str) -> int:
         """Add members to set."""
@@ -227,7 +227,7 @@ class Cache:
                 s.update(members)
             _memory_cache[key] = (s, None)
             return len(members)
-    
+
     @staticmethod
     def smembers(key: str) -> set[str]:
         """Get all members of set."""
@@ -242,7 +242,7 @@ class Cache:
             if item is None:
                 return set()
             return item[0] if isinstance(item[0], set) else set()
-    
+
     @staticmethod
     def srem(key: str, *members: str) -> int:
         """Remove members from set."""
@@ -264,7 +264,7 @@ class Cache:
                     removed += 1
             _memory_cache[key] = (s, None)
             return removed
-    
+
     @staticmethod
     def expire(key: str, ttl: int) -> bool:
         """Set TTL on existing key."""

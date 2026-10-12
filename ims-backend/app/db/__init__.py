@@ -8,19 +8,19 @@ Database components:
 - Tenant and data scope filtering
 """
 
-from app.db.session import (
-    get_db,
-    get_db_session,
-    engine,
-    SessionLocal,
-)
 from app.db.base import (
-    Base,
-    AuditBase,
-    PlatformBase,
     AssociationBase,
+    AuditBase,
+    Base,
+    PlatformBase,
 )
 from app.db.repository import BaseRepository
+from app.db.session import (
+    SessionLocal,
+    engine,
+    get_db,
+    get_db_session,
+)
 from app.db.transaction import transactional
 
 __all__ = [

@@ -8,7 +8,7 @@ Tests can inject a fake clock via set_clock() for deterministic time testing.
 Per work package D4: 取当前时间一律调用 app/core 的时钟函数，禁止直接调 datetime.now()
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
@@ -24,7 +24,7 @@ def _default_clock() -> datetime:
 def get_now() -> datetime:
     """
     Get current time using the configured clock.
-    
+
     Returns Beijing timezone datetime by default.
     Tests can override via set_clock().
     """
@@ -36,7 +36,7 @@ def get_now() -> datetime:
 def set_clock(clock_fn: Callable[[], datetime]) -> None:
     """
     Set a custom clock function for testing.
-    
+
     Example:
         def fake_clock():
             return datetime(2026, 10, 12, 10, 0, 0, tzinfo=BEIJING_TZ)
@@ -68,8 +68,5 @@ def format_datetime(dt: datetime) -> str:
 def parse_datetime(s: str) -> datetime:
     """Parse ISO 8601 datetime string, converting to Beijing time."""
     dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=BEIJING_TZ)
-    else:
-        dt = dt.astimezone(BEIJING_TZ)
+    dt = dt.replace(tzinfo=BEIJING_TZ) if dt.tzinfo is None else dt.astimezone(BEIJING_TZ)
     return dt

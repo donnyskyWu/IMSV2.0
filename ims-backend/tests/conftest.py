@@ -9,9 +9,10 @@ Rules:
 """
 
 import os
-import pytest
 from datetime import datetime
 from typing import Generator
+
+import pytest
 
 # Set test environment BEFORE importing app modules
 os.environ["IMS_ENV"] = "test"
@@ -26,9 +27,9 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
-from app.core.clock import set_clock, reset_clock
+from app.core.clock import reset_clock, set_clock
 from app.core.context import RequestContext, ctx
+from app.db.base import Base
 
 
 @pytest.fixture(scope="function")
@@ -40,40 +41,40 @@ def db_engine():
         poolclass=StaticPool,
         echo=False,
     )
-    
+
     # Enable foreign keys for SQLite
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
-    
+
     # Import all models to ensure they're registered with Base
     from app.domains.sys import models  # noqa: F401
-    
+
     # Create all tables
     Base.metadata.create_all(bind=engine)
-    
+
     yield engine
-    
+
     engine.dispose()
 
 
 @pytest.fixture(scope="function")
 def db_session(db_engine) -> Generator[Session, None, None]:
     """Create a new database session for each test."""
-    TestingSessionLocal = sessionmaker(
+    testing_session_local = sessionmaker(
         autocommit=False,
         autoflush=False,
         bind=db_engine,
     )
-    
-    session = TestingSessionLocal()
-    
+
+    session = testing_session_local()
+
     # Set up session in context
     from app.db.session import _db_session
     token = _db_session.set(session)
-    
+
     try:
         yield session
     finally:
@@ -130,7 +131,7 @@ def admin_context():
 def fixed_time():
     """
     Fixture to set a fixed time for tests.
-    
+
     Usage:
         def test_with_fixed_time(fixed_time):
             fixed_time(datetime(2026, 10, 12, 10, 0, 0))
@@ -138,9 +139,9 @@ def fixed_time():
     """
     def _set_time(dt: datetime):
         set_clock(lambda: dt)
-    
+
     yield _set_time
-    
+
     # Reset clock after test
     reset_clock()
 
@@ -149,7 +150,7 @@ def fixed_time():
 def client(db_session) -> Generator[TestClient, None, None]:
     """Create test client with database session."""
     from app.main import app
-    
+
     with TestClient(app) as c:
         yield c
 
@@ -166,7 +167,7 @@ def auth_client(client, admin_context) -> TestClient:
 def sample_user(db_session, test_context) -> dict:
     """Create a sample user for testing."""
     from app.domains.sys.models import User
-    
+
     user = User(
         id=1,
         tenant_id=1,
@@ -177,7 +178,7 @@ def sample_user(db_session, test_context) -> dict:
     )
     db_session.add(user)
     db_session.flush()
-    
+
     return {
         "id": user.id,
         "username": user.username,
@@ -189,7 +190,7 @@ def sample_user(db_session, test_context) -> dict:
 def sample_dept(db_session, test_context) -> dict:
     """Create a sample department for testing."""
     from app.domains.sys.models import Dept
-    
+
     root_dept = Dept(
         id=1,
         tenant_id=1,
@@ -200,7 +201,7 @@ def sample_dept(db_session, test_context) -> dict:
         source="LOCAL",
     )
     db_session.add(root_dept)
-    
+
     child_dept = Dept(
         id=2,
         tenant_id=1,
@@ -211,7 +212,7 @@ def sample_dept(db_session, test_context) -> dict:
         source="LOCAL",
     )
     db_session.add(child_dept)
-    
+
     system_dept = Dept(
         id=3,
         tenant_id=1,
@@ -222,9 +223,9 @@ def sample_dept(db_session, test_context) -> dict:
         source="SYSTEM",
     )
     db_session.add(system_dept)
-    
+
     db_session.flush()
-    
+
     return {
         "root": {"id": 1, "name": "Root Department"},
         "child": {"id": 2, "name": "Child Department"},
@@ -235,8 +236,8 @@ def sample_dept(db_session, test_context) -> dict:
 @pytest.fixture
 def sample_dict(db_session, test_context) -> dict:
     """Create sample dictionary data for testing."""
-    from app.domains.sys.models import DictType, DictData
-    
+    from app.domains.sys.models import DictData, DictType
+
     dict_type = DictType(
         id=1,
         tenant_id=1,
@@ -245,13 +246,13 @@ def sample_dict(db_session, test_context) -> dict:
         status="ENABLED",
     )
     db_session.add(dict_type)
-    
+
     statuses = [
         ("ACTIVE", "在职", "success"),
         ("FROZEN", "冻结", "warning"),
         ("RESIGNED", "离职", "danger"),
     ]
-    
+
     for i, (value, label, color) in enumerate(statuses):
         data = DictData(
             id=100 + i,
@@ -265,9 +266,9 @@ def sample_dict(db_session, test_context) -> dict:
             is_builtin=True,
         )
         db_session.add(data)
-    
+
     db_session.flush()
-    
+
     return {
         "type": "dict_user_status",
         "values": ["ACTIVE", "FROZEN", "RESIGNED"],

@@ -54,7 +54,7 @@ class ErrorCodeDef:
     domain: str
     msg: str
     front_strategy: FrontStrategy = FrontStrategy.TOAST
-    
+
     def format_msg(self, **params: Any) -> str:
         """Format message with parameters."""
         try:
@@ -65,14 +65,14 @@ class ErrorCodeDef:
 
 class ErrorCodeRegistry:
     """Registry for all error codes."""
-    
+
     # Pattern to detect forbidden content in messages
     FORBIDDEN_PATTERN = re.compile(r"[A-Z_]{3,}|/admin-api")
-    
+
     def __init__(self) -> None:
         self._codes: dict[int, ErrorCodeDef] = {}
         self._frozen = False
-    
+
     def register(
         self,
         code: int,
@@ -83,14 +83,14 @@ class ErrorCodeRegistry:
         """Register an error code."""
         if self._frozen:
             raise RuntimeError("Error code registry is frozen")
-        
+
         # Check for duplicate
         if code in self._codes:
             existing = self._codes[code]
             raise ValueError(
                 f"Duplicate error code {code}: already registered by {existing.domain}"
             )
-        
+
         # Check domain range
         if domain == "COMMON":
             if code not in COMMON_CODES:
@@ -101,7 +101,7 @@ class ErrorCodeRegistry:
                 raise ValueError(
                     f"Code {code} outside range for {domain} domain ({min_code}-{max_code})"
                 )
-        
+
         # Check message content (no English codes or API paths)
         # Skip check for error code numbers themselves
         msg_check = re.sub(r'\d+', '', msg)  # Remove numbers
@@ -110,7 +110,7 @@ class ErrorCodeRegistry:
                 f"Error message for code {code} contains forbidden content "
                 f"(English codes or API paths): {msg}"
             )
-        
+
         error_def = ErrorCodeDef(
             code=code,
             domain=domain,
@@ -119,22 +119,22 @@ class ErrorCodeRegistry:
         )
         self._codes[code] = error_def
         return error_def
-    
+
     def get(self, code: int) -> Optional[ErrorCodeDef]:
         """Get error code definition."""
         return self._codes.get(code)
-    
+
     def freeze(self) -> None:
         """Freeze registry to prevent further registration."""
         self._frozen = True
-    
+
     def export_json(self) -> dict[int, dict[str, str]]:
         """Export for frontend error-codes.json (FP-H03-01)."""
         return {
             code: {"msg": defn.msg, "strategy": defn.front_strategy.value}
             for code, defn in self._codes.items()
         }
-    
+
     def all_codes(self) -> list[int]:
         """Get all registered codes."""
         return list(self._codes.keys())
@@ -195,7 +195,7 @@ error_codes.register(1273, "LIVE", "直播服务业务错误", FrontStrategy.TOA
 
 class BizError(Exception):
     """Business logic exception."""
-    
+
     def __init__(
         self,
         code: int,
@@ -205,7 +205,7 @@ class BizError(Exception):
     ) -> None:
         self.code = code
         self.data = data or {}
-        
+
         # Get message from registry
         error_def = error_codes.get(code)
         if error_def:
@@ -214,34 +214,34 @@ class BizError(Exception):
         else:
             self.msg = msg or "未知错误"
             self.front_strategy = FrontStrategy.TOAST
-        
+
         super().__init__(self.msg)
-    
+
     @classmethod
     def validation_error(cls, field_errors: list[dict[str, str]]) -> "BizError":
         """Create a validation error with field-level errors."""
         return cls(1001, data={"fieldErrors": field_errors})
-    
+
     @classmethod
     def not_found(cls) -> "BizError":
         """Create a resource not found error (1504, no details exposed)."""
         return cls(1504)
-    
+
     @classmethod
     def no_permission(cls, msg: Optional[str] = None) -> "BizError":
         """Create a permission denied error."""
         return cls(1008, msg=msg)
-    
+
     @classmethod
     def ref_not_exist(cls, field: str) -> "BizError":
         """Create a reference not exist error."""
         return cls(1500, data={"field": field})
-    
+
     @classmethod
     def ref_disabled(cls, field: str) -> "BizError":
         """Create a reference disabled error."""
         return cls(1501, data={"field": field})
-    
+
     @classmethod
     def ref_in_use(cls, refs: list[dict[str, Any]]) -> "BizError":
         """Create a reference in use error."""
@@ -250,11 +250,11 @@ class BizError(Exception):
 
 class FieldError:
     """Field-level validation error."""
-    
+
     def __init__(self, field: str, message: str) -> None:
         self.field = field
         self.message = message
-    
+
     def to_dict(self) -> dict[str, str]:
         return {"field": self.field, "message": self.message}
 

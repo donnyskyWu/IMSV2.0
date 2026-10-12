@@ -10,11 +10,10 @@ Per 02-单测用例.md UT-G02:
 - Todo cancellation marks as cancelled
 """
 
-import pytest
-from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Optional, List
+from datetime import datetime
 from enum import Enum
+from typing import List, Optional
 
 
 class TodoStatus(str, Enum):
@@ -49,7 +48,7 @@ class Todo:
 
 class TestTodoCreation:
     """Tests for todo creation (FP-G02-01)."""
-    
+
     def test_create_todo_for_user(self):
         """UT-G02-01: Business can create todo for specified users."""
         todo = Todo(
@@ -61,10 +60,10 @@ class TestTodoCreation:
             title="请审批订单",
             handler_user_ids=[100],
         )
-        
+
         assert todo.status == TodoStatus.PENDING
         assert 100 in todo.handler_user_ids
-    
+
     def test_todo_has_required_fields(self):
         """UT-G02-01: Todo has required fields."""
         todo = Todo(
@@ -75,7 +74,7 @@ class TestTodoCreation:
             biz_id="123",
             title="请审批订单",
         )
-        
+
         assert todo.id is not None
         assert todo.tenant_id is not None
         assert todo.todo_type is not None
@@ -86,72 +85,71 @@ class TestTodoCreation:
 
 class TestTodoDuplicatePrevention:
     """Tests for todo duplicate prevention (FP-G02-01)."""
-    
+
     def test_same_biz_key_returns_existing(self):
         """UT-G02-02: Same source + type does not create new todo."""
         existing_todos = [
-            Todo(id=1, tenant_id=1, todo_type=TodoType.APPROVAL, 
+            Todo(id=1, tenant_id=1, todo_type=TodoType.APPROVAL,
                  biz_type="order", biz_id="123", title="请审批订单")
         ]
-        
+
         # Try to create for same biz_type + biz_id
         new_biz_type = "order"
         new_biz_id = "123"
-        
+
         duplicate_exists = any(
             t.biz_type == new_biz_type and t.biz_id == new_biz_id
             for t in existing_todos
         )
-        
+
         assert duplicate_exists
-    
+
     def test_different_biz_id_creates_new(self):
         """UT-G02-02: Different biz_id creates new todo."""
         existing_todos = [
             Todo(id=1, tenant_id=1, todo_type=TodoType.APPROVAL,
                  biz_type="order", biz_id="123", title="请审批订单")
         ]
-        
+
         new_biz_id = "456"
-        
+
         duplicate_exists = any(
             t.biz_type == "order" and t.biz_id == new_biz_id
             for t in existing_todos
         )
-        
+
         assert not duplicate_exists
 
 
 class TestPermissionBasedHandler:
     """Tests for permission-based handler resolution (FP-G02-01)."""
-    
+
     def test_handler_by_permission_code(self):
         """UT-G02-03: Handlers resolved by permission code."""
-        permission_code = "ims:demo:order:audit"
-        
+
         # Mock: users with this permission
         users_with_permission = [100, 200]  # A and B
-        
+
         # But only A's data scope covers the order
         users_with_scope = [100]  # Only A
-        
+
         final_handlers = [u for u in users_with_permission if u in users_with_scope]
-        
+
         assert final_handlers == [100]
-    
+
     def test_handler_excludes_no_scope(self):
         """UT-G02-03: Users without data scope excluded."""
         users_with_permission = [100, 200]
         users_with_scope = [100]
-        
+
         excluded = [u for u in users_with_permission if u not in users_with_scope]
-        
+
         assert 200 in excluded
 
 
 class TestTodoCompletion:
     """Tests for todo completion (FP-G02-01)."""
-    
+
     def test_complete_todo_sets_done(self):
         """UT-G02-04: Completing sets status to DONE."""
         todo = Todo(
@@ -159,15 +157,15 @@ class TestTodoCompletion:
             biz_type="order", biz_id="123", title="请审批订单",
             handler_user_ids=[100, 200]
         )
-        
+
         # User 200 completes
         todo.status = TodoStatus.DONE
         todo.handler_user_id = 200
         todo.done_time = datetime.now()
-        
+
         assert todo.status == TodoStatus.DONE
         assert todo.handler_user_id == 200
-    
+
     def test_completed_todo_not_in_pending_list(self):
         """UT-G02-04: Completed todo not shown in pending list."""
         todos = [
@@ -178,27 +176,27 @@ class TestTodoCompletion:
                  biz_type="order", biz_id="456", title="请审批订单",
                  status=TodoStatus.PENDING),
         ]
-        
+
         pending = [t for t in todos if t.status == TodoStatus.PENDING]
-        
+
         assert len(pending) == 1
         assert pending[0].biz_id == "456"
 
 
 class TestTodoCancellation:
     """Tests for todo cancellation (FP-G02-01)."""
-    
+
     def test_cancel_todo_sets_cancelled(self):
         """UT-G02-05: Cancelling sets status to CANCELLED."""
         todo = Todo(
             id=1, tenant_id=1, todo_type=TodoType.APPROVAL,
             biz_type="order", biz_id="123", title="请审批订单"
         )
-        
+
         todo.status = TodoStatus.CANCELLED
-        
+
         assert todo.status == TodoStatus.CANCELLED
-    
+
     def test_cancelled_not_in_statistics(self):
         """UT-G02-05: Cancelled todos not counted in '应提交' statistics."""
         todos = [
@@ -209,16 +207,16 @@ class TestTodoCancellation:
                  biz_type="order", biz_id="456", title="请审批",
                  status=TodoStatus.PENDING),
         ]
-        
+
         # 应提交 only counts PENDING
         pending_count = sum(1 for t in todos if t.status == TodoStatus.PENDING)
-        
+
         assert pending_count == 1
 
 
 class TestTodoVisibility:
     """Tests for todo visibility (FP-G02-02)."""
-    
+
     def test_cannot_view_others_todo(self):
         """UT-G02-06: Cannot view/process another user's todo."""
         todo = Todo(
@@ -226,12 +224,12 @@ class TestTodoVisibility:
             biz_type="order", biz_id="123", title="请审批",
             handler_user_ids=[100]
         )
-        
+
         current_user_id = 200
         can_view = current_user_id in todo.handler_user_ids
-        
+
         assert not can_view
-    
+
     def test_handler_can_view_todo(self):
         """UT-G02-06: Handler can view their todo."""
         todo = Todo(
@@ -239,16 +237,16 @@ class TestTodoVisibility:
             biz_type="order", biz_id="123", title="请审批",
             handler_user_ids=[100, 200]
         )
-        
+
         current_user_id = 100
         can_view = current_user_id in todo.handler_user_ids
-        
+
         assert can_view
 
 
 class TestTodoCount:
     """Tests for todo count by type (FP-G02-02)."""
-    
+
     def test_count_by_type(self):
         """UT-G02-07: Can count todos by type."""
         todos = [
@@ -271,14 +269,14 @@ class TestTodoCount:
                  biz_type="perf", biz_id="3", title="预警",
                  handler_user_ids=[100], status=TodoStatus.PENDING),
         ]
-        
+
         user_id = 100
         user_todos = [t for t in todos if user_id in t.handler_user_ids and t.status == TodoStatus.PENDING]
-        
+
         counts = {}
         for todo in user_todos:
             counts[todo.todo_type] = counts.get(todo.todo_type, 0) + 1
-        
+
         assert counts[TodoType.APPROVAL] == 2
         assert counts[TodoType.RETURN] == 1
         assert counts[TodoType.WARNING] == 3
@@ -286,7 +284,7 @@ class TestTodoCount:
 
 class TestTodoMultipleHandlers:
     """Tests for todos with multiple handlers."""
-    
+
     def test_any_handler_can_complete(self):
         """UT-G02-04: Any handler can complete the todo."""
         todo = Todo(
@@ -294,11 +292,11 @@ class TestTodoMultipleHandlers:
             biz_type="order", biz_id="123", title="请审批",
             handler_user_ids=[100, 200]
         )
-        
+
         # Either user can complete
         assert 100 in todo.handler_user_ids
         assert 200 in todo.handler_user_ids
-    
+
     def test_completion_records_handler(self):
         """UT-G02-04: Completion records which handler did it."""
         todo = Todo(
@@ -306,9 +304,9 @@ class TestTodoMultipleHandlers:
             biz_type="order", biz_id="123", title="请审批",
             handler_user_ids=[100, 200]
         )
-        
+
         # User 200 completes
         todo.status = TodoStatus.DONE
         todo.handler_user_id = 200
-        
+
         assert todo.handler_user_id == 200

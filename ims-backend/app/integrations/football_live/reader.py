@@ -13,9 +13,9 @@ Error codes:
 - 1273: Cross-tenant access
 """
 
-from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
 
 
 @dataclass
@@ -49,18 +49,18 @@ UNAVAILABLE = FootballUnavailable()
 class FootballLiveReader:
     """
     Football live room read-only repository.
-    
+
     Per FP-H06-01:
     - Uses second database engine (read-only)
     - Returns UNAVAILABLE marker when service is down
     - Applies tenant mapping
     """
-    
+
     def __init__(self, mode: str = "mock"):
         self.mode = mode
         self._mock_rooms: dict[int, FootballRoom] = {}
         self._tenant_map: dict[int, int] = {1: 1}  # Football tenant 1 -> IMS tenant 1
-    
+
     def get_room(
         self,
         room_id: int,
@@ -68,7 +68,7 @@ class FootballLiveReader:
     ) -> FootballRoom | FootballUnavailable | None:
         """
         Get room by ID with tenant filtering.
-        
+
         Returns:
             - FootballRoom if found and tenant matches
             - None if not found or deleted
@@ -79,13 +79,13 @@ class FootballLiveReader:
             if room is None:
                 return None
             return room
-        
+
         # Real implementation would:
         # 1. Query football_live engine
         # 2. Apply tenant mapping
         # 3. Return UNAVAILABLE if connection fails
         return UNAVAILABLE
-    
+
     def room_exists_for_bind(
         self,
         room_id: int,
@@ -93,17 +93,17 @@ class FootballLiveReader:
     ) -> bool | FootballUnavailable:
         """
         Check if room exists and is valid for binding.
-        
+
         Per FP-H06-01:
         - Used when creating/updating live session
         """
         result = self.get_room(room_id, tenant_id)
-        
+
         if isinstance(result, FootballUnavailable):
             return UNAVAILABLE
-        
+
         return result is not None
-    
+
     def live_duration(
         self,
         author_id: int,
@@ -112,24 +112,24 @@ class FootballLiveReader:
     ) -> int | FootballUnavailable:
         """
         Calculate total live duration for an author.
-        
+
         Per FP-H06-01:
         - Matches RoomMapper.xml#getLiveRoomCount logic
         - Uses create_time for filtering
-        
+
         Returns:
             Total minutes of live time, or UNAVAILABLE
         """
         if self.mode == "mock":
             # Return mock duration
             return 120  # 2 hours
-        
+
         return UNAVAILABLE
-    
+
     def set_mock_room(self, room: FootballRoom) -> None:
         """Add a mock room for testing."""
         self._mock_rooms[room.id] = room
-    
+
     def clear_mock_rooms(self) -> None:
         """Clear all mock rooms."""
         self._mock_rooms.clear()

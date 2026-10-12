@@ -15,8 +15,8 @@ Also includes:
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Request
+from pydantic import Field
 
 from app.core.response import CommonResult
 from app.core.serialization import BaseSchema
@@ -100,7 +100,7 @@ class DingTalkSSORequest(BaseSchema):
 async def login(request: LoginRequest) -> CommonResult[LoginResponse]:
     """
     Local username/password login.
-    
+
     Rules per FP-D01-01:
     - User not exist or wrong password -> 1214 (same message)
     - 5 consecutive failures -> lock 15 minutes, return 1215
@@ -110,7 +110,7 @@ async def login(request: LoginRequest) -> CommonResult[LoginResponse]:
     - Non-existent username also counts failures (prevent enumeration)
     """
     from app.services.auth import AuthService
-    
+
     auth_service = AuthService()
     result = await auth_service.login(
         username=request.username,
@@ -123,13 +123,13 @@ async def login(request: LoginRequest) -> CommonResult[LoginResponse]:
 async def refresh_token(request: RefreshTokenRequest) -> CommonResult[LoginResponse]:
     """
     Refresh access token.
-    
+
     Rules per FP-D01-03:
     - Valid refresh -> new access + new refresh (old refresh invalidated)
     - Invalid/expired/reused refresh -> 1002 (HTTP 401)
     """
     from app.services.auth import AuthService
-    
+
     auth_service = AuthService()
     result = await auth_service.refresh(refresh_token=request.refresh_token)
     return CommonResult.success(data=result)
@@ -139,22 +139,21 @@ async def refresh_token(request: RefreshTokenRequest) -> CommonResult[LoginRespo
 async def logout(request: Request) -> CommonResult:
     """
     Logout current session.
-    
+
     Rules per FP-D01-04:
     - Delete current session
     - Add access token sid to blacklist (TTL = remaining time)
     """
     from app.services.auth import AuthService
-    from app.api.deps import get_current_user_optional
-    
+
     auth_service = AuthService()
-    
+
     # Get token from header
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
         await auth_service.logout(token)
-    
+
     return CommonResult.success()
 
 
@@ -162,16 +161,16 @@ async def logout(request: Request) -> CommonResult:
 async def get_current_user_info() -> CommonResult[MeResponse]:
     """
     Get current user's info, menus, and permissions.
-    
+
     Rules per FP-D06-01:
     - Menu tree = tenant package menus ∩ enabled role menus
     - permCodes from all enabled roles
     - dataScopeText in Chinese (e.g., "本部门（市场一部、市场二部）")
     - PENDING_CONFIG or empty permissions -> empty menus with prompt
     """
-    from app.services.auth import AuthService
     from app.core.context import ctx
-    
+    from app.services.auth import AuthService
+
     auth_service = AuthService()
     user_id = ctx.require_user_id()
     result = await auth_service.get_current_user_info(user_id)
@@ -182,15 +181,16 @@ async def get_current_user_info() -> CommonResult[MeResponse]:
 async def dingtalk_sso_redirect(redirect: str = "/"):
     """
     DingTalk SSO redirect.
-    
+
     Rules per FP-D02-01:
     - Generate 32-char random state, store in Redis 5 min (with redirect)
     - redirect must be site-relative path, otherwise replace with /
     - DingTalk not configured -> 1008
     """
-    from app.services.auth import AuthService
     from fastapi.responses import RedirectResponse
-    
+
+    from app.services.auth import AuthService
+
     auth_service = AuthService()
     redirect_url = await auth_service.get_dingtalk_redirect_url(redirect)
     return RedirectResponse(url=redirect_url)
@@ -200,7 +200,7 @@ async def dingtalk_sso_redirect(redirect: str = "/"):
 async def dingtalk_sso_callback(auth_code: str, state: str):
     """
     DingTalk SSO callback.
-    
+
     Rules per FP-D02-02:
     - state not exist/expired/used -> 1002 (GETDEL atomic)
     - Use authCode to get DingTalk userid + phone
@@ -209,9 +209,10 @@ async def dingtalk_sso_callback(auth_code: str, state: str):
     - FROZEN/RESIGNED -> 1216
     - Success: issue tokens, 302 to /sso-callback#accessToken=...&refreshToken=...&redirect=...
     """
-    from app.services.auth import AuthService
     from fastapi.responses import RedirectResponse
-    
+
+    from app.services.auth import AuthService
+
     auth_service = AuthService()
     callback_url = await auth_service.handle_dingtalk_callback(auth_code, state)
     return RedirectResponse(url=callback_url)

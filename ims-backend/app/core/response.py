@@ -18,31 +18,31 @@ T = TypeVar("T")
 class CommonResult(BaseModel, Generic[T]):
     """
     Unified API response format.
-    
+
     All API responses follow this structure:
     - code: 0 for success, non-zero for errors
     - msg: Human-readable message in Chinese
     - data: Response payload (can be any type)
     """
-    
+
     code: int = Field(default=0, description="Response code, 0 = success")
     msg: str = Field(default="成功", description="Response message")
     data: Optional[T] = Field(default=None, description="Response data")
-    
+
     model_config = {"json_schema_extra": {"examples": [{"code": 0, "msg": "成功", "data": {}}]}}
-    
+
     @classmethod
     def success(cls, data: Optional[T] = None, msg: str = "成功") -> "CommonResult[T]":
         """Create a success response."""
         return cls(code=0, msg=msg, data=data)
-    
+
     @classmethod
     def error(cls, code: int, msg: str, data: Optional[T] = None) -> "CommonResult[T]":
         """Create an error response."""
         return cls(code=code, msg=msg, data=data)
-    
+
     @classmethod
-    def from_exception(cls, exc: "BizError") -> "CommonResult[Any]":
+    def from_exception(cls, exc: Any) -> "CommonResult[Any]":
         """Create response from BizError."""
         from app.core.errors import BizError
         if isinstance(exc, BizError):

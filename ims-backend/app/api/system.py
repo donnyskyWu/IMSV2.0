@@ -16,10 +16,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api.deps import require_any_permission, require_login, require_permission
 from app.core.pagination import PageParam, PageResult
 from app.core.response import CommonResult
 from app.core.serialization import BaseSchema
-from app.api.deps import require_permission, require_any_permission, require_login
 
 router = APIRouter()
 
@@ -144,14 +144,14 @@ async def get_dict_data_simple_list(
 ) -> CommonResult[list[DictDataItem]]:
     """
     Get enabled dictionary values for a type.
-    
+
     Rules per FP-B07-03:
     - Returns enabled values only
     - Includes colorType
     - Cached in Redis (ims:dict:<type>), TTL 60s local cache
     """
     from app.services.dict import DictService
-    
+
     service = DictService()
     items = await service.get_dict_data_simple_list(dict_type)
     return CommonResult.success(data=items)
@@ -166,7 +166,7 @@ async def get_dict_data_simple_list(
 async def get_dict_type_list() -> CommonResult[list[DictTypeItem]]:
     """Get all dictionary types."""
     from app.services.dict import DictService
-    
+
     service = DictService()
     items = await service.get_dict_type_list()
     return CommonResult.success(data=items)
@@ -186,7 +186,7 @@ async def get_dept_tree(
 ) -> CommonResult[list[DeptTreeNode]]:
     """
     Get department tree.
-    
+
     Rules per FP-B08-02:
     - memberCount: dedup count of active+frozen users in dept and all descendants
     - directMemberCount: users directly in this dept
@@ -196,7 +196,7 @@ async def get_dept_tree(
     - Performance: 2000 depts, 20k users -> <= 500ms
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     tree = await service.get_dept_tree(
         status=status,
@@ -214,7 +214,7 @@ async def get_dept_tree(
 async def create_dept(request: DeptCreateRequest) -> CommonResult[DeptResponse]:
     """
     Create a local department.
-    
+
     Rules per FP-B08-04:
     - source=LOCAL
     - Parent not exist -> 1500, disabled -> 1501
@@ -222,7 +222,7 @@ async def create_dept(request: DeptCreateRequest) -> CommonResult[DeptResponse]:
     - Under "待分配" -> 1220
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     result = await service.create_dept(request)
     return CommonResult.success(data=result)
@@ -240,14 +240,14 @@ async def update_dept(
 ) -> CommonResult[DeptResponse]:
     """
     Update department (name, leader, sort).
-    
+
     Rules per FP-B08-05:
     - SYSTEM dept -> 1220
     - Same-parent duplicate name -> 1219
     - DINGTALK dept: success with syncOverrideHint=true
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     result = await service.update_dept(id, request)
     return CommonResult.success(data=result)
@@ -262,7 +262,7 @@ async def update_dept(
 async def move_dept(request: DeptMoveRequest) -> CommonResult[DeptResponse]:
     """
     Move department to new parent.
-    
+
     Rules per FP-B08-06:
     - Move to self or descendant -> 1218
     - DINGTALK to LOCAL parent -> 1220
@@ -271,7 +271,7 @@ async def move_dept(request: DeptMoveRequest) -> CommonResult[DeptResponse]:
     - Same transaction update all descendant paths
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     result = await service.move_dept(request.id, request.new_parent_id)
     return CommonResult.success(data=result)
@@ -289,14 +289,14 @@ async def update_dept_status(
 ) -> CommonResult:
     """
     Enable or disable department.
-    
+
     Rules per FP-B08-07:
     - Has enabled children -> 1502
     - SYSTEM dept -> 1220
     - DINGTALK dept: local disable allowed, next sync may re-enable
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     await service.update_dept_status(id, status)
     return CommonResult.success()
@@ -311,13 +311,13 @@ async def update_dept_status(
 async def delete_dept(id: str = Query(..., description="部门ID")) -> CommonResult:
     """
     Delete department.
-    
+
     Rules per FP-B08-07:
     - Has children or users (any status including resigned) -> 1502
     - SYSTEM dept -> 1220
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     await service.delete_dept(id)
     return CommonResult.success()
@@ -341,14 +341,14 @@ async def get_user_page(
 ) -> CommonResult[PageResult[UserListItem]]:
     """
     Get paginated user list.
-    
+
     Rules per FP-B08-03:
     - includeChildren=true: filter by path LIKE '/…/deptId/%'
     - includeChildren=false: only direct members
     - Data scope filtering applied
     """
     from app.services.user import UserService
-    
+
     service = UserService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_user_page(
@@ -374,11 +374,11 @@ async def get_user_simple_page(
 ) -> CommonResult[PageResult[UserSimpleItem]]:
     """
     Get simple user list for selectors.
-    
+
     LOGIN_ONLY - returns id, nickname, mainDeptName, status only.
     """
     from app.services.user import UserService
-    
+
     service = UserService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_user_simple_page(page_param, keyword)
@@ -394,12 +394,12 @@ async def get_user_simple_page(
 async def create_user(request: UserCreateRequest) -> CommonResult[UserListItem]:
     """
     Create a new user.
-    
+
     Minimal fields: username, nickname, mobile, depts, mainDeptId, password.
     Full user management is in M02 module.
     """
     from app.services.user import UserService
-    
+
     service = UserService()
     result = await service.create_user(request)
     return CommonResult.success(data=result)
@@ -418,13 +418,13 @@ async def confirm_orphan_dept(
 ) -> CommonResult:
     """
     Confirm keeping a local orphan department.
-    
+
     Rules per FP-D07-02 item 7:
     - Sets local_orphan=0, marking dept as confirmed to keep
     - Only applicable to departments with local_orphan=1
     """
     from app.services.dept import DeptService
-    
+
     service = DeptService()
     await service.confirm_orphan_dept(id)
     return CommonResult.success()
@@ -437,13 +437,13 @@ async def confirm_orphan_dept(
     dependencies=[Depends(require_permission("ims:system:user:update"))],
 )
 async def update_user_depts(
-    id: str = Query(..., description="用户ID"),
-    dept_ids: list[str] = Query(..., description="部门ID列表"),
-    main_dept_id: str = Query(..., description="主部门ID"),
+    id: str,
+    dept_ids: list[str],
+    main_dept_id: str,
 ) -> CommonResult:
     """
     Update user's department assignments.
-    
+
     Rules per FP-B03-02:
     - User can belong to multiple departments
     - Must have exactly one main department
@@ -451,7 +451,7 @@ async def update_user_depts(
     - Removing all depts auto-assigns to "待分配" dept
     """
     from app.services.user import UserService
-    
+
     service = UserService()
     await service.update_user_depts(id, dept_ids, main_dept_id)
     return CommonResult.success()
@@ -466,13 +466,13 @@ async def update_user_depts(
 async def delete_user(id: str = Query(..., description="用户ID")) -> CommonResult:
     """
     Delete user.
-    
+
     Rules per FP-B03-01 item 3:
     - Only users who never logged in AND have no business references can be deleted
     - RESIGNED users cannot be deleted -> 1502
     """
     from app.services.user import UserService
-    
+
     service = UserService()
     await service.delete_user(id)
     return CommonResult.success()
@@ -506,14 +506,14 @@ class OrgSyncBatchItem(BaseSchema):
 async def trigger_org_sync_reconcile() -> CommonResult[OrgSyncBatchItem]:
     """
     Trigger organization structure reconciliation with DingTalk.
-    
+
     Rules per FP-D07-04:
     - Compares IMS org structure with DingTalk
     - Creates sync batch record
     - Returns immediately with batch info (async execution)
     """
     from app.services.org_sync import OrgSyncService
-    
+
     service = OrgSyncService()
     result = await service.trigger_reconcile()
     return CommonResult.success(data=result)
@@ -528,13 +528,13 @@ async def trigger_org_sync_reconcile() -> CommonResult[OrgSyncBatchItem]:
 async def get_latest_org_sync_batch() -> CommonResult[OrgSyncBatchItem]:
     """
     Get the latest org sync batch status.
-    
+
     Rules per FP-D07-04:
     - Returns the most recent sync batch
     - Includes counts for dept/user changes
     """
     from app.services.org_sync import OrgSyncService
-    
+
     service = OrgSyncService()
     result = await service.get_latest_batch()
     return CommonResult.success(data=result)
@@ -551,11 +551,11 @@ async def get_latest_org_sync_batch() -> CommonResult[OrgSyncBatchItem]:
 async def get_role_simple_list() -> CommonResult[list[RoleSimpleItem]]:
     """
     Get enabled roles for selectors.
-    
+
     LOGIN_ONLY - returns id, name, source only.
     """
     from app.services.role import RoleService
-    
+
     service = RoleService()
     items = await service.get_role_simple_list()
     return CommonResult.success(data=items)

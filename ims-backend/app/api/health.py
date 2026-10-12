@@ -3,7 +3,7 @@
 Health check endpoint.
 
 Input: GET /health (anonymous)
-Output: {code:0, data:{status:"UP"|"DEGRADED", db:"UP"|"DOWN", redis:"UP"|"DOWN"|"MEMORY", 
+Output: {code:0, data:{status:"UP"|"DEGRADED", db:"UP"|"DOWN", redis:"UP"|"DOWN"|"MEMORY",
          footballLive:"UP"|"DOWN"|"DISABLED", version}}
 
 Rules per FP-A01-03:
@@ -28,7 +28,7 @@ class HealthData(BaseModel):
     redis: str
     football_live: str
     version: str
-    
+
     class Config:
         populate_by_name = True
 
@@ -37,22 +37,22 @@ class HealthData(BaseModel):
 async def health_check() -> CommonResult[HealthData]:
     """
     Health check endpoint.
-    
+
     Returns system health status. Does not expose any connection strings.
     """
-    from app.db.session import DatabaseHealth
     from app.core.cache import CacheHealth
-    
+    from app.db.session import DatabaseHealth
+
     # Check IMS database
     db_up = DatabaseHealth.check_ims()
     db_status = "UP" if db_up else "DOWN"
-    
+
     # Check Redis
     redis_up, redis_status = CacheHealth.check()
-    
+
     # Check Football database
     football_up, football_status = DatabaseHealth.check_football()
-    
+
     # Determine overall status
     if not db_up:
         overall_status = "DOWN"
@@ -63,7 +63,7 @@ async def health_check() -> CommonResult[HealthData]:
     else:
         overall_status = "UP"
         http_status = 200
-    
+
     data = HealthData(
         status=overall_status,
         db=db_status,
@@ -71,16 +71,16 @@ async def health_check() -> CommonResult[HealthData]:
         football_live=football_status,
         version=__version__,
     )
-    
+
     # Note: FastAPI doesn't directly support dynamic status codes in the same response model
     # For 503, we handle this specially
     result = CommonResult.success(data=data)
-    
+
     if http_status == 503:
         from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=503,
             content=result.model_dump(by_alias=True),
         )
-    
+
     return result

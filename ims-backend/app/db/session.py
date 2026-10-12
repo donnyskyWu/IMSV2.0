@@ -37,7 +37,7 @@ _db_session: ContextVar[Optional[Session]] = ContextVar("db_session", default=No
 def init_db() -> None:
     """Initialize database engines and session factories."""
     global engine, SessionLocal, football_engine, FootballSession
-    
+
     # Main IMS database
     if settings.db.url:
         engine = create_engine(
@@ -51,7 +51,7 @@ def init_db() -> None:
             autoflush=False,
             bind=engine,
         )
-    
+
     # Football read-only database (if configured)
     if settings.football_live.enabled and settings.football_live.url:
         football_engine = create_engine(
@@ -65,7 +65,7 @@ def init_db() -> None:
             autoflush=False,
             bind=football_engine,
         )
-        
+
         # Add read-only interceptor for Football connection
         @event.listens_for(football_engine, "before_cursor_execute")
         def receive_before_cursor_execute(
@@ -83,7 +83,7 @@ def init_db() -> None:
 def get_db_session() -> Session:
     """
     Get the current request-scoped database session.
-    
+
     This should be used within request context where a session
     has already been created.
     """
@@ -96,12 +96,12 @@ def get_db_session() -> Session:
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency for FastAPI routes to get database session.
-    
+
     Creates a new session for each request and handles cleanup.
     """
     if SessionLocal is None:
         raise RuntimeError("Database not initialized")
-    
+
     session = SessionLocal()
     token = _db_session.set(session)
     try:
@@ -114,13 +114,13 @@ def get_db() -> Generator[Session, None, None]:
 def get_football_session() -> Generator[Session, None, None]:
     """
     Get a Football read-only database session.
-    
+
     This is a separate session that does not participate in
     IMS transactions.
     """
     if FootballSession is None:
         raise RuntimeError("Football database not configured or disabled")
-    
+
     session = FootballSession()
     try:
         yield session
@@ -130,7 +130,7 @@ def get_football_session() -> Generator[Session, None, None]:
 
 class DatabaseHealth:
     """Database health check utilities."""
-    
+
     @staticmethod
     def check_ims() -> bool:
         """Check IMS database connectivity."""
@@ -142,12 +142,12 @@ class DatabaseHealth:
             return True
         except Exception:
             return False
-    
+
     @staticmethod
     def check_football() -> tuple[bool, str]:
         """
         Check Football database connectivity.
-        
+
         Returns:
             (is_up, status): status is UP/DOWN/DISABLED
         """

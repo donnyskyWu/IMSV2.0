@@ -9,10 +9,10 @@ Per FP-B08-08:
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api.deps import require_login
 from app.core.config import get_settings
 from app.core.errors import BizError, get_error_info
 from app.core.response import CommonResult
-from app.api.deps import require_login
 
 router = APIRouter()
 settings = get_settings()
@@ -29,7 +29,7 @@ async def demo_error(
 ) -> CommonResult:
     """
     Return specified error code for testing.
-    
+
     LOGIN_ONLY - for B0b request layer example page to verify error handling.
     Only available in test environment.
     """

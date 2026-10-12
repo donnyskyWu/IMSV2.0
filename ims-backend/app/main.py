@@ -40,17 +40,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
     logger.info(f"Starting IMS Backend ({settings.env})")
-    
+
     # Initialize database
     from app.db.session import init_db
     init_db()
-    
+
     # Initialize Redis (or fallback in dev)
     from app.core.cache import init_cache
     init_cache()
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down IMS Backend")
 
@@ -65,7 +65,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if settings.docs_enabled else None,
         lifespan=lifespan,
     )
-    
+
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -74,7 +74,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     # Request context middleware
     @app.middleware("http")
     async def context_middleware(request: Request, call_next):
@@ -85,7 +85,7 @@ def create_app() -> FastAPI:
             client_ip=request.client.host if request.client else "",
         )
         ctx.set(context)
-        
+
         try:
             response = await call_next(request)
             # Add trace ID to response
@@ -93,19 +93,19 @@ def create_app() -> FastAPI:
             return response
         finally:
             ctx.reset()
-    
+
     # Exception handlers
     @app.exception_handler(BizError)
     async def biz_error_handler(request: Request, exc: BizError) -> JSONResponse:
         """Handle business exceptions."""
         # HTTP 401 for auth-related errors (1002, 1003)
         status_code = 401 if exc.code in (1002, 1003) else 200
-        
+
         return JSONResponse(
             status_code=status_code,
             content=CommonResult(code=exc.code, msg=exc.msg, data=exc.data).model_dump(),
         )
-    
+
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
         request: Request, exc: RequestValidationError
@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
                 field = snake_to_camel(field)
             message = error.get("msg", "参数校验失败")
             field_errors.append({"field": str(field), "message": message})
-        
+
         return JSONResponse(
             status_code=200,
             content=CommonResult(
@@ -130,7 +130,7 @@ def create_app() -> FastAPI:
                 data={"fieldErrors": field_errors},
             ).model_dump(),
         )
-    
+
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
         request: Request, exc: StarletteHTTPException
@@ -145,7 +145,7 @@ def create_app() -> FastAPI:
             status_code=exc.status_code,
             content=CommonResult(code=5007, msg="系统繁忙，请稍后再试").model_dump(),
         )
-    
+
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """Handle uncaught exceptions -> 5007."""
@@ -154,34 +154,34 @@ def create_app() -> FastAPI:
             f"Unhandled exception [trace_id={ctx.trace_id}]: {exc}",
             exc_info=exc,
         )
-        
+
         # Never expose stack trace or internal details
         return JSONResponse(
             status_code=200,
             content=CommonResult(code=5007, msg="系统繁忙，请稍后再试").model_dump(),
         )
-    
+
     # Register routes
     register_routes(app)
-    
+
     return app
 
 
 def register_routes(app: FastAPI) -> None:
     """Register all domain routers."""
-    from app.api.health import router as health_router
     from app.api.auth import router as auth_router
+    from app.api.health import router as health_router
     from app.api.system import router as system_router
-    
+
     # Health check (anonymous)
     app.include_router(health_router)
-    
+
     # Auth routes (/admin-api/ims/auth)
     app.include_router(auth_router, prefix="/admin-api/ims/auth", tags=["认证"])
-    
+
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])
-    
+
     # Demo routes - test environment only (FP-B08-08)
     if settings.env == "test":
         from app.api.demo import router as demo_router
@@ -191,18 +191,18 @@ def register_routes(app: FastAPI) -> None:
 def validate_routes(app: FastAPI) -> None:
     """
     Validate that all routes follow naming conventions.
-    
+
     Per FP-A01-02:
     - All routes except /health must start with /admin-api/ims/
     - Business routes must declare permission or be whitelisted
     """
     allowed_prefixes = ["/health", "/admin-api/ims/", "/docs", "/redoc", "/openapi.json"]
-    
+
     for route in app.routes:
         path = getattr(route, "path", "")
         if not path:
             continue
-        
+
         if not any(path.startswith(prefix) for prefix in allowed_prefixes):
             raise RuntimeError(
                 f"Route {path} does not start with /admin-api/ims/ "
