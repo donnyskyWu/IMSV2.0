@@ -108,7 +108,7 @@ function handleDownload(task: DownloadTask) {
   background-color: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r-m);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
   z-index: 2000;
   overflow: hidden;
 }

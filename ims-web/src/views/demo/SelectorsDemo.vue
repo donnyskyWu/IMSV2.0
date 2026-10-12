@@ -205,7 +205,7 @@ function handleDateChange(val: unknown) {
   }
 }
 
-@media (max-width: 767px) {
+@media (width <= 767px) {
   .demo-row {
     flex-direction: column;
     gap: 16px;

@@ -18,14 +18,14 @@
   --gray: #8e8e93;
   --cyan: #5ac8fa;
   --purple: #af52da;
-  --yellow: #ffcc00;
-  --line: rgba(0, 0, 0, 0.08);
-  --line2: rgba(0, 0, 0, 0.12);
-  --sh: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --sh-h: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --yellow: #fc0;
+  --line: rgb(0 0 0 / 8%);
+  --line2: rgb(0 0 0 / 12%);
+  --sh: 0 1px 3px rgb(0 0 0 / 6%);
+  --sh-h: 0 4px 12px rgb(0 0 0 / 10%);
 
   /* === 字体 Token (§1.2) === */
-  --font: -apple-system, 'SF Pro Text', BlinkMacSystemFont, 'Segoe UI', Roboto,
+  --font: -apple-system, 'SF Pro Text', blinkmacsystemfont, 'Segoe UI', roboto,
     'Helvetica Neue', 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei',
     sans-serif;
 
@@ -47,12 +47,16 @@
   --left-tree-width: 240px;
 
   /* === 响应式断点 Token (§2.1 Q1) === */
+
   /* 只有两档: <768px 手机布局, >=768px 桌面布局; 无平板档 */
+
   /* Q11: 横屏 844×390 宽度 >=768px，按桌面布局处理 */
   --bp-mobile: 768px;
 
   /* === 触控尺寸 Token (§2.1 Q10) === */
+
   /* 最小触控尺寸 44×44px，视觉尺寸可以更小但热区要扩大到 44px */
+
   /* 相邻目标间距至少 8px */
   --min-touch-size: 44px;
   --touch-target-gap: 8px;
@@ -61,44 +65,45 @@
   --mobile-sidebar-width: 240px;
 
   /* === 状态色 8 组 (§1.5, FP-T-03) === */
+
   /* primary (进行中/已提交) - 蓝 */
   --status-primary-text: #0071e3;
-  --status-primary-bg: rgba(0, 113, 227, 0.12);
+  --status-primary-bg: rgb(0 113 227 / 12%);
 
   /* success (完成/正常) - 绿 */
   --status-success-text: #1e8e3e;
-  --status-success-bg: rgba(52, 199, 89, 0.12);
+  --status-success-bg: rgb(52 199 89 / 12%);
 
   /* warning (待办/警示) - 橙 */
   --status-warning-text: #c46a00;
-  --status-warning-bg: rgba(255, 149, 0, 0.12);
+  --status-warning-bg: rgb(255 149 0 / 12%);
 
   /* danger (失败/严重) - 红 */
   --status-danger-text: #d70015;
-  --status-danger-bg: rgba(255, 59, 48, 0.12);
+  --status-danger-bg: rgb(255 59 48 / 12%);
 
   /* neutral (中性/终止) - 灰 */
   --status-neutral-text: #6d6d72;
-  --status-neutral-bg: rgba(142, 142, 147, 0.12);
+  --status-neutral-bg: rgb(142 142 147 / 12%);
 
   /* info (信息) - 青 */
   --status-info-text: #0e7fb8;
-  --status-info-bg: rgba(90, 200, 250, 0.12);
+  --status-info-bg: rgb(90 200 250 / 12%);
 
   /* purple (分类) - 紫 */
   --status-purple-text: #8944ab;
-  --status-purple-bg: rgba(175, 82, 218, 0.12);
+  --status-purple-bg: rgb(175 82 218 / 12%);
 
   /* yellow (等级) - 黄 */
   --status-yellow-text: #a07d00;
-  --status-yellow-bg: rgba(255, 204, 0, 0.12);
+  --status-yellow-bg: rgb(255 204 0 / 12%);
 }
 
 /**
  * 移动端响应式调整 (§2.1 Q1~Q21)
  * 断点: <768px 为手机布局
  */
-@media (max-width: 767px) {
+@media (width <= 767px) {
   :root {
     /* Q2: 侧栏改为左侧抽屉 240px, 默认收起不占用内容区宽度 */
     --sidebar-width: 0px;

@@ -29,7 +29,7 @@ body {
 
 /* 等宽字体 (§1.2 编号列) */
 .mono {
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-family: 'SF Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -46,6 +46,7 @@ body {
 }
 
 /* === 触控热区扩展 (§2.1 Q10) === */
+
 /* 用于 26px 小号按钮和 30px 控件, 保持原视觉尺寸但扩大热区到 44px */
 .touch-target {
   position: relative;
@@ -62,8 +63,9 @@ body {
 }
 
 /* === 移动端字号调整 (§2.1 Q12) === */
+
 /* 手机下最小字号 12px, 原来 11px 和 11.5px 统一提到 12px */
-@media (max-width: 767px) {
+@media (width <= 767px) {
   /* 输入框字号 >=16px 防止 iOS 聚焦放大 */
   input,
   textarea,
@@ -83,11 +85,11 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgb(0 0 0 / 15%);
   border-radius: 3px;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.25);
+    background: rgb(0 0 0 / 25%);
   }
 }
 

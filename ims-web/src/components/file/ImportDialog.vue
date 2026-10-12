@@ -246,6 +246,7 @@ function handleRetry() {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -277,6 +278,7 @@ function handleRetry() {
 
     &.success {
       color: var(--green);
+
       .value {
         color: var(--green);
       }
@@ -284,6 +286,7 @@ function handleRetry() {
 
     &.error {
       color: var(--red);
+
       .value {
         color: var(--red);
       }

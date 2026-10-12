@@ -187,7 +187,7 @@ function handleReset() {
   border-radius: var(--r-s);
   padding: 24px;
 
-  @media (max-width: 767px) {
+  @media (width <= 767px) {
     padding: 16px;
   }
 }

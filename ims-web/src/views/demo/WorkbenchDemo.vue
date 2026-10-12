@@ -125,7 +125,7 @@ const barChartOption = ref({
   gap: 16px;
   margin-bottom: 16px;
 
-  @media (max-width: 767px) {
+  @media (width <= 767px) {
     grid-template-columns: 1fr;
     gap: 12px;
     margin-bottom: 12px;
@@ -141,7 +141,7 @@ const barChartOption = ref({
   &.full {
     grid-column: span 2;
 
-    @media (max-width: 767px) {
+    @media (width <= 767px) {
       grid-column: span 1;
     }
   }

@@ -182,7 +182,7 @@ function handleSync() {
   grid-template-columns: 320px 1fr;
   gap: 24px;
 
-  @media (max-width: 767px) {
+  @media (width <= 767px) {
     grid-template-columns: 1fr;
   }
 }
@@ -192,7 +192,7 @@ function handleSync() {
   flex-direction: column;
   height: 600px;
 
-  @media (max-width: 767px) {
+  @media (width <= 767px) {
     height: 400px;
   }
 }

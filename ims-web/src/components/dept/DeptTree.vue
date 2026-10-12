@@ -266,7 +266,7 @@ function handleCommand(command: string, node: DeptNode) {
         @node-click="handleNodeClick"
         @node-drop="handleDrop"
       >
-        <template #default="{ node, data }">
+        <template #default="{ data }">
           <div class="tree-node">
             <div class="node-content">
               <el-icon class="node-icon"><OfficeBuilding /></el-icon>

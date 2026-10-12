@@ -167,7 +167,7 @@ const flowEdges = ref([
   }
 }
 
-@media (max-width: 767px) {
+@media (width <= 767px) {
   .text-demos {
     flex-direction: column;
     gap: 16px;
