@@ -159,6 +159,7 @@ export const useAuthStore = defineStore('auth', () => {
       path: item.path || undefined,
       icon: item.icon || undefined,
       permCode: item.permCode || undefined,
+      type: item.type || undefined,
       children: item.children?.map(mapMenuItem) || [],
     }
   }

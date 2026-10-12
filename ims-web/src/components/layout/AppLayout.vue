@@ -105,6 +105,7 @@ async function handleMenuSelect(path: string) {
       return
     }
   }
+  if (!path.startsWith('/')) return
   router.push(path)
 }
 

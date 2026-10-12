@@ -42,6 +42,8 @@ export interface MenuItem {
   path?: string
   icon?: string
   permCode?: string
+  /** DIR / MENU / BUTTON。真实 /me 用它区分页面和按钮。 */
+  type?: string
   children?: MenuItem[]
 }
 

@@ -8,10 +8,14 @@
  * 1. GET /health 的 data.db 为 UP
  * 2. 种子账号经登录页真实登录并拿到访问令牌
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
- * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏里出现的名字必须来自 /me。
- *    现在的 main 会进示例页并画出这些名字；#12 只画已登记叶子，没登记时可以没有菜单项。
+ * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏菜单项大于 0，
+ *    每一项都来自 /me，且至少有一个是 /me 里的真实菜单名。
  * 5. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
+ * 6. 登录后把 access token 换成用 IMS_JWT_SECRET 签的过期令牌，刷新令牌仍是登录拿到的。
+ *    打开页面后经 Vite 调 /me：刷新接口只出现 1 次，最终 /me 为 200，地址不回登录页。
  */
+import { createHmac } from 'node:crypto'
+
 import { expect, test } from '@playwright/test'
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
@@ -91,18 +95,12 @@ test.describe('Vite 代理联通真实后端', () => {
     const sidebar = page.locator('[data-testid="app-sidebar"]')
     await expect(sidebar).toBeVisible()
     const sidebarEntries = sidebar.locator('.el-menu-item, .el-sub-menu__title')
-    const sidebarText = (await sidebarEntries.allTextContents()).join('\n')
-    const matched = menuNames.filter((name) => sidebarText.includes(name))
-    // 画出的每一项都得是 /me 的名字。示例 mock（Token 演示等）不在种子菜单里，出现即失败。
     const shown = (await sidebarEntries.allTextContents()).map((text) => text.trim()).filter(Boolean)
+    expect(shown.length).toBeGreaterThan(0)
     for (const text of shown) {
       expect(menuNames.some((name) => text.includes(name))).toBe(true)
     }
-    // 当前 main 的示例页会把 /me 铺进侧栏，至少对上一个名字。
-    // #12 在叶子都未登记时侧栏没有菜单项；上面的循环已经保证画出来的名字都属于 /me。
-    if (new URL(page.url()).pathname.startsWith('/demo/')) {
-      expect(matched.length).toBeGreaterThan(0)
-    }
+    expect(menuNames.some((name) => shown.some((text) => text.includes(name)))).toBe(true)
   })
 
   test('不带令牌经 Vite 调用 /me 返回 401 与 1002', async ({ page }) => {
@@ -122,4 +120,90 @@ test.describe('Vite 代理联通真实后端', () => {
     expect(me.status).toBe(401)
     expect(me.body.code).toBe(1002)
   })
+
+  test('过期访问令牌经 Vite 静默刷新后 /me 为 200 且不回登录页', async ({ page }) => {
+    const secret = env?.IMS_JWT_SECRET
+    if (!secret) {
+      throw new Error('缺少 IMS_JWT_SECRET，无法用与后端相同的密钥签发过期访问令牌')
+    }
+
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.clear()
+      sessionStorage.clear()
+    })
+    await page.goto('/login')
+    await page.getByPlaceholder('用户名').fill(username)
+    await page.getByPlaceholder('密码').fill(password)
+    await page.getByRole('button', { name: '登录' }).click()
+    await page.waitForURL((url) => url.pathname !== '/login')
+
+    const stored = await page.evaluate(() => ({
+      accessToken: localStorage.getItem('ims_access_token'),
+      refreshToken: localStorage.getItem('ims_refresh_token'),
+    }))
+    if (!stored.accessToken || !stored.refreshToken) {
+      throw new Error('登录没有写入访问令牌或刷新令牌')
+    }
+    const expiredAccess = signExpiredAccessToken(stored.accessToken, secret)
+    expect(expiredAccess).not.toBe(stored.accessToken)
+
+    let refreshCount = 0
+    page.on('request', (request) => {
+      if (request.url().includes('/admin-api/ims/auth/refresh-token') && request.method() === 'POST') {
+        refreshCount += 1
+      }
+    })
+    const refreshResponse = page.waitForResponse(
+      (response) => response.url().includes('/admin-api/ims/auth/refresh-token') && response.request().method() === 'POST',
+    )
+    const meOk = page.waitForResponse(
+      (response) => response.url().includes('/admin-api/ims/auth/me') && response.request().method() === 'GET' && response.status() === 200,
+    )
+
+    await page.evaluate((token) => {
+      localStorage.setItem('ims_access_token', token)
+    }, expiredAccess)
+    await page.reload()
+
+    const refreshed = await refreshResponse
+    expect(new URL(refreshed.url()).origin).toBe('http://127.0.0.1:3000')
+    const refreshBody = await refreshed.json()
+    expect(refreshBody.code).toBe(0)
+    expect(refreshBody.data?.accessToken).toBeTruthy()
+
+    const me = await meOk
+    expect(new URL(me.url()).origin).toBe('http://127.0.0.1:3000')
+    const meBody = await me.json()
+    expect(me.status()).toBe(200)
+    expect(meBody.code).toBe(0)
+    expect(refreshCount).toBe(1)
+    await expect(page).not.toHaveURL(/\/login/)
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('ims_access_token'))).not.toBe(expiredAccess)
+  })
 })
+
+function signExpiredAccessToken(accessToken: string, secret: string): string {
+  const payloadPart = accessToken.split('.')[1]
+  if (!payloadPart) {
+    throw new Error('登录返回的访问令牌不是 JWT，无法改签过期时间')
+  }
+  const claims = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8')) as Record<string, unknown>
+  const now = Math.floor(Date.now() / 1000)
+  const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = base64Url(JSON.stringify({
+    sub: claims.sub,
+    tid: claims.tid,
+    sid: claims.sid,
+    iat: now - 7200,
+    exp: now - 60,
+    type: 'access',
+  }))
+  const unsigned = `${header}.${payload}`
+  const signature = createHmac('sha256', secret).update(unsigned).digest('base64url')
+  return `${unsigned}.${signature}`
+}
+
+function base64Url(value: string): string {
+  return Buffer.from(value).toString('base64url')
+}

@@ -332,13 +332,82 @@ test.describe('R. 请求层', () => {
     expect(me.msg).toContain('登录已失效')
   })
 
-  test('无效令牌访问 /me 返回 401/1002 时清令牌并回到登录页', async ({ page }) => {
-    await page.goto('/demo/layout')
-    await page.waitForSelector('.app-layout')
-    await page.evaluate(() => {
-      localStorage.setItem('ims_access_token', 'expired-token')
-      localStorage.setItem('ims_refresh_token', 'expired-refresh')
+  test('401/1002 刷新成功后重放 /me 并留在原页', async ({ page }) => {
+    let meHits = 0
+    let refreshCalled = 0
+    await page.unroute('**/admin-api/ims/auth/me')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      meHits += 1
+      if (meHits === 1) {
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 1002, msg: '登录已失效，请重新登录', data: null }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 0,
+          msg: '成功',
+          data: {
+            user: {
+              id: '1',
+              username: 'qa_admin',
+              nickname: '测试',
+              avatar: null,
+              deptNames: [],
+              mainDeptName: null,
+              positionLabel: null,
+              pwdResetRequired: false,
+            },
+            menus: [{ id: '11', name: '布局演示', path: '/demo/layout', type: 'MENU', children: [] }],
+            permCodes: ['ims:demo:order:query'],
+            permDetails: {},
+            dataScopeText: '全部',
+          },
+        }),
+      })
     })
+    await page.route('**/admin-api/ims/auth/refresh-token', async (route) => {
+      refreshCalled += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 0,
+          msg: '成功',
+          data: {
+            accessToken: 'refreshed-access',
+            refreshToken: 'refreshed-refresh',
+            expiresIn: 7200,
+            pwdResetRequired: false,
+          },
+        }),
+      })
+    })
+
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.setItem('ims_access_token', 'expired-access')
+      localStorage.setItem('ims_refresh_token', 'valid-refresh')
+    })
+    await page.goto('/demo/layout')
+    await expect(page).toHaveURL(/\/demo\/layout/)
+    await expect(page.locator('.app-layout').first()).toBeVisible()
+    expect(refreshCalled).toBe(1)
+    expect(meHits).toBe(2)
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBe('refreshed-access')
+    await expect(page.evaluate(() => localStorage.getItem('ims_refresh_token'))).resolves.toBe('refreshed-refresh')
+  })
+
+  test('无效令牌先刷新失败再回到登录页', async ({ page }) => {
+    let refreshCalled = 0
+    await page.unroute('**/admin-api/ims/auth/me')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
     await page.route('**/admin-api/ims/auth/me', async (route) => {
       await route.fulfill({
         status: 401,
@@ -346,12 +415,123 @@ test.describe('R. 请求层', () => {
         body: JSON.stringify({ code: 1002, msg: '登录已失效，请重新登录', data: null }),
       })
     })
-    await page.reload()
-    await expect(page).toHaveURL(/\/login/)
+    await page.route('**/admin-api/ims/auth/refresh-token', async (route) => {
+      refreshCalled += 1
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 1002, msg: '登录已失效，请重新登录', data: null }),
+      })
+    })
+
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.setItem('ims_access_token', 'expired-access')
+      localStorage.setItem('ims_refresh_token', 'expired-refresh')
+    })
+    await page.goto('/demo/layout')
+    await expect(page).toHaveURL(/\/login\?/)
+    expect(decodeURIComponent(page.url())).toContain('redirect=')
+    expect(decodeURIComponent(page.url())).toContain('/demo/layout')
     await expect(page.getByPlaceholder('请输入用户名')).toBeVisible()
     await expect(page.locator('.app-layout')).toHaveCount(0)
+    expect(refreshCalled).toBe(1)
     await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
     await expect(page.evaluate(() => localStorage.getItem('ims_refresh_token'))).resolves.toBeNull()
+  })
+
+  test('1003 直接回登录页且不刷新', async ({ page }) => {
+    let refreshCalled = 0
+    await page.unroute('**/admin-api/ims/auth/me')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 1003, msg: '下线', data: null }),
+      })
+    })
+    await page.route('**/admin-api/ims/auth/refresh-token', async (route) => {
+      refreshCalled += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 0,
+          msg: '成功',
+          data: { accessToken: 'should-not', refreshToken: 'should-not', expiresIn: 7200, pwdResetRequired: false },
+        }),
+      })
+    })
+
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.setItem('ims_access_token', 'kicked-access')
+      localStorage.setItem('ims_refresh_token', 'still-valid-refresh')
+    })
+    await page.goto('/demo/layout')
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.locator('.el-message').filter({ hasText: '您的账号已在其他设备登录，本设备已下线' })).toBeVisible()
+    expect(refreshCalled).toBe(0)
+    await expect(page.locator('.app-layout')).toHaveCount(0)
+  })
+
+  test('并发 3 个 1002 只刷新一次并全部重放', async ({ page }) => {
+    let refreshCalled = 0
+    let expiredHits = 0
+    let replayHits = 0
+    await page.unroute('**/admin-api/ims/demo/error**')
+    await page.unroute('**/admin-api/ims/auth/refresh-token')
+    let serveExpired = true
+    await page.route('**/admin-api/ims/demo/error**', async (route) => {
+      if (serveExpired) {
+        expiredHits += 1
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 1002, msg: '登录已失效，请重新登录', data: null }),
+        })
+        if (expiredHits >= 3) serveExpired = false
+        return
+      }
+      replayHits += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 0, msg: '成功', data: { message: '操作成功' } }),
+      })
+    })
+    await page.route('**/admin-api/ims/auth/refresh-token', async (route) => {
+      refreshCalled += 1
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 0,
+          msg: '成功',
+          data: {
+            accessToken: 'burst-access',
+            refreshToken: 'burst-refresh',
+            expiresIn: 7200,
+            pwdResetRequired: false,
+          },
+        }),
+      })
+    })
+
+    await page.goto('/demo/request')
+    await page.waitForSelector('.request-demo, .app-layout')
+    await page.evaluate(() => {
+      localStorage.setItem('ims_access_token', 'old-access')
+      localStorage.setItem('ims_refresh_token', 'old-refresh')
+    })
+    await page.getByRole('button', { name: '并发 3 次' }).click()
+    await expect(page.locator('.el-message--success').filter({ hasText: '3 个请求都成功' })).toBeVisible()
+    await expect(page).toHaveURL(/\/demo\/request/)
+    expect(refreshCalled).toBe(1)
+    expect(expiredHits).toBe(3)
+    expect(replayHits).toBe(3)
   })
 
   test('VC-R-14: 字典变更实时生效', async ({ page }) => {

@@ -110,6 +110,18 @@ describe('visibleMenus', () => {
     expect(visible[0]?.children?.map((item) => item.path)).toEqual(['/demo/tokens'])
   })
 
+  it('没有 path 的页面菜单显示名称，按钮和未登记 path 不显示', () => {
+    const visible = visibleMenus(
+      [
+        { id: '1', name: '部门管理', type: 'MENU' },
+        { id: '2', name: '新建部门', type: 'BUTTON' },
+        { id: '3', name: '工作台', path: '/ims/workbench', type: 'MENU' },
+      ],
+      ['/demo/tokens'],
+    )
+    expect(visible.map((item) => item.name)).toEqual(['部门管理'])
+  })
+
   it('工作台路由登记后可以出现在侧栏', () => {
     const visible = visibleMenus(
       [leaf('/ims/workbench', '工作台')],

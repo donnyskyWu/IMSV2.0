@@ -19,6 +19,7 @@ import axios, {
 } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { isAuthNavigation } from '@/utils/auth-navigation'
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -130,10 +131,23 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+let loginRedirecting = false
+
 function redirectToLogin(message = '登录已失效，请重新登录'): void {
   clearTokens()
   // 记下需要真实登录，避免开发环境在浏览器后退时又自动进入示例页。
   sessionStorage.setItem('ims_require_auth', '1')
+  // 同一轮失败只跳一次，排队中的请求不再各跳一次。
+  if (loginRedirecting) return
+  loginRedirecting = true
+  queueMicrotask(() => {
+    loginRedirecting = false
+  })
+  // 守卫还在等 /me 的刷新结果，由守卫带上原路径跳转。
+  if (isAuthNavigation()) {
+    ElMessage.warning(message)
+    return
+  }
   const currentPath = router.currentRoute.value.fullPath
   if (currentPath !== '/login' && !currentPath.startsWith('/login?')) {
     localStorage.setItem(REDIRECT_KEY, currentPath)
@@ -145,13 +159,22 @@ function redirectToLogin(message = '登录已失效，请重新登录'): void {
   }
 }
 
+function isRefreshCall(config: InternalAxiosRequestConfig): boolean {
+  return (config.url || '').includes('/auth/refresh-token')
+}
+
 async function handleTokenExpired(
   instance: AxiosInstance,
   originalRequest: InternalAxiosRequestConfig & { _retry?: boolean },
+  code: number,
+  message: string,
+  data: unknown,
 ) {
-  if (originalRequest._retry) {
-    redirectToLogin()
-    throw new Error('token expired')
+  const expiredMessage = '登录已失效，请重新登录'
+  // 已经重放过、本身就是刷新接口、或本地没有刷新令牌：不再刷新。
+  if (originalRequest._retry || isRefreshCall(originalRequest) || !getRefreshToken()) {
+    redirectToLogin(expiredMessage)
+    throw new ApiError(code, message, data)
   }
   originalRequest._retry = true
 
@@ -159,7 +182,7 @@ async function handleTokenExpired(
     const token = await new Promise<string | null>((resolve) => {
       addRefreshSubscriber(resolve)
     })
-    if (!token) throw new Error('token expired')
+    if (!token) throw new ApiError(code, message, data)
     originalRequest.headers.Authorization = `Bearer ${token}`
     return instance(originalRequest)
   }
@@ -169,8 +192,8 @@ async function handleTokenExpired(
     const newToken = await refreshAccessToken()
     onRefreshed(newToken)
     if (!newToken) {
-      redirectToLogin()
-      throw new Error('token expired')
+      redirectToLogin(expiredMessage)
+      throw new ApiError(code, message, data)
     }
     originalRequest.headers.Authorization = `Bearer ${newToken}`
     return instance(originalRequest)
@@ -238,7 +261,13 @@ function createRequest(): AxiosInstance {
       }
 
       if (result.code === ErrorCode.TOKEN_EXPIRED) {
-        return handleTokenExpired(instance, response.config)
+        return handleTokenExpired(
+          instance,
+          response.config,
+          result.code,
+          result.msg || '登录已失效，请重新登录',
+          result.data,
+        )
       }
 
       // 登录 / 改密自行展示 1214 等文案，避免和全局 toast 重复
@@ -248,20 +277,31 @@ function createRequest(): AxiosInstance {
       return Promise.reject(new ApiError(result.code, result.msg || '请求失败', result.data))
     },
     async (error: AxiosError) => {
-      // #17：未登录、无效或过期令牌访问 /me 等接口返回 HTTP 401。
-      // 这里清令牌并回登录页，不走 HTTP 200 + 1002 的静默刷新。
-      if (error.response?.status === 401) {
+      // Q8：401 + 1002 有刷新令牌就先静默刷新并重放；1003 直接回登录页。
+      // 其它 401 保留后端原始 code，不改写成 1002。
+      if (error.response?.status === 401 && error.config) {
         const result = (typeof error.response.data === 'object' && error.response.data)
           ? error.response.data as CommonResult
           : undefined
-        const code = result?.code === ErrorCode.KICKED_OFFLINE
-          ? ErrorCode.KICKED_OFFLINE
-          : ErrorCode.TOKEN_EXPIRED
-        const message = code === ErrorCode.KICKED_OFFLINE
-          ? '您的账号已在其他设备登录，本设备已下线'
-          : (result?.msg || '登录已失效，请重新登录')
-        redirectToLogin(message)
-        return Promise.reject(new ApiError(code, message, result?.data ?? null))
+        const code = typeof result?.code === 'number' ? result.code : undefined
+        if (code === ErrorCode.KICKED_OFFLINE) {
+          const message = '您的账号已在其他设备登录，本设备已下线'
+          redirectToLogin(message)
+          return Promise.reject(new ApiError(code, message, result?.data ?? null))
+        }
+        if (code === ErrorCode.TOKEN_EXPIRED) {
+          return handleTokenExpired(
+            instance,
+            error.config,
+            code,
+            result?.msg || '登录已失效，请重新登录',
+            result?.data ?? null,
+          )
+        }
+        if (code !== undefined) {
+          if (!error.config.skipGlobalError) handleErrorCode(code, result?.msg || '')
+          return Promise.reject(new ApiError(code, result?.msg || '请求失败', result?.data ?? null))
+        }
       }
 
       const silent = Boolean(error.config?.skipGlobalError)

@@ -5,6 +5,7 @@
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { beginAuthNavigation, endAuthNavigation } from '@/utils/auth-navigation'
 import {
   isPasswordPath,
   landingPath,
@@ -199,12 +200,15 @@ router.beforeEach(async (to, _from, next) => {
 
   // 已登录再打开登录页：直接进入系统或改密页（FP-B1-LG-01）
   if (to.path === '/login' && loggedIn) {
+    beginAuthNavigation()
     try {
       if (!authStore.user) await authStore.fetchUserInfo()
     } catch {
       authStore.clearSession()
       next()
       return
+    } finally {
+      endAuthNavigation()
     }
     if (mustResetPassword()) {
       const redirect = sanitizeRedirect(to.query.redirect)
@@ -253,20 +257,22 @@ router.beforeEach(async (to, _from, next) => {
 
   // 刷新后 Pinia 清空，用 /me 恢复权限（只读用户因此看不到写操作）
   if (authStore.permCodes.length === 0 && !isPasswordPath(to.path)) {
+    beginAuthNavigation()
     try {
       await authStore.fetchUserInfo()
     } catch (err) {
       const code = failureCode(err)
-      // /me 返回 401 + 1002（或 1003 被踢）时清会话回登录页，不再自动进入示例页。
+      // 刷新在请求层里完成。失败后再回登录页，这里不提前清 refresh token。
       if (code === 1002 || code === 1003) {
-        authStore.clearSession()
         sessionStorage.setItem('ims_require_auth', '1')
-        next('/login')
+        next({ path: '/login', query: { redirect: to.fullPath } })
         return
       }
       if (demoEnabled && to.path.startsWith('/demo')) {
         authStore.mockLogin()
       }
+    } finally {
+      endAuthNavigation()
     }
   }
 
