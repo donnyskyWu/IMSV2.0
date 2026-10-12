@@ -313,9 +313,11 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page.locator('.app-sidebar').getByText('权限管理')).toHaveCount(0)
     await expect(page.getByTestId('denied-panel')).toHaveCount(0)
 
+    // 地址栏直接打开组织页、岗位页，都停在无权限页，不渲染业务表格。
     await page.goto('/ims/auth/org')
     await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
     await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/ims\/auth\/org/)
     const code = await page.evaluate(async () => {
       const mod = await import('/src/api/request.ts')
       try {
@@ -328,6 +330,11 @@ test.describe('B1 账号登录与改密', () => {
     expect(code).toBe(1008)
     await expect(page.locator('.el-message').filter({ hasText: '暂无权限' })).toBeVisible()
     await expect(page).toHaveURL(/\/ims\/auth\/org/)
+
+    await page.goto('/ims/auth/position')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/ims\/auth\/position/)
   })
 
   test('1215 锁定提示按用户名禁用登录，改用户名后恢复', async ({ page }) => {
@@ -564,9 +571,15 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
     await expect(page.locator('.app-sidebar').getByText('工作台')).toBeVisible()
     await expect(page.locator('.app-sidebar').getByText('权限管理')).toHaveCount(0)
+    // 与可跑用例相同：地址栏打开组织页、岗位页都显示无权限页。
     await page.goto('/ims/auth/org')
     await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
     await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/ims\/auth\/org/)
+    await page.goto('/ims/auth/position')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/ims\/auth\/position/)
     const code = await page.evaluate(async () => {
       const mod = await import('/src/api/request.ts')
       try {
@@ -578,5 +591,6 @@ test.describe('B1 账号登录与改密', () => {
     })
     expect(code).toBe(1008)
     await expect(page.locator('.el-message').filter({ hasText: '暂无权限' })).toBeVisible()
+    await expect(page).toHaveURL(/\/ims\/auth\/position/)
   })
 })
