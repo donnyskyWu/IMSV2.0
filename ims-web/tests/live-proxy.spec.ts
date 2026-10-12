@@ -1,7 +1,8 @@
 /**
  * 开发代理联通（fix B0b）。
  * 浏览器只访问 Vite（127.0.0.1:3000），由代理转到真实后端。
- * 禁止 page.route / 网络 mock。账号与 scripts/prepare_live_proxy_db.py 一致。
+ * 禁止 page.route / 网络 mock。
+ * 账号由 playwright.live.config.ts 从 tools.seed.users 注入，不在这里写死。
  *
  * 断言：
  * 1. GET /health 的 data.db 为 UP
@@ -12,8 +13,11 @@
 import { expect, test } from '@playwright/test'
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
-const username = env?.E2E_SEED_USERNAME || 'qa_admin'
-const password = env?.E2E_SEED_PASSWORD || 'Test1234'
+const username = env?.E2E_SEED_USERNAME
+const password = env?.E2E_SEED_PASSWORD
+if (!username || !password) {
+  throw new Error('缺少 E2E_SEED_USERNAME / E2E_SEED_PASSWORD，应由 tools.seed.users 注入')
+}
 
 interface MenuNode {
   name?: string

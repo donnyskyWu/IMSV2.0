@@ -9,7 +9,7 @@ npm run lint
 npm run build     # production
 npm run preview   # http://127.0.0.1:4173
 npm test          # Playwright（不含真后端联通）
-npm run test:live-proxy  # 经 Vite 代理打真实后端，需先起 API
+npm run test:live-proxy  # 经 Vite 代理打真实后端；先建表并 python -m tools.seed --env e2e
 ```
 
 开发服务器和 `vite preview` 会把 `/admin-api`、`/health` 代理到后端。默认 `http://127.0.0.1:8000`，可用环境变量 `VITE_API_PROXY_TARGET` 覆盖。设成 `off` 则不转发（组件用例使用，避免没起后端时出现 502）。

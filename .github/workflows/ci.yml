@@ -65,8 +65,6 @@ jobs:
       IMS_REDIS_URL: ""
       IMS_JWT_SECRET: test-jwt-secret-for-ci
       VITE_API_PROXY_TARGET: http://127.0.0.1:8000
-      E2E_SEED_USERNAME: qa_admin
-      E2E_SEED_PASSWORD: Test1234
     steps:
       - uses: actions/checkout@v4
 
@@ -80,7 +78,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e "./ims-backend"
 
-      - name: Create tables and seed login user
+      - name: Create tables and seed e2e login user
         run: python ims-web/scripts/prepare_live_proxy_db.py
 
       - name: Start API
@@ -89,9 +87,15 @@ jobs:
           nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
           for _ in $(seq 1 30); do
             code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:8000/health || true)
-            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
-              echo "API responded: $code"
-              cat /tmp/health.json
+            if [ "$code" = "200" ]; then
+              python - <<'PY'
+import json
+body = json.load(open("/tmp/health.json"))
+db = (body.get("data") or {}).get("db")
+print("API responded: 200 db=%s" % db)
+if body.get("code") != 0 or db != "UP":
+    raise SystemExit(1)
+PY
               exit 0
             fi
             sleep 2
