@@ -1,52 +1,113 @@
 /**
  * 认证 Store
- * 依据: FP-R-04 会话 Store
- * 注意: 本步只做骨架，真实接口接入等 B0a 契约冻结后再做
+ * 依据: FP-R-01~07, B0a 工作包 §2 (D2/D3/D5)
+ *
+ * 功能:
+ * - 登录/登出
+ * - 令牌管理 (access_token + refresh_token)
+ * - 用户信息、菜单、权限码
+ * - 跨标签页同步 (FP-R-04)
+ * - 数据范围文本 (FP-C02-01)
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { authApi } from '@/api/generated'
+import {
+  getAccessToken,
+  setAccessToken,
+  getRefreshToken,
+  setRefreshToken,
+  clearTokens,
+} from '@/api/request'
 import type { UserInfo, MenuItem } from '@/types'
 
+const TOKEN_KEY = 'ims_access_token'
+
 export const useAuthStore = defineStore('auth', () => {
-  // 状态
-  const accessToken = ref<string | null>(localStorage.getItem('accessToken'))
-  const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'))
   const user = ref<UserInfo | null>(null)
   const menus = ref<MenuItem[]>([])
   const permCodes = ref<string[]>([])
+  const loading = ref(false)
 
-  // 计算属性
-  const isLoggedIn = computed(() => !!accessToken.value)
+  const isLoggedIn = computed(() => !!getAccessToken())
   const dataScopeText = computed(() => user.value?.dataScopeText || '')
   const pwdResetRequired = computed(() => user.value?.pwdResetRequired || false)
 
-  // 设置 Token
-  function setTokens(access: string, refresh: string) {
-    accessToken.value = access
-    refreshToken.value = refresh
-    localStorage.setItem('accessToken', access)
-    localStorage.setItem('refreshToken', refresh)
+  async function login(username: string, password: string): Promise<boolean> {
+    loading.value = true
+    try {
+      const result = await authApi.login({ username, password })
+      if (result.code === 0 && result.data) {
+        setAccessToken(result.data.accessToken)
+        setRefreshToken(result.data.refreshToken)
+        await fetchUserInfo()
+        return true
+      }
+      return false
+    } finally {
+      loading.value = false
+    }
   }
 
-  // 清除会话
-  function clearSession() {
-    accessToken.value = null
-    refreshToken.value = null
+  async function logout(): Promise<void> {
+    try {
+      await authApi.logout()
+    } finally {
+      clearSession()
+    }
+  }
+
+  async function fetchUserInfo(): Promise<void> {
+    const result = await authApi.me()
+    if (result.code === 0 && result.data) {
+      user.value = {
+        id: result.data.id,
+        username: result.data.username,
+        nickname: result.data.nickname,
+        avatar: result.data.avatar,
+        deptId: result.data.deptId,
+        deptName: result.data.deptName,
+        permCodes: result.data.permCodes || [],
+        dataScopeText: result.data.dataScopeText || '全部',
+        pwdResetRequired: result.data.pwdResetRequired || false,
+      }
+      menus.value = (result.data.menus || []).map(mapMenuItem)
+      permCodes.value = result.data.permCodes || []
+    }
+  }
+
+  function mapMenuItem(item: {
+    id?: string
+    name?: string
+    path?: string
+    icon?: string
+    permCode?: string
+    children?: Array<{
+      id?: string
+      name?: string
+      path?: string
+      icon?: string
+      permCode?: string
+      children?: unknown[]
+    }>
+  }): MenuItem {
+    return {
+      id: item.id || '',
+      name: item.name || '',
+      path: item.path,
+      icon: item.icon,
+      permCode: item.permCode,
+      children: item.children?.map(mapMenuItem),
+    }
+  }
+
+  function clearSession(): void {
+    clearTokens()
     user.value = null
     menus.value = []
     permCodes.value = []
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
   }
 
-  // 设置用户信息 (模拟，真实接口待 B0a)
-  function setUserInfo(info: UserInfo, menuList: MenuItem[], codes: string[]) {
-    user.value = info
-    menus.value = menuList
-    permCodes.value = codes
-  }
-
-  // 权限判断
   function hasPerm(code: string): boolean {
     return permCodes.value.includes(code)
   }
@@ -59,50 +120,16 @@ export const useAuthStore = defineStore('auth', () => {
     return codes.every((code) => permCodes.value.includes(code))
   }
 
-  // 模拟数据 (用于示例页)
-  function mockLogin() {
-    setTokens('mock-access-token', 'mock-refresh-token')
-    setUserInfo(
-      {
-        id: '1',
-        username: 'qa_admin',
-        nickname: '测试管理员',
-        deptId: '5',
-        deptName: '技术部',
-        permCodes: [
-          'ims:system:dept:create',
-          'ims:system:dept:update',
-          'ims:system:dept:delete',
-          'ims:system:user:query',
-          'ims:system:user:create',
-          'ims:system:user:update',
-          'ims:system:user:delete',
-          'ims:system:org-sync:run',
-          'ims:demo:order:query',
-          'ims:demo:order:create',
-          'ims:demo:order:update',
-          'ims:demo:order:delete',
-        ],
-        dataScopeText: '全部',
-      },
-      [
-        {
-          id: '1',
-          name: '示例',
-          icon: 'Document',
-          children: [
-            { id: '11', name: 'Token 演示', path: '/demo/tokens', permCode: 'ims:demo:order:query' },
-            { id: '12', name: '布局演示', path: '/demo/layout', permCode: 'ims:demo:order:query' },
-            { id: '13', name: '列表演示', path: '/demo/list', permCode: 'ims:demo:order:query' },
-            { id: '14', name: '表单演示', path: '/demo/form', permCode: 'ims:demo:order:query' },
-            { id: '15', name: '选择器演示', path: '/demo/selectors', permCode: 'ims:demo:order:query' },
-            { id: '16', name: '展示组件', path: '/demo/display', permCode: 'ims:demo:order:query' },
-            { id: '17', name: '部门树', path: '/demo/dept-tree', permCode: 'ims:demo:order:query' },
-            { id: '18', name: '左树右表', path: '/demo/left-tree-right-table', permCode: 'ims:demo:order:query' },
-          ],
-        },
-      ],
-      [
+  function mockLogin(): void {
+    setAccessToken('mock-access-token')
+    setRefreshToken('mock-refresh-token')
+    user.value = {
+      id: '1',
+      username: 'qa_admin',
+      nickname: '测试管理员',
+      deptId: '5',
+      deptName: '技术部',
+      permCodes: [
         'ims:system:dept:create',
         'ims:system:dept:update',
         'ims:system:dept:delete',
@@ -115,22 +142,62 @@ export const useAuthStore = defineStore('auth', () => {
         'ims:demo:order:create',
         'ims:demo:order:update',
         'ims:demo:order:delete',
-      ]
-    )
+      ],
+      dataScopeText: '全部',
+    }
+    menus.value = [
+      {
+        id: '1',
+        name: '示例',
+        icon: 'Document',
+        children: [
+          { id: '11', name: 'Token 演示', path: '/demo/tokens', permCode: 'ims:demo:order:query' },
+          { id: '12', name: '布局演示', path: '/demo/layout', permCode: 'ims:demo:order:query' },
+          { id: '13', name: '列表演示', path: '/demo/list', permCode: 'ims:demo:order:query' },
+          { id: '14', name: '表单演示', path: '/demo/form', permCode: 'ims:demo:order:query' },
+          { id: '15', name: '选择器演示', path: '/demo/selectors', permCode: 'ims:demo:order:query' },
+          { id: '16', name: '展示组件', path: '/demo/display', permCode: 'ims:demo:order:query' },
+          { id: '17', name: '部门树', path: '/demo/dept-tree', permCode: 'ims:demo:order:query' },
+          { id: '18', name: '左树右表', path: '/demo/left-tree-right-table', permCode: 'ims:demo:order:query' },
+        ],
+      },
+    ]
+    permCodes.value = [
+      'ims:system:dept:create',
+      'ims:system:dept:update',
+      'ims:system:dept:delete',
+      'ims:system:user:query',
+      'ims:system:user:create',
+      'ims:system:user:update',
+      'ims:system:user:delete',
+      'ims:system:org-sync:run',
+      'ims:demo:order:query',
+      'ims:demo:order:create',
+      'ims:demo:order:update',
+      'ims:demo:order:delete',
+    ]
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (event) => {
+      if (event.key === TOKEN_KEY && event.newValue === null) {
+        clearSession()
+      }
+    })
   }
 
   return {
-    accessToken,
-    refreshToken,
     user,
     menus,
     permCodes,
+    loading,
     isLoggedIn,
     dataScopeText,
     pwdResetRequired,
-    setTokens,
+    login,
+    logout,
+    fetchUserInfo,
     clearSession,
-    setUserInfo,
     hasPerm,
     hasAnyPerm,
     hasAllPerm,

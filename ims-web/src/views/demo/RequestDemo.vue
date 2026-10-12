@@ -7,11 +7,12 @@ import { ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import { toast } from '@/utils/toast'
+import { demoApi } from '@/api/generated/client'
 
 // 加载状态
 const loading = ref(false)
 
-// 模拟请求
+// 模拟请求 (前端模拟)
 async function simulateRequest(type: 'success' | 'error' | 'timeout') {
   loading.value = true
   
@@ -32,6 +33,21 @@ async function simulateRequest(type: 'success' | 'error' | 'timeout') {
   } catch (err) {
     const error = err as Error
     toast.error(error.message || '请求失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 测试真实 API 错误码
+async function testErrorCode(code: number) {
+  loading.value = true
+  try {
+    const result = await demoApi.triggerError({ code })
+    if (result.code === 0) {
+      toast.success('请求成功')
+    }
+  } catch {
+    // 错误已由 axios 拦截器处理
   } finally {
     loading.value = false
   }
@@ -110,7 +126,55 @@ function testToastTypes() {
       </div>
 
       <div class="demo-section">
-        <h3 class="section-title">3. 错误码说明</h3>
+        <h3 class="section-title">3. 错误码测试 (真实 API)</h3>
+        <div class="button-group">
+          <el-button
+            type="success"
+            :loading="loading"
+            @click="testErrorCode(0)"
+          >
+            成功 (0)
+          </el-button>
+          <el-button
+            type="warning"
+            :loading="loading"
+            @click="testErrorCode(1001)"
+          >
+            校验失败 (1001)
+          </el-button>
+          <el-button
+            type="warning"
+            :loading="loading"
+            @click="testErrorCode(1008)"
+          >
+            无权限 (1008)
+          </el-button>
+          <el-button
+            type="info"
+            :loading="loading"
+            @click="testErrorCode(1504)"
+          >
+            资源不存在 (1504)
+          </el-button>
+          <el-button
+            type="danger"
+            :loading="loading"
+            @click="testErrorCode(5007)"
+          >
+            系统异常 (5007)
+          </el-button>
+        </div>
+        <div class="demo-tip">
+          <p>• 这些按钮调用真实 API 端点 /demo/error，用于测试请求层错误处理</p>
+          <p>• 1001: 字段校验失败，通常显示在表单字段</p>
+          <p>• 1008: 暂无权限，显示权限不足提示</p>
+          <p>• 1504: 资源不可用，通常关闭抽屉</p>
+          <p>• 5007: 系统繁忙，显示问题编号</p>
+        </div>
+      </div>
+
+      <div class="demo-section">
+        <h3 class="section-title">4. 错误码说明</h3>
         <el-table :data="errorCodes" style="width: 100%">
           <el-table-column prop="code" label="错误码" width="100" />
           <el-table-column prop="name" label="名称" width="150" />
