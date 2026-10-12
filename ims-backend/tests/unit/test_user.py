@@ -188,3 +188,48 @@ class TestUserPasswordManagement:
         db_session.flush()
 
         assert user.password_hash == ""
+
+
+class TestUserTokenVersion:
+    """Tests for user token_version field (D5)."""
+
+    def test_user_has_token_version_field(self):
+        """UT-D05-01: User model has token_version field for session invalidation."""
+        assert hasattr(User, "token_version")
+
+    def test_token_version_default_is_zero(self, db_session, test_context):
+        """UT-D05-02: token_version defaults to 0."""
+        user = User(
+            id=400,
+            tenant_id=1,
+            username="token_version_test",
+            nickname="Token Version Test",
+            status="ACTIVE",
+            source="LOCAL",
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        # Reload from DB to verify default
+        db_session.refresh(user)
+        assert user.token_version == 0
+
+    def test_token_version_can_be_incremented(self, db_session, test_context):
+        """UT-D05-03: token_version can be incremented for session invalidation."""
+        user = User(
+            id=401,
+            tenant_id=1,
+            username="token_version_inc",
+            nickname="Token Version Inc",
+            status="ACTIVE",
+            source="LOCAL",
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        # Increment token_version (simulating password change / force logout)
+        user.token_version += 1
+        db_session.flush()
+
+        db_session.refresh(user)
+        assert user.token_version == 1

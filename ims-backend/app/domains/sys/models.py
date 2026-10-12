@@ -104,6 +104,12 @@ class User(AuditBase):
         Boolean, nullable=False, default=False, comment="是否需要重置密码"
     )
 
+    # Token version for session invalidation (D5)
+    # Reserved by B0a, used by B1 for password-change / leave / force-logout bump
+    token_version: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, comment="令牌版本号，改密/离职/强制登出时递增"
+    )
+
     # Source: LOCAL, DINGTALK, MIGRATED
     source: Mapped[str] = mapped_column(
         String(20), nullable=False, default="LOCAL", comment="来源"
