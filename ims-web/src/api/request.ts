@@ -20,6 +20,26 @@ import axios, {
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** 为 true 时不弹全局 toast，由调用方按错误码展示（登录 / 改密页） */
+    skipGlobalError?: boolean
+  }
+}
+
+/** 业务错误。拦截器拒绝时带上 code 与 data，页面据此展示白名单文案。 */
+export class ApiError extends Error {
+  code: number
+  data: unknown
+
+  constructor(code: number, msg: string, data: unknown = null) {
+    super(msg)
+    this.name = 'ApiError'
+    this.code = code
+    this.data = data
+  }
+}
+
 const TOKEN_KEY = 'ims_access_token'
 const REFRESH_TOKEN_KEY = 'ims_refresh_token'
 const REDIRECT_KEY = 'ims_redirect_url'
@@ -212,15 +232,18 @@ function createRequest(): AxiosInstance {
 
       if (result.code === ErrorCode.KICKED_OFFLINE) {
         redirectToLogin('您的账号已在其他设备登录，本设备已下线')
-        return Promise.reject(new Error(result.msg || 'kicked'))
+        return Promise.reject(new ApiError(result.code, result.msg || 'kicked', result.data))
       }
 
       if (result.code === ErrorCode.TOKEN_EXPIRED) {
         return handleTokenExpired(instance, response.config)
       }
 
-      handleErrorCode(result.code, result.msg)
-      return Promise.reject(new Error(result.msg || '请求失败'))
+      // 登录 / 改密自行展示 1214 等文案，避免和全局 toast 重复
+      if (!response.config.skipGlobalError) {
+        handleErrorCode(result.code, result.msg)
+      }
+      return Promise.reject(new ApiError(result.code, result.msg || '请求失败', result.data))
     },
     async (error: AxiosError) => {
       if (error.response?.status === 401) {
@@ -228,14 +251,17 @@ function createRequest(): AxiosInstance {
         return Promise.reject(error)
       }
 
+      const silent = Boolean(error.config?.skipGlobalError)
+
       if (!error.response) {
-        ElMessage.error('网络异常，请检查网络后重试')
-        return Promise.reject(error)
+        if (!silent) ElMessage.error('网络异常，请检查网络后重试')
+        return Promise.reject(new ApiError(ErrorCode.NETWORK_ERROR, '网络异常，请检查网络后重试'))
       }
 
       const result = error.response?.data as CommonResult | undefined
       if (result?.code) {
-        handleErrorCode(result.code, result.msg)
+        if (!silent) handleErrorCode(result.code, result.msg)
+        return Promise.reject(new ApiError(result.code, result.msg || '请求失败', result.data))
       }
 
       return Promise.reject(error)

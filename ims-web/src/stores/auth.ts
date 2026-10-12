@@ -12,14 +12,34 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/generated'
+import { changePassword as changePasswordApi } from '@/api/password'
 import {
+  ApiError,
   getAccessToken,
   setAccessToken,
-  getRefreshToken,
   setRefreshToken,
   clearTokens,
 } from '@/api/request'
+import type { components } from '@/api/generated/api-types'
 import type { UserInfo, MenuItem } from '@/types'
+
+type MeData = components['schemas']['MeResponse']
+type MeMenu = components['schemas']['MenuItem']
+
+const PWD_RESET_KEY = 'ims_pwd_reset'
+const LOGIN_METHOD_KEY = 'ims_last_login_method'
+
+export interface LoginFailure {
+  ok: false
+  code: number
+  msg: string
+  data: unknown
+}
+
+export interface LoginSuccess {
+  ok: true
+  pwdResetRequired: boolean
+}
 
 const TOKEN_KEY = 'ims_access_token'
 
@@ -34,26 +54,66 @@ export const useAuthStore = defineStore('auth', () => {
   const dataScopeText = computed(() => user.value?.dataScopeText || '')
   const pwdResetRequired = computed(() => user.value?.pwdResetRequired || false)
 
-  async function login(username: string, password: string): Promise<boolean> {
+  async function login(username: string, password: string): Promise<LoginSuccess | LoginFailure> {
     loading.value = true
     try {
-      const result = await authApi.login({ username, password })
+      const result = await authApi.login(
+        { username: username.trim(), password },
+        { skipGlobalError: true },
+      )
       if (result.code === 0 && result.data) {
         setAccessToken(result.data.accessToken)
         setRefreshToken(result.data.refreshToken)
         tokenVersion.value += 1
-        if (result.data.pwdResetRequired) {
-          sessionStorage.setItem('ims_pwd_reset', '1')
+        const reset = Boolean(result.data.pwdResetRequired)
+        if (reset) sessionStorage.setItem(PWD_RESET_KEY, '1')
+        else sessionStorage.removeItem(PWD_RESET_KEY)
+        try {
+          await fetchUserInfo()
+        } catch {
+          // 令牌已签发。/me 失败不撤销本次登录，页面仍按 pwdResetRequired 跳转。
         }
-        await fetchUserInfo()
-        if (user.value && (result.data.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1')) {
+        if (reset && user.value) {
           user.value = { ...user.value, pwdResetRequired: true }
         }
-        return true
+        localStorage.setItem(LOGIN_METHOD_KEY, 'password')
+        return { ok: true, pwdResetRequired: reset || Boolean(user.value?.pwdResetRequired) }
       }
-      return false
+      return { ok: false, code: result.code, msg: result.msg, data: result.data }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        return { ok: false, code: err.code, msg: err.message, data: err.data }
+      }
+      return { ok: false, code: -1, msg: '网络异常，请检查网络后重试', data: null }
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * 提交改密。仅在接口 code=0 后清除强制改密标记。
+   * 改密接口尚未进入 B0a generated client，走 api/password.ts 适配层。
+   */
+  async function submitPasswordChange(oldPassword: string, newPassword: string): Promise<LoginSuccess | LoginFailure> {
+    try {
+      await changePasswordApi({ oldPassword, newPassword })
+      sessionStorage.removeItem(PWD_RESET_KEY)
+      try {
+        await fetchUserInfo()
+      } catch {
+        // 改密已成功时仍允许离开本页；/me 失败由后续请求的 1002 处理。
+      }
+      if (user.value?.pwdResetRequired) {
+        sessionStorage.setItem(PWD_RESET_KEY, '1')
+      } else if (user.value) {
+        user.value = { ...user.value, pwdResetRequired: false }
+      }
+      return { ok: true, pwdResetRequired: Boolean(user.value?.pwdResetRequired) }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        return { ok: false, code: err.code, msg: err.message, data: err.data }
+      }
+      return { ok: false, code: -1, msg: '网络异常，请检查网络后重试', data: null }
     }
   }
 
@@ -68,44 +128,36 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchUserInfo(): Promise<void> {
     const result = await authApi.me()
     if (result.code === 0 && result.data) {
-      user.value = {
-        id: result.data.id,
-        username: result.data.username,
-        nickname: result.data.nickname,
-        avatar: result.data.avatar,
-        deptId: result.data.deptId,
-        deptName: result.data.deptName,
-        permCodes: result.data.permCodes || [],
-        dataScopeText: result.data.dataScopeText || '全部',
-        pwdResetRequired: result.data.pwdResetRequired || false,
-      }
-      menus.value = (result.data.menus || []).map(mapMenuItem)
-      permCodes.value = result.data.permCodes || []
+      applyMe(result.data)
     }
   }
 
-  function mapMenuItem(item: {
-    id?: string
-    name?: string
-    path?: string
-    icon?: string
-    permCode?: string
-    children?: Array<{
-      id?: string
-      name?: string
-      path?: string
-      icon?: string
-      permCode?: string
-      children?: unknown[]
-    }>
-  }): MenuItem {
+  /** 按 B0a MeResponse 读取：id 保持字符串，不转成 number。 */
+  function applyMe(data: MeData): void {
+    const profile = data.user
+    user.value = {
+      id: String(profile.id),
+      username: profile.username,
+      nickname: profile.nickname,
+      avatar: profile.avatar || undefined,
+      deptId: '',
+      deptName: profile.mainDeptName || profile.deptNames?.[0] || '',
+      permCodes: data.permCodes || [],
+      dataScopeText: data.dataScopeText || '',
+      pwdResetRequired: Boolean(profile.pwdResetRequired),
+    }
+    menus.value = (data.menus || []).map(mapMenuItem)
+    permCodes.value = data.permCodes || []
+  }
+
+  function mapMenuItem(item: MeMenu): MenuItem {
     return {
       id: item.id || '',
       name: item.name || '',
-      path: item.path,
-      icon: item.icon,
-      permCode: item.permCode,
-      children: item.children?.map(mapMenuItem),
+      path: item.path || undefined,
+      icon: item.icon || undefined,
+      permCode: item.permCode || undefined,
+      children: item.children?.map(mapMenuItem) || [],
     }
   }
 
@@ -115,6 +167,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     menus.value = []
     permCodes.value = []
+    sessionStorage.removeItem(PWD_RESET_KEY)
   }
 
   function hasPerm(code: string): boolean {
@@ -130,7 +183,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearPwdReset(): void {
-    sessionStorage.removeItem('ims_pwd_reset')
+    sessionStorage.removeItem(PWD_RESET_KEY)
     if (user.value) {
       user.value = { ...user.value, pwdResetRequired: false }
     }
@@ -215,6 +268,7 @@ export const useAuthStore = defineStore('auth', () => {
     dataScopeText,
     pwdResetRequired,
     login,
+    submitPasswordChange,
     logout,
     fetchUserInfo,
     clearSession,

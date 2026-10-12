@@ -239,7 +239,10 @@ function handleLogout() {
 
       <!-- 内容区 -->
       <main class="app-content">
-        <div v-if="showNoPerm" class="no-perm-panel">暂无权限查看此内容</div>
+        <div v-if="showNoPerm" class="no-perm-panel">
+          <p>您的账号尚未分配权限，请联系管理员</p>
+          <p>暂无权限查看此内容</p>
+        </div>
         <slot v-else />
       </main>
     </div>

@@ -5,7 +5,6 @@
  */
 import { test, expect } from '@playwright/test'
 import { setupApiMocks, ErrorCode } from './mocks/api-mocks'
-import { isNarrow } from './helpers/viewport'
 
 test.describe('R. 请求层', () => {
   test.beforeEach(async ({ page }) => {
@@ -278,22 +277,26 @@ test.describe('R. 请求层', () => {
         }),
       })
     })
+    await page.route('**/admin-api/ims/auth/password/change', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 0, msg: '成功', data: null }),
+      })
+    })
     await page.goto('/login')
-    await page.getByPlaceholder('用户名').fill('qa_viewer')
-    await page.getByPlaceholder('密码').fill('new-pass')
+    await page.getByPlaceholder('请输入用户名').fill('qa_viewer')
+    await page.getByPlaceholder('请输入密码').fill('Test1234')
     await page.getByRole('button', { name: '登录' }).click()
-    await expect(page).toHaveURL(/\/user\/change-password/)
-    if (isNarrow(page)) {
-      await page.locator('.menu-btn').last().tap()
-    }
-    await page.getByRole('menuitem', { name: '人员管理' }).last().click()
-    await expect(page).toHaveURL(/\/user\/change-password/)
-    if (isNarrow(page)) {
-      await page.mouse.click(380, 400)
-    }
-    await page.getByPlaceholder('请输入新密码').fill('abcdef')
+    await expect(page).toHaveURL(/\/password-reset/)
+    await expect(page.locator('.app-sidebar')).toHaveCount(0)
+    await page.goto('/demo/list')
+    await expect(page).toHaveURL(/\/password-reset/)
+    await page.getByPlaceholder('请输入当前密码').fill('Test1234')
+    await page.getByPlaceholder('请输入新密码').fill('Abcd5678')
+    await page.getByPlaceholder('请再次输入新密码').fill('Abcd5678')
     await page.getByRole('button', { name: '确认修改' }).click()
-    await expect(page).toHaveURL(/\/demo\/tokens/)
+    await expect(page).toHaveURL(/\/account\/home/)
   })
 
   test('VC-R-13: 权限变更无感知刷新', async ({ page }) => {
@@ -340,7 +343,7 @@ test.describe('R. 请求层', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' })
     await setupApiMocks(page, { userType: 'noperm' })
     await page.reload()
-    await expect(page.getByText('您的账号尚未分配权限，请联系管理员')).toBeVisible()
+    await expect(page.getByRole('main').getByText('您的账号尚未分配权限，请联系管理员')).toBeVisible()
     await expect(page.getByText('暂无权限查看此内容')).toBeVisible()
     await expect(page.locator('.app-content .el-table')).toHaveCount(0)
   })

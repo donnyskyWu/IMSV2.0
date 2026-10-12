@@ -5,6 +5,12 @@
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import {
+  isPasswordPath,
+  PASSWORD_RESET_PATH,
+  resolveLanding,
+  sanitizeRedirect,
+} from '@/utils/login-landing'
 
 // 示例页路由 (仅 dev/test 构建注册)
 const demoRoutes: RouteRecordRaw[] = [
@@ -97,10 +103,25 @@ const loginRoute: RouteRecordRaw = {
 }
 
 const changePasswordRoute: RouteRecordRaw = {
-  path: '/user/change-password',
+  path: PASSWORD_RESET_PATH,
   name: 'ChangePassword',
   component: () => import('@/views/ChangePassword.vue'),
-  meta: { title: '修改密码' },
+  meta: { title: '请先修改密码', menuless: true },
+}
+
+/** B0b 已登记路径，与 /password-reset 同一页面。 */
+const changePasswordAliasRoute: RouteRecordRaw = {
+  path: '/user/change-password',
+  name: 'ChangePasswordAlias',
+  component: () => import('@/views/ChangePassword.vue'),
+  meta: { title: '请先修改密码', menuless: true },
+}
+
+const accountHomeRoute: RouteRecordRaw = {
+  path: '/account/home',
+  name: 'AccountHome',
+  component: () => import('@/views/AccountHome.vue'),
+  meta: { title: '首页' },
 }
 
 // dev/test 注册示例页；生产构建不注册，/demo/* 回首页（§2.2 #9、§2.3 U4）
@@ -111,6 +132,8 @@ const routes: RouteRecordRaw[] = demoEnabled
       { path: '/', redirect: '/demo/tokens' },
       loginRoute,
       changePasswordRoute,
+      changePasswordAliasRoute,
+      accountHomeRoute,
       ...demoRoutes,
     ]
   : [
@@ -122,6 +145,8 @@ const routes: RouteRecordRaw[] = demoEnabled
       },
       loginRoute,
       changePasswordRoute,
+      changePasswordAliasRoute,
+      accountHomeRoute,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
@@ -133,6 +158,15 @@ const router = createRouter({
   routes,
 })
 
+function registeredRoutePaths(): string[] {
+  return router.getRoutes().map((route) => route.path).filter((path) => path && !path.includes(':'))
+}
+
+function mustResetPassword(): boolean {
+  const authStore = useAuthStore()
+  return authStore.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1'
+}
+
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
@@ -143,21 +177,35 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  // 公开页面
+  const loggedIn = !!localStorage.getItem('ims_access_token')
+
+  // 已登录再打开登录页：直接进入系统或改密页（FP-B1-LG-01）
+  if (to.path === '/login' && loggedIn) {
+    try {
+      if (!authStore.user) await authStore.fetchUserInfo()
+    } catch {
+      authStore.clearSession()
+      next()
+      return
+    }
+    if (mustResetPassword()) {
+      const redirect = sanitizeRedirect(to.query.redirect)
+      next({ path: PASSWORD_RESET_PATH, query: redirect ? { redirect } : {} })
+      return
+    }
+    next(resolveLanding({
+      redirect: to.query.redirect,
+      menus: authStore.menus,
+      registeredPaths: registeredRoutePaths(),
+    }))
+    return
+  }
+
   if (to.meta.public) {
     next()
     return
   }
 
-  // 密码被重置后只能停留在改密页（登录响应可能先于用户信息）
-  const mustReset = authStore.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1'
-  if (mustReset && to.path !== '/user/change-password') {
-    next('/user/change-password')
-    return
-  }
-
-  // 未登录 → 跳登录页 (FP-R-07)。令牌在 localStorage，不能用无依赖的 computed。
-  const loggedIn = !!localStorage.getItem('ims_access_token')
   if (!loggedIn) {
     const requireAuth = sessionStorage.getItem('ims_require_auth') === '1'
     // 示例页自动登录 (模拟)。VC-R-15 写入 ims_require_auth 后走真实跳转。
@@ -170,8 +218,17 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
+  if (mustResetPassword() && !isPasswordPath(to.path)) {
+    const redirect = sanitizeRedirect(to.query.redirect) || sanitizeRedirect(to.fullPath)
+    next({
+      path: PASSWORD_RESET_PATH,
+      query: redirect ? { redirect } : {},
+    })
+    return
+  }
+
   // 刷新后 Pinia 清空，用 /me 恢复权限（只读用户因此看不到写操作）
-  if (!to.meta.public && authStore.permCodes.length === 0) {
+  if (authStore.permCodes.length === 0 && !isPasswordPath(to.path)) {
     try {
       await authStore.fetchUserInfo()
     } catch {
@@ -181,9 +238,8 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  // 需要修改密码 (FP-R-04)
-  if (authStore.pwdResetRequired && to.path !== '/user/change-password') {
-    next('/user/change-password')
+  if (mustResetPassword() && !isPasswordPath(to.path)) {
+    next(PASSWORD_RESET_PATH)
     return
   }
 

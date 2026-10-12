@@ -2,17 +2,19 @@
  * API 客户端封装
  * 提供类型安全的 API 调用方法
  */
+import type { AxiosRequestConfig } from 'axios'
 import { request } from '../request'
-import type { paths, components } from './api-types'
+import type { components } from './api-types'
 
 type Schemas = components['schemas']
 
 // 认证相关
 export const authApi = {
-  login: (data: { username: string; password: string }) =>
+  login: (data: { username: string; password: string }, config?: AxiosRequestConfig) =>
     request.post<Schemas['CommonResult_LoginResponse_']>(
       '/admin-api/ims/auth/login',
-      data
+      data,
+      config,
     ),
 
   logout: () =>
