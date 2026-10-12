@@ -95,13 +95,20 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd ims-backend
-          pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+          # --cov-branch 写入分支弧。后面的 P0 门禁只看分支覆盖率，不看合计列。
+          pytest tests/ -v --cov=app --cov-branch --cov-report=xml --cov-report=term-missing
       
       - name: Check coverage threshold
         run: |
           cd ims-backend
           # 80% overall per team rules (pyproject.toml fail_under=80)
           coverage report --fail-under=80
+
+      - name: Check P0 service branch coverage
+        run: |
+          cd ims-backend
+          # 名单只在 scripts/p0_services.txt。每个文件的分支覆盖率 < 90 则失败。
+          python scripts/check_p0_branch_coverage.py
 
   static-checks:
     name: Static Checks

@@ -233,21 +233,21 @@ class TestMeEndpoint:
     """Integration tests for GET /admin-api/ims/auth/me."""
 
     def test_me_endpoint_without_auth_fails(self, app_client):
-        """Test /me without auth returns error."""
+        """未登录调用 /me 与其它接口一样：HTTP 401，业务码 1002。"""
         response = app_client.get("/admin-api/ims/auth/me")
-        assert response.status_code == 200
+        assert response.status_code == 401
         data = response.json()
-        assert data["code"] != 0
+        assert data["code"] == 1002
 
     def test_me_endpoint_with_invalid_token_fails(self, app_client):
-        """Test /me with invalid token returns error."""
+        """无效令牌同样是 401 + 1002，不能落成 1008。"""
         response = app_client.get(
             "/admin-api/ims/auth/me",
             headers={"Authorization": "Bearer invalidtoken"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 401
         data = response.json()
-        assert data["code"] != 0
+        assert data["code"] == 1002
 
 
 class TestDingtalkSSOEndpoints:
@@ -298,9 +298,9 @@ class TestAuthServiceCoverage:
             "/admin-api/ims/auth/me",
             headers={"Authorization": f"Bearer {expired_token}"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 401
         data = response.json()
-        assert data["code"] in [1002, 1008]
+        assert data["code"] == 1002
 
     def test_verify_token_with_wrong_type(self, app_client):
         """Test that tokens with wrong type are rejected."""
@@ -326,6 +326,6 @@ class TestAuthServiceCoverage:
             "/admin-api/ims/auth/me",
             headers={"Authorization": f"Bearer {wrong_type_token}"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 401
         data = response.json()
-        assert data["code"] in [1002, 1008]
+        assert data["code"] == 1002

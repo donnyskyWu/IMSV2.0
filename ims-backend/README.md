@@ -69,8 +69,12 @@ pytest tests/ -v
 # 运行单元测试
 pytest tests/unit/ -v
 
-# 带覆盖率
-pytest tests/ -v --cov=app --cov-report=term-missing
+# 带覆盖率（含分支）。总行覆盖门槛 80%。
+pytest tests/ -v --cov=app --cov-branch --cov-report=term-missing
+
+# P0 Service 分支覆盖门槛 90%（只看分支，不看语句+分支的合计）。
+# 增删文件只改 scripts/p0_services.txt。
+python scripts/check_p0_branch_coverage.py
 ```
 
 ## API 文档

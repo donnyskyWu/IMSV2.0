@@ -10,8 +10,10 @@ Covers:
 
 import pytest
 
+from app.core.cache import Cache
 from app.core.errors import BizError
-from app.services.dict import DictService
+from app.domains.sys.models import DictData
+from app.services.dict import DICT_REF_CHECKS, DictService
 
 
 class TestDictService:
@@ -160,3 +162,97 @@ class TestDictService:
             service.validate_color_type("red")
 
         assert exc_info.value.code == 1001
+
+    @pytest.mark.asyncio
+    async def test_local_cache_hit_ignores_db_change_within_ttl(
+        self, db_session, test_context, sample_dict
+    ):
+        """60 秒内第二次读取走进程内缓存，不反映刚改过的库内标签。"""
+        service = DictService()
+        Cache.delete(f"{service.CACHE_PREFIX}dict_user_status")
+
+        first = await service.get_dict_data_simple_list("dict_user_status")
+        active = next(item for item in first if item["dict_value"] == "ACTIVE")
+        assert active["dict_label"] == "在职"
+
+        row = db_session.query(DictData).filter(
+            DictData.dict_type == "dict_user_status",
+            DictData.dict_value == "ACTIVE",
+            DictData.deleted == 0,
+        ).one()
+        row.dict_label = "已改"
+        db_session.flush()
+
+        second = await service.get_dict_data_simple_list("dict_user_status")
+        cached = next(item for item in second if item["dict_value"] == "ACTIVE")
+        # 返回的是同一份列表，说明没有回库重查。
+        assert second is first
+        assert cached["dict_label"] == "在职"
+        db_session.refresh(row)
+        assert row.dict_label == "已改"
+
+    @pytest.mark.asyncio
+    async def test_update_missing_value_raises_1503(
+        self, db_session, test_context, sample_dict
+    ):
+        """改不存在的字典值返回 1503。"""
+        service = DictService()
+
+        with pytest.raises(BizError) as exc_info:
+            await service.update_dict_label("dict_user_status", "NO_SUCH", "不存在")
+
+        assert exc_info.value.code == 1503
+
+    @pytest.mark.asyncio
+    async def test_delete_missing_value_raises_1504(self, db_session, test_context):
+        """删不存在的字典值返回 1504。"""
+        service = DictService()
+
+        with pytest.raises(BizError) as exc_info:
+            await service.delete_dict_value(999_999)
+
+        assert exc_info.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_delete_continues_when_ref_count_is_zero(
+        self, db_session, test_context
+    ):
+        """引用检查返回 0 时不拦截，软删除把 deleted 写成自身 id。"""
+        row = DictData(
+            tenant_id=1,
+            dict_type="dict_ref_zero",
+            dict_value="ZERO",
+            dict_label="零引用",
+            status="ENABLED",
+            is_builtin=False,
+        )
+        db_session.add(row)
+        db_session.flush()
+
+        def zero_refs(_session, data_id):
+            assert data_id == row.id
+            return 0
+
+        saved = list(DICT_REF_CHECKS)
+        DICT_REF_CHECKS.clear()
+        DICT_REF_CHECKS.append(zero_refs)
+        try:
+            await DictService().delete_dict_value(row.id)
+        finally:
+            DICT_REF_CHECKS.clear()
+            DICT_REF_CHECKS.extend(saved)
+
+        db_session.refresh(row)
+        assert row.deleted == row.id
+
+    @pytest.mark.asyncio
+    async def test_get_dict_label_skips_non_matching_values(
+        self, db_session, test_context, sample_dict
+    ):
+        """标签查找会跳过排在前面的值，命中后面的 FROZEN。"""
+        service = DictService()
+        Cache.delete(f"{service.CACHE_PREFIX}dict_user_status")
+
+        label = await service.get_dict_label("dict_user_status", "FROZEN")
+
+        assert label == "冻结"

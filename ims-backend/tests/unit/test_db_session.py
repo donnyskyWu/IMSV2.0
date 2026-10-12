@@ -198,3 +198,242 @@ class TestUseDbSession:
             sess.SessionLocal = previous_local
             sess.engine = previous_engine
             sess._db_session.reset(token)
+
+    def test_idle_session_skips_commit(self, db_engine):
+        """没读也没写时不提交，避免空提交去连已经宕掉的库。"""
+        from sqlalchemy.orm import Session, sessionmaker
+
+        import app.db.session as sess
+
+        commits: list[int] = []
+
+        class TrackingSession(Session):
+            def commit(self):  # type: ignore[override]
+                commits.append(1)
+                return super().commit()
+
+        token = sess._db_session.set(None)
+        previous_local = sess.SessionLocal
+        previous_engine = sess.engine
+        sess.engine = db_engine
+        sess.SessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=db_engine, class_=TrackingSession,
+        )
+        try:
+            with sess.use_db_session():
+                pass
+            assert commits == []
+        finally:
+            sess.SessionLocal = previous_local
+            sess.engine = previous_engine
+            sess._db_session.reset(token)
+
+    def test_pending_commits_when_transaction_flag_is_false(self, db_engine):
+        """待写入对象在事务标记为假时仍然提交。"""
+        from sqlalchemy.orm import sessionmaker
+
+        import app.db.session as sess
+        from app.domains.sys.models import Tenant
+
+        token = sess._db_session.set(None)
+        previous_local = sess.SessionLocal
+        previous_engine = sess.engine
+        sess.engine = db_engine
+        sess.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+        try:
+            with sess.use_db_session() as session:
+                session.add(Tenant(tenant_id=1, name="待提交探针", status="ENABLED"))
+                session.in_transaction = lambda: False  # type: ignore[method-assign]
+
+            with sess.use_db_session() as session:
+                saved = session.query(Tenant).filter(Tenant.name == "待提交探针").one()
+                assert saved.status == "ENABLED"
+                session.delete(saved)
+        finally:
+            sess.SessionLocal = previous_local
+            sess.engine = previous_engine
+            sess._db_session.reset(token)
+
+    def test_new_session_requires_factory(self):
+        """没有工厂、也没有可借用的会话时，直接失败。"""
+        import app.db.session as sess
+
+        token = sess._db_session.set(None)
+        previous = sess.SessionLocal
+        sess.SessionLocal = None
+        try:
+            with pytest.raises(RuntimeError, match="Database not initialized"):
+                with sess.use_db_session():
+                    pass
+        finally:
+            sess.SessionLocal = previous
+            sess._db_session.reset(token)
+
+
+class TestSessionP0Branches:
+    """补 FP-C01-01 里原先没走到的分支，供 P0 分支门禁使用。
+
+    足球只读拦截、未初始化、健康检查成功/失败都要有明确结果断言。
+    SQLAlchemy 2 拒绝裸字符串，check_* 里的 ``return True`` 用接受探测语句的连接替身走到。
+    """
+
+    def test_init_skips_engines_and_reports_disabled(self, monkeypatch):
+        """库地址为空且足球未启用：不建引擎，健康检查分别是 False 和 DISABLED。"""
+        import app.db.session as session_mod
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod.settings.db, "url", "")
+        monkeypatch.setattr(session_mod.settings.football_live, "url", "")
+        monkeypatch.setattr(session_mod.settings.football_live, "enabled", False)
+        monkeypatch.setattr(session_mod, "engine", None)
+        monkeypatch.setattr(session_mod, "SessionLocal", None)
+        monkeypatch.setattr(session_mod, "football_engine", None)
+
+        session_mod.init_db()
+
+        assert session_mod.engine is None
+        assert session_mod.SessionLocal is None
+        assert session_mod.football_engine is None
+        assert session_mod.DatabaseHealth.check_ims() is False
+        assert session_mod.DatabaseHealth.check_football() == (True, "DISABLED")
+
+    def test_football_enabled_without_engine_is_down(self, monkeypatch):
+        """足球开关开着但引擎没建出来，探活是 DOWN，而不是 DISABLED。"""
+        import app.db.session as session_mod
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod.settings.football_live, "enabled", True)
+        monkeypatch.setattr(session_mod, "football_engine", None)
+
+        assert session_mod.DatabaseHealth.check_football() == (False, "DOWN")
+
+    async def test_get_db_yields_none_when_uninitialized(self, monkeypatch):
+        """库还没初始化且没有借用会话时，依赖交出 None，让 /health 仍能报 DOWN。"""
+        import app.db.session as session_mod
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod, "SessionLocal", None)
+        session_mod._db_session.set(None)
+
+        gen = session_mod.get_db()
+        assert await anext(gen) is None
+        await gen.aclose()
+
+    async def test_get_db_borrows_existing_without_factory(self, monkeypatch, db_session):
+        """已有会话时，即使工厂是空的也只借用，不新建。"""
+        import app.db.session as session_mod
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod, "SessionLocal", None)
+        session_mod._db_session.set(db_session)
+
+        gen = session_mod.get_db()
+        borrowed = await anext(gen)
+        assert borrowed is db_session
+        await gen.aclose()
+        assert db_session.is_active
+
+    def test_football_session_requires_factory(self, monkeypatch):
+        """没配置足球库时，不能借出会话。"""
+        import app.db.session as session_mod
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod, "FootballSession", None)
+
+        with pytest.raises(RuntimeError, match="Football database not configured"):
+            next(session_mod.get_football_session())
+
+    def test_football_readonly_interceptor_and_session(self, monkeypatch):
+        """SELECT / SHOW 放行，其他语句在执行前被只读拦截拒绝。"""
+        from sqlalchemy.exc import OperationalError
+
+        import app.db.session as session_mod
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod.settings.football_live, "enabled", True)
+        monkeypatch.setattr(session_mod.settings.football_live, "url", "sqlite://")
+
+        before_engine = session_mod.football_engine
+        session_mod.init_db()
+        created = session_mod.football_engine
+        assert created is not None
+        assert created is not before_engine
+        try:
+            conn = created.connect()
+            try:
+                conn.exec_driver_sql("  select 1")
+                # SHOW 不是 SELECT，拦截器仍应放行；sqlite 自己不认识这条语法。
+                with pytest.raises(OperationalError):
+                    conn.exec_driver_sql("SHOW TABLES")
+                with pytest.raises(RuntimeError, match="read-only"):
+                    conn.exec_driver_sql("DELETE FROM live_room")
+            finally:
+                conn.close()
+
+            assert session_mod.DatabaseHealth.check_football() == (True, "UP")
+            assert session_mod.DatabaseHealth.check_ims() is True
+
+            gen = session_mod.get_football_session()
+            football_session = next(gen)
+            try:
+                assert football_session.bind is created
+            finally:
+                gen.close()
+        finally:
+            created.dispose()
+
+    def test_health_probe_success_and_query_failure(self, monkeypatch):
+        """探测语句成功则为 UP / True，抛错则为 DOWN / False。"""
+        import app.db.session as session_mod
+
+        class _Conn:
+            def __init__(self, fail: bool) -> None:
+                self.fail = fail
+                self.statements: list[object] = []
+
+            def __enter__(self) -> "_Conn":
+                return self
+
+            def __exit__(self, *_args: object) -> bool:
+                return False
+
+            def execute(self, statement: object) -> int:
+                self.statements.append(statement)
+                if self.fail:
+                    raise RuntimeError("db down")
+                return 1
+
+        class _Engine:
+            def __init__(self, fail: bool) -> None:
+                self.conn = _Conn(fail)
+
+            def connect(self) -> _Conn:
+                return self.conn
+
+        self._snapshot(monkeypatch, session_mod)
+        monkeypatch.setattr(session_mod.settings.football_live, "enabled", True)
+
+        ims_up = _Engine(False)
+        monkeypatch.setattr(session_mod, "engine", ims_up)
+        assert session_mod.DatabaseHealth.check_ims() is True
+        assert "SELECT 1" in str(ims_up.conn.statements[0])
+
+        ims_down = _Engine(True)
+        monkeypatch.setattr(session_mod, "engine", ims_down)
+        assert session_mod.DatabaseHealth.check_ims() is False
+        assert "SELECT 1" in str(ims_down.conn.statements[0])
+
+        football_up = _Engine(False)
+        monkeypatch.setattr(session_mod, "football_engine", football_up)
+        assert session_mod.DatabaseHealth.check_football() == (True, "UP")
+        assert "SELECT 1" in str(football_up.conn.statements[0])
+
+        football_down = _Engine(True)
+        monkeypatch.setattr(session_mod, "football_engine", football_down)
+        assert session_mod.DatabaseHealth.check_football() == (False, "DOWN")
+
+    @staticmethod
+    def _snapshot(monkeypatch: pytest.MonkeyPatch, session_mod: object) -> None:
+        """记住 init_db 会改写的全局量，用例结束时还原，避免污染其他用例。"""
+        for name in ("engine", "SessionLocal", "football_engine", "FootballSession"):
+            monkeypatch.setattr(session_mod, name, getattr(session_mod, name))

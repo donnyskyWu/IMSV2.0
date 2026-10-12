@@ -170,10 +170,14 @@ async def get_current_user_info() -> CommonResult[MeResponse]:
     - PENDING_CONFIG or empty permissions -> empty menus with prompt
     """
     from app.core.context import ctx
+    from app.core.errors import BizError
     from app.services.auth import AuthService
 
     auth_service = AuthService()
-    user_id = ctx.require_user_id()
+    # 未登录与其它需要登录的接口一致：HTTP 401 + 1002，而不是 200 + 1008。
+    user_id = ctx.user_id
+    if user_id is None or user_id <= 0:
+        raise BizError(1002)
     result = await auth_service.get_current_user_info(user_id)
     return CommonResult.success(data=result)
 
