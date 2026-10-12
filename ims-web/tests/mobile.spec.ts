@@ -38,28 +38,14 @@ test.describe('移动端测试', () => {
     await page.goto('/demo/layout')
     await page.waitForSelector('.app-layout')
 
-    const sidebar = page.locator('.sidebar, .app-sidebar').first()
-    if (await sidebar.count() > 0) {
-      const isHidden = await sidebar.evaluate((el) => {
-        return el.classList.contains('mobile-hidden') ||
-          getComputedStyle(el).display === 'none' ||
-          getComputedStyle(el).visibility === 'hidden'
-      })
-      expect(isHidden).toBe(true)
-    }
+    // 布局演示页会再嵌一套 AppLayout，只断言外壳侧栏
+    const shell = page.locator('.app-layout').first()
+    const sidebar = shell.locator('.sidebar.app-sidebar').first()
+    await expect(sidebar).toBeVisible()
+    await expect(sidebar).toHaveClass(/mobile-hidden/)
 
-    const main = page.locator('main, .main-content').first()
-    if (await main.count() > 0) {
-      const box = await main.boundingBox()
-      if (box) {
-        expect(box.x).toBeLessThanOrEqual(16)
-      }
-    }
-
-    const menuBtn = page.locator('.menu-btn, [data-testid="menu-btn"]').first()
-    if (await menuBtn.count() > 0) {
-      await expect(menuBtn).toBeVisible()
-    }
+    const menuBtn = shell.locator('.menu-btn').first()
+    await expect(menuBtn).toBeVisible()
 
     await expectNoHOverflow(page)
   })
@@ -586,6 +572,7 @@ test.describe('移动端测试', () => {
     // 获取小号按钮，验证触控热区 ≥44×44px (§2.3 U1)
     const smallButtons = page.locator('.el-button--small:visible')
     const smallCount = await smallButtons.count()
+    expect(smallCount).toBeGreaterThanOrEqual(2)
 
     // 使用 hitBox() 验证小号按钮的触控热区
     for (let i = 0; i < Math.min(smallCount, 5); i++) {
@@ -762,7 +749,7 @@ test.describe('移动端测试', () => {
   test('VC-M-33: __routes 接口不需鉴权返回路由清单', async ({ playwright }) => {
     // 使用新的请求上下文，不带令牌
     const ctx = await playwright.request.newContext({
-      baseURL: 'http://localhost:3000',
+      baseURL: 'http://127.0.0.1:3000',
     })
 
     const res = await ctx.get('/__routes')
@@ -810,29 +797,33 @@ test.describe('移动端测试', () => {
     await ctx.dispose()
   })
 
-  test('VC-M-34: 生产构建不提供 __routes 示例页跳首页', async ({ page, browserName }, testInfo) => {
-    // 此测试仅在 prod-build 项目中运行
+  test('VC-M-34: 生产构建不提供 __routes 示例页跳首页', async ({ page }, testInfo) => {
+    // 依据: FP-R-09、§2.3 U4。只在 prod-build（vite preview）项目中执行
     test.skip(testInfo.project.name !== 'prod-build', '仅在 prod-build 项目中运行')
 
-    // 测试 /__routes 返回 404 或非 JSON
     const res = await page.request.get('/__routes')
-    const isNotAvailable =
+    const contentType = res.headers()['content-type'] || ''
+    const body = await res.text()
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(body)
+    } catch {
+      parsed = undefined
+    }
+    const isRouteList = Array.isArray(parsed)
+    const unavailable =
       res.status() === 404 ||
-      !(res.headers()['content-type'] || '').includes('application/json')
+      !contentType.includes('application/json') ||
+      parsed === undefined
+    expect(unavailable).toBe(true)
+    expect(isRouteList).toBe(false)
 
-    expect(isNotAvailable).toBe(true)
-
-    // 访问 /demo/list 应跳转到首页
     await page.goto('/demo/list')
-    await page.waitForLoadState('networkidle')
-
-    // 验证跳转到首页
-    const url = page.url()
-    expect(url).toMatch(/\/($|home|workspace|workbench)/)
-
-    // 验证没有示例表格内容
-    const table = page.locator('.el-table')
-    expect(await table.count()).toBe(0)
+    await expect(page).toHaveURL(/\/($|home|workspace|workbench)/)
+    await expect(page.getByRole('heading', { name: '首页' })).toBeVisible()
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page.getByText('列表演示')).toHaveCount(0)
+    await expect(page.getByText('示例订单')).toHaveCount(0)
   })
 
   test('VC-M-35: 错误权限码 warn 不影响冒烟', async ({ page }) => {

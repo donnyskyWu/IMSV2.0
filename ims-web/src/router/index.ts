@@ -88,23 +88,36 @@ const demoRoutes: RouteRecordRaw[] = [
   },
 ]
 
-// 基础路由
-const baseRoutes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    redirect: '/demo/tokens',
-  },
-  {
-    path: '/login',
-    name: 'Login',
-    component: () => import('@/views/Login.vue'),
-    meta: { title: '登录', public: true },
-  },
-]
+// 登录页（生产与开发都保留）
+const loginRoute: RouteRecordRaw = {
+  path: '/login',
+  name: 'Login',
+  component: () => import('@/views/Login.vue'),
+  meta: { title: '登录', public: true },
+}
 
-// 根据环境决定是否注册示例页路由
-const isDev = import.meta.env.DEV || import.meta.env.MODE === 'test'
-const routes: RouteRecordRaw[] = isDev ? [...baseRoutes, ...demoRoutes] : baseRoutes
+// dev/test 注册示例页；生产构建不注册，/demo/* 回首页（§2.2 #9、§2.3 U4）
+const demoEnabled = import.meta.env.DEV || import.meta.env.MODE === 'test'
+
+const routes: RouteRecordRaw[] = demoEnabled
+  ? [
+      { path: '/', redirect: '/demo/tokens' },
+      loginRoute,
+      ...demoRoutes,
+    ]
+  : [
+      {
+        path: '/',
+        name: 'Home',
+        component: () => import('@/views/Home.vue'),
+        meta: { title: '首页', public: true },
+      },
+      loginRoute,
+      {
+        path: '/demo/:pathMatch(.*)*',
+        redirect: '/',
+      },
+    ]
 
 const router = createRouter({
   history: createWebHistory(),
@@ -115,6 +128,12 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
 
+  // 生产构建不提供示例页：/demo/* 跳首页，且不经过登录（§2.3 U4）
+  if (!demoEnabled && (to.path === '/demo' || to.path.startsWith('/demo/'))) {
+    next({ path: '/', replace: true })
+    return
+  }
+
   // 公开页面
   if (to.meta.public) {
     next()
@@ -124,7 +143,7 @@ router.beforeEach((to, _from, next) => {
   // 未登录 → 跳登录页 (FP-R-07)
   if (!authStore.isLoggedIn) {
     // 示例页自动登录 (模拟)
-    if (isDev && to.path.startsWith('/demo')) {
+    if (demoEnabled && to.path.startsWith('/demo')) {
       authStore.mockLogin()
       next()
       return
@@ -171,7 +190,7 @@ export function getRoutesList(): Array<{ path: string; name: string; meta: Recor
     }))
 }
 
-// 暴露给全局，供 /__routes 使用 (仅 test 构建)
-if (isDev) {
+// 暴露给全局，供 /__routes 使用 (仅 dev/test 构建)
+if (demoEnabled) {
   ;(window as unknown as Record<string, unknown>).__getRoutesList = getRoutesList
 }

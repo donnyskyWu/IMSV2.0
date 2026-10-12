@@ -66,7 +66,6 @@ declare module 'vue' {
     FileUpload: typeof import('./components/file/FileUpload.vue')['default']
     FormDrawer: typeof import('./components/form/FormDrawer.vue')['default']
     FormField: typeof import('./components/form/FormField.vue')['default']
-    HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     ImportDialog: typeof import('./components/file/ImportDialog.vue')['default']
     LeftTreeRightTable: typeof import('./components/list/LeftTreeRightTable.vue')['default']
     MaskedText: typeof import('./components/display/MaskedText.vue')['default']

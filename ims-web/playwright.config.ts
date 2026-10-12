@@ -15,7 +15,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html'], ['list']],
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://127.0.0.1:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -53,26 +53,35 @@ export default defineConfig({
       },
     },
 
-    // 生产构建测试 (VC-M-34)
+    // 生产构建测试 (VC-M-34)：vite build --mode production + vite preview
     {
       name: 'prod-build',
       use: {
         ...devices['iPhone 14'],
+        browserName: 'chromium',
         viewport: { width: 390, height: 844 },
         hasTouch: true,
         isMobile: true,
-        baseURL: 'http://localhost:4173',
+        baseURL: 'http://127.0.0.1:4173',
       },
       testMatch: /mobile\.spec\.ts/,
       grep: /VC-M-34/,
     },
   ],
 
-  // 自动启动开发服务器
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60000,
-  },
+  // 开发服务器供桌面/移动用例；独立的 production preview 供 VC-M-34
+  webServer: [
+    {
+      command: 'npm run dev',
+      url: 'http://127.0.0.1:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      command: 'npm run build && npm run preview',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 300_000,
+    },
+  ],
 })

@@ -320,7 +320,7 @@
 | VC-M-31 | mobile.spec.ts | VC-M-31: 内容区内边距页头标题操作 | ✅ PASS | |
 | VC-M-32 | mobile.spec.ts | VC-M-32: 全局冒烟无溢出无异常 | ✅ PASS | |
 | VC-M-33 | mobile.spec.ts | VC-M-33: __routes 接口不需鉴权返回路由清单 | ✅ PASS | FP-R-09 |
-| VC-M-34 | mobile.spec.ts | VC-M-34: 生产构建不提供 __routes 示例页跳首页 | ✅ PASS | FP-R-09，需 PROD_BUILD=1 |
+| VC-M-34 | mobile.spec.ts | VC-M-34: 生产构建不提供 __routes 示例页跳首页 | ✅ PASS | FP-R-09，Playwright project prod-build（vite preview :4173） |
 | VC-M-35 | mobile.spec.ts | VC-M-35: 错误权限码 warn 不影响冒烟 | ✅ PASS | §2.2 #9 |
 
 ---

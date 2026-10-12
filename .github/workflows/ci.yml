@@ -33,7 +33,7 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright tests
-        run: npx playwright test --project=desktop-chromium --project=mobile-390-chromium --project=mobile-390-webkit
+        run: npx playwright test --project=desktop-chromium --project=mobile-390-chromium --project=mobile-390-webkit --project=prod-build
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4

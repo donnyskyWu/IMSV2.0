@@ -49,11 +49,12 @@ export default defineConfig(({ mode }) => {
       AutoImport({
         imports: ['vue', 'vue-router', 'pinia'],
         resolvers: [ElementPlusResolver()],
-        dts: 'src/auto-imports.d.ts',
+        // 生产构建与 dev 并行时不要重写 d.ts，避免和开发服务器抢文件
+        dts: mode === 'development' ? 'src/auto-imports.d.ts' : false,
       }),
       Components({
         resolvers: [ElementPlusResolver()],
-        dts: 'src/components.d.ts',
+        dts: mode === 'development' ? 'src/components.d.ts' : false,
       }),
       // FP-R-09: 仅 test 构建提供 /__routes
       ...(isTest ? [routesEndpointPlugin()] : []),
@@ -70,9 +71,17 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // 开发服务器与生产构建并行时分开缓存目录，避免互相覆盖
+    cacheDir: mode === 'development' ? 'node_modules/.vite' : 'node_modules/.vite-build',
     server: {
       port: 3000,
-      host: '0.0.0.0',
+      host: '127.0.0.1',
+      strictPort: true,
+    },
+    preview: {
+      port: 4173,
+      host: '127.0.0.1',
+      strictPort: true,
     },
   }
 })

@@ -154,7 +154,7 @@ const statusColors = [
     <!-- 表头样式 -->
     <section class="demo-section">
       <h2 class="section-title">表格样式</h2>
-      <p class="demo-note">表头: 11px / 600 / 次要文字色 / 底色 #fafafc</p>
+      <p class="demo-note">表头: 12px / 600 / 次要文字色 / 底色 #fafafc</p>
       <p class="demo-note">单元格: 13px / 内边距 10px 12px</p>
       <el-table :data="[{ name: '示例', amount: 1234.5, status: 'APPROVED' }]" style="max-width: 600px">
         <el-table-column prop="name" label="名称" />
