@@ -165,6 +165,7 @@ async def get_current_user_info() -> CommonResult[MeResponse]:
 
     Rules per FP-D06-01:
     - Menu tree = tenant package menus ∩ enabled role menus
+    - Tree is nested DIR and MENU only; buttons are permCodes, not nodes
     - permCodes from all enabled roles
     - dataScopeText in Chinese (e.g., "本部门（市场一部、市场二部）")
     - PENDING_CONFIG or empty permissions -> empty menus with prompt

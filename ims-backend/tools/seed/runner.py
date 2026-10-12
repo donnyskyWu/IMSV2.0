@@ -35,7 +35,7 @@ def run_seeds(
     6. grants - B1 default role-menu grants (insert-if-absent)
     7. depts - Root, system department, and e2e departments
     8. access - Default package, package menus, R1 role menus
-    9. users - E2E accounts when env=e2e
+    9. users - test_admin when env is test or e2e; other 02 accounts only when env=e2e
 
     access 放在菜单和 B1 授权之后，这样新菜单会进默认套餐，/me 才能看见。
     """

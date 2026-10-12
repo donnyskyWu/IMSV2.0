@@ -1,11 +1,10 @@
-"""E2E 登录账号。
+"""测试登录账号。
 
-只在 --env e2e 写入。密码 Test1234，bcrypt cost=10。
-已存在的用户不改密码、姓名、状态或部门。
+test_admin 在 test 和 e2e 环境写入，密码 Test1234。dev、prod 不创建。
+已存在的用户不改密码、姓名、状态或部门。test_admin 缺 R1 时补上。
 
-e2e_admin 是 PR #15 的集成测试账号，缺 R1 关联时补上。
-02 §0.2 的 test_* 账号整行已存在则跳过，不补角色。
-部门或租户还没种上时跳过对应 test_*，避免单独跑 users 把 e2e_admin 一起失败掉。
+02 §0.2 的其余 test_* 只在 e2e 写入。整行已存在则跳过，不补角色。
+部门或租户还没种上时跳过对应账号。test_admin 没有「信息部」时仍创建，部门留空。
 
 test_r10 只绑角色键 R10（种子显示名「外部协作」，规格称外协），对应 FP-B1-LG-10 / E2E-B1-LG-23。
 
@@ -17,10 +16,11 @@ import bcrypt
 
 from tools.seed.timeutil import seed_now
 
-# 集成测试与本地 e2e 共用这一组账号。不要在 dev/test/prod 种子里创建。
-E2E_USERNAME = "e2e_admin"
+# 02 §0.2 的管理员账号。test 与 e2e 都能登录，prod 不创建。
+E2E_USERNAME = "test_admin"
 E2E_PASSWORD = "Test1234"
-E2E_NICKNAME = "测试-管理员"
+E2E_NICKNAME = "测试管理员"
+LOGIN_ENVS = frozenset({"test", "e2e"})
 
 # role_key 为空表示不绑角色。tenant_id 默认 1。
 E2E_ACCOUNTS = [
@@ -60,12 +60,13 @@ E2E_ACCOUNTS = [
 
 
 def seed_users(env: str, dry_run: bool = False) -> int:
-    """写入 e2e_admin 和 02 §0.2 账号。非 e2e 环境什么都不做。"""
-    if env != "e2e":
+    """写入 test_admin，以及 e2e 下的 02 §0.2 账号。dev / prod 什么都不做。"""
+    accounts = _accounts_for(env)
+    if not accounts:
         return 0
     if dry_run:
-        print(f"  Would seed e2e user {E2E_USERNAME} and {len(E2E_ACCOUNTS)} scenario users")
-        return 1 + len(E2E_ACCOUNTS)
+        print(f"  Would seed {len(accounts)} users, including {E2E_USERNAME}")
+        return len(accounts)
 
     from app.db.session import get_db_session
     from app.domains.sys.models import Dept, Role, Tenant, User, UserDept, UserRole
@@ -76,69 +77,28 @@ def seed_users(env: str, dry_run: bool = False) -> int:
     password_hash = bcrypt.hashpw(
         E2E_PASSWORD.encode(), bcrypt.gensalt(rounds=10)
     ).decode()
-    inserted = _seed_e2e_admin(session, now, password_hash, Role, User, UserRole)
-    inserted += _seed_scenario_accounts(
-        session, now, password_hash, Dept, Role, Tenant, User, UserDept, UserRole,
+    inserted = _seed_accounts(
+        session, accounts, now, password_hash, Dept, Role, Tenant, User, UserDept, UserRole,
     )
     session.commit()
     return inserted
 
 
-def _seed_e2e_admin(session, now, password_hash, role_cls, user_cls, user_role_cls) -> int:
-    """PR #15：e2e_admin 不存在才建，已存在则只补缺失的 R1。"""
-    role = session.query(role_cls).filter(
-        role_cls.tenant_id == 1,
-        role_cls.role_key == "R1",
-        role_cls.deleted == 0,
-    ).first()
-    if role is None:
-        raise RuntimeError("R1 role is missing; seed roles before e2e users")
-
-    inserted = 0
-    user = session.query(user_cls).filter(
-        user_cls.tenant_id == 1,
-        user_cls.username == E2E_USERNAME,
-        user_cls.deleted == 0,
-    ).first()
-    if user is None:
-        user = user_cls(
-            tenant_id=1,
-            username=E2E_USERNAME,
-            nickname=E2E_NICKNAME,
-            password_hash=password_hash,
-            status="ACTIVE",
-            source="LOCAL",
-            pwd_reset_required=False,
-            creator=0,
-            create_time=now,
-        )
-        session.add(user)
-        session.flush()
-        inserted += 1
-
-    link = session.query(user_role_cls).filter(
-        user_role_cls.user_id == user.id,
-        user_role_cls.role_id == role.id,
-    ).first()
-    if link is None:
-        session.add(user_role_cls(
-            tenant_id=1,
-            user_id=user.id,
-            role_id=role.id,
-            source="MANUAL",
-            creator=0,
-            create_time=now,
-        ))
-        inserted += 1
-    return inserted
+def _accounts_for(env: str) -> list[dict]:
+    """test 只给登录账号。e2e 给 02 的全部场景账号。"""
+    if env == "e2e":
+        return E2E_ACCOUNTS
+    if env == "test":
+        return [row for row in E2E_ACCOUNTS if row["username"] == E2E_USERNAME]
+    return []
 
 
-def _seed_scenario_accounts(
-    session, now, password_hash, dept_cls, role_cls, tenant_cls, user_cls, user_dept_cls, user_role_cls,
+def _seed_accounts(
+    session, accounts, now, password_hash, dept_cls, role_cls, tenant_cls, user_cls, user_dept_cls, user_role_cls,
 ) -> int:
-    """02 场景账号。整行已存在则跳过。依赖的部门或租户不在时也跳过。"""
+    """整行已存在则跳过。test_admin 例外：缺 R1 时补关联，仍不改密码和姓名。"""
     count = 0
-    for account in E2E_ACCOUNTS:
+    for account in accounts:
         tenant_id = account.get("tenant_id", 1)
         existing = session.query(user_cls).filter(
             user_cls.tenant_id == tenant_id,
@@ -146,11 +106,15 @@ def _seed_scenario_accounts(
             user_cls.deleted == 0,
         ).first()
         if existing is not None:
+            if account["username"] == E2E_USERNAME:
+                count += _ensure_role(
+                    session, existing, account, now, role_cls, user_role_cls,
+                )
             continue
         if not _tenant_ready(session, tenant_cls, tenant_id):
             continue
         dept = _resolve_dept(session, dept_cls, tenant_id, account.get("dept"))
-        if account.get("dept") and dept is None:
+        if account.get("dept") and dept is None and account["username"] != E2E_USERNAME:
             continue
         user = user_cls(
             tenant_id=tenant_id,
@@ -166,6 +130,7 @@ def _seed_scenario_accounts(
         )
         session.add(user)
         session.flush()
+        count += 1
         if dept is not None:
             session.add(user_dept_cls(
                 tenant_id=tenant_id,
@@ -176,25 +141,37 @@ def _seed_scenario_accounts(
                 creator=0,
                 create_time=now,
             ))
-        role_key = account.get("role_key")
-        if role_key:
-            role = session.query(role_cls).filter(
-                role_cls.tenant_id == tenant_id,
-                role_cls.role_key == role_key,
-                role_cls.deleted == 0,
-            ).first()
-            if role is None:
-                raise RuntimeError(f"E2E 角色不存在: {role_key} tenant={tenant_id}")
-            session.add(user_role_cls(
-                tenant_id=tenant_id,
-                user_id=user.id,
-                role_id=role.id,
-                source="MANUAL",
-                creator=0,
-                create_time=now,
-            ))
-        count += 1
+        count += _ensure_role(session, user, account, now, role_cls, user_role_cls)
     return count
+
+
+def _ensure_role(session, user, account, now, role_cls, user_role_cls) -> int:
+    """角色不存在就报错。关联已在则不重复插入。"""
+    role_key = account.get("role_key")
+    if not role_key:
+        return 0
+    role = session.query(role_cls).filter(
+        role_cls.tenant_id == user.tenant_id,
+        role_cls.role_key == role_key,
+        role_cls.deleted == 0,
+    ).first()
+    if role is None:
+        raise RuntimeError(f"角色不存在: {role_key} tenant={user.tenant_id}")
+    link = session.query(user_role_cls).filter(
+        user_role_cls.user_id == user.id,
+        user_role_cls.role_id == role.id,
+    ).first()
+    if link is not None:
+        return 0
+    session.add(user_role_cls(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        role_id=role.id,
+        source="MANUAL",
+        creator=0,
+        create_time=now,
+    ))
+    return 1
 
 
 def _tenant_ready(session, tenant_cls, tenant_id: int) -> bool:

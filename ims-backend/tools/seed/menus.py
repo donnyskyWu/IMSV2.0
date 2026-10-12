@@ -5,7 +5,9 @@ Menu tree with all ims:* permission codes.
 Permission code format: ims:<domain>:<resource>[:<action>]
 
 已有菜单不改名称、排序、图标。
-B0a 的「组织同步」若名称和路径都还是占位值，才迁到「权限管理」下。
+parent_id 仍是 0、而种子父级不是根时，补成目录 → 菜单 → 按钮。
+已经挂到别的父级视为管理员调整，不再改。
+B0a 的「组织同步」若名称和路径都还是占位值，才同时改名称和路径。
 """
 
 from tools.seed.timeutil import seed_now
@@ -188,11 +190,11 @@ MENUS = [
 def seed_menus(env: str, dry_run: bool = False) -> int:
     """
     Seed menu tree.
-    
+
     Rules per FP-H05-01:
     - Upsert by perm_code (for MENU/BUTTON) or path (for DIR)
     - Does not overwrite admin-modified fields (name, sort, icon)
-    
+
     Returns:
         Number of records upserted
     """
@@ -253,12 +255,14 @@ def _seed_menu_tree(session, menus: list, parent_id: int, now) -> int:
                 count += _seed_menu_tree(session, children, menu.id, now)
             continue
 
-        # 仍是 B0a 占位时迁到权限管理。管理员改过名称或路径则不动。
+        # 仍是 B0a 占位时迁到权限管理。管理员改过名称或路径则不改这两项。
         if _is_untouched_b0a_org(existing, m):
             existing.parent_id = parent_id
             existing.name = m["name"]
             existing.path = m.get("path")
             existing.component = m.get("component")
+        elif _needs_flat_parent(existing, parent_id):
+            existing.parent_id = parent_id
         children = m.get("children", [])
         if children:
             count += _seed_menu_tree(session, children, existing.id, now)
@@ -280,6 +284,11 @@ def _find_menu(session, menu_cls, item: dict):
             menu_cls.deleted == 0,
         ).first()
     return None
+
+
+def _needs_flat_parent(existing, parent_id: int) -> bool:
+    """旧数据挂在根上时补父级。父级已经不是 0，说明管理员移动过，保持不动。"""
+    return bool(parent_id) and (existing.parent_id or 0) == 0
 
 
 def _is_untouched_b0a_org(existing, item: dict) -> bool:

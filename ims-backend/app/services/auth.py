@@ -29,6 +29,42 @@ from app.db.session import get_db_session
 settings = get_settings()
 
 
+def _nest_menu_tree(menus: list) -> list[dict[str, Any]]:
+    """目录和菜单按 parent_id 嵌套。调用方已经去掉按钮。"""
+    nodes: dict[int, dict[str, Any]] = {}
+    for menu in menus:
+        nodes[menu.id] = {
+            "id": str(menu.id),
+            "parent_id": str(menu.parent_id) if menu.parent_id else None,
+            "name": menu.name,
+            "type": menu.type,
+            "perm_code": menu.perm_code,
+            "path": menu.path,
+            "component": menu.component,
+            "icon": menu.icon,
+            "sort": menu.sort or 0,
+            "visible": bool(menu.visible),
+            "children": [],
+        }
+
+    roots: list[dict[str, Any]] = []
+    for menu in menus:
+        node = nodes[menu.id]
+        parent = nodes.get(menu.parent_id)
+        if parent is None:
+            roots.append(node)
+        else:
+            parent["children"].append(node)
+
+    def _sort(level: list[dict[str, Any]]) -> None:
+        level.sort(key=lambda item: (item["sort"], int(item["id"])))
+        for item in level:
+            _sort(item["children"])
+
+    _sort(roots)
+    return roots
+
+
 class AuthService:
     """Authentication and authorization service."""
 
@@ -404,6 +440,7 @@ class AuthService:
 
         Rules per FP-D06-01:
         - Menu tree = tenant package ∩ role menus
+        - Tree contains DIR and MENU only; BUTTON stays in perm_codes
         - dataScopeText in Chinese
         - Empty permissions -> empty menus with prompt
         """
@@ -523,16 +560,9 @@ class AuthService:
             Menu.id.in_(role_menu_ids),
             Menu.status == "ENABLED",
             Menu.deleted == 0,
+            Menu.type.in_(("DIR", "MENU")),
         ).all()
-        return [
-            {
-                "id": str(menu.id),
-                "name": menu.name,
-                "perm_code": menu.perm_code,
-                "type": menu.type,
-            }
-            for menu in menus
-        ]
+        return _nest_menu_tree(menus)
 
     async def change_password(
         self, user_id: int, new_password: str, keep_session_id: str

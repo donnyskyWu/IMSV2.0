@@ -74,6 +74,14 @@ def _release_real_db(original_url: str, context_token: object) -> None:
     _db_session.reset(context_token)
 
 
+def _walk_menus(nodes: list) -> list[dict]:
+    found: list[dict] = []
+    for node in nodes:
+        found.append(node)
+        found.extend(_walk_menus(node.get("children") or []))
+    return found
+
+
 def _login_me(client: TestClient, username: str, password: str) -> dict:
     """真实登录后请求 /me。不伪造令牌，也不替换依赖。"""
     login = client.post(
@@ -112,11 +120,11 @@ def test_real_login_me_and_health(tmp_path):
             assert db_url not in health.text
 
             me_body = _login_me(client, E2E_USERNAME, E2E_PASSWORD)
-            assert me_body["data"]["user"]["username"] == E2E_USERNAME
+            assert me_body["data"]["user"]["username"] == "test_admin"
             menus = me_body["data"]["menus"]
             assert isinstance(menus, list)
             assert len(menus) > 0
-            assert any(item["name"] == "部门管理" for item in menus)
+            assert any(item["name"] == "部门管理" for item in _walk_menus(menus))
 
         check_engine = create_engine(db_url)
         check = sessionmaker(bind=check_engine)()
@@ -144,5 +152,39 @@ def test_test_admin_me_includes_system_and_auth_menus(tmp_path):
             names = {item["name"] for item in me_body["data"]["menus"]}
             assert "系统管理" in names
             assert "权限管理" in names
+    finally:
+        _release_real_db(original_url, context_token)
+
+
+def test_auth_menu_children_are_org_and_position_without_buttons(tmp_path):
+    """权限管理下有组织同步、岗位规则两个子菜单，整棵树没有按钮。
+
+    01/02 的菜单名是「组织架构同步」和「岗位-角色供给规则」。
+    按钮只出现在 permCodes。
+    """
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            me_body = _login_me(client, "test_admin", E2E_PASSWORD)
+            menus = me_body["data"]["menus"]
+            auth = next(item for item in menus if item["name"] == "权限管理")
+            assert auth["type"] == "DIR"
+            children = auth["children"]
+            assert [item["name"] for item in children] == ["组织架构同步", "岗位-角色供给规则"]
+            assert [item["type"] for item in children] == ["MENU", "MENU"]
+            assert [item["parentId"] for item in children] == [auth["id"], auth["id"]]
+            assert children[0]["path"] == "/ims/auth/org"
+            assert children[1]["path"] == "/ims/auth/position"
+
+            nodes = _walk_menus(menus)
+            assert "BUTTON" not in {item["type"] for item in nodes}
+            assert "执行同步" not in {item["name"] for item in nodes}
+            assert "新建规则" not in {item["name"] for item in nodes}
+            perms = set(me_body["data"]["permCodes"])
+            assert "ims:system:org-sync:run" in perms
+            assert "ims:auth:position-rule:create" in perms
     finally:
         _release_real_db(original_url, context_token)

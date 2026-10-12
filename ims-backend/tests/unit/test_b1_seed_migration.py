@@ -239,7 +239,7 @@ class TestSeedIdempotentAndPreserve:
         assert parent.path == "/ims/auth"
         assert menu.sort == 7
 
-    def test_renamed_org_menu_is_not_moved(self, db_session):
+    def test_renamed_org_menu_keeps_name_and_path(self, db_session):
         from app.domains.sys.models import Menu
         from tools.seed.menus import seed_menus
 
@@ -261,6 +261,80 @@ class TestSeedIdempotentAndPreserve:
         ).one()
         assert menu.path == "/system/org-sync"
         assert menu.name == "我的同步"
+        parent = db_session.query(Menu).filter(Menu.id == menu.parent_id).one()
+        assert parent.path == "/ims/auth"
+
+    def test_flat_menu_and_button_gain_parent_without_admin_field_loss(self, db_session):
+        """parent_id 仍是 0 时挂到目录 → 菜单 → 按钮。名称、排序、图标保持管理员的值。"""
+        from app.domains.sys.models import Menu
+        from tools.seed.menus import seed_menus
+
+        db_session.add(Menu(
+            tenant_id=1,
+            parent_id=0,
+            type="MENU",
+            name="管理员的部门",
+            path="/system/dept",
+            perm_code="ims:system:dept:query",
+            sort=3,
+            visible=True,
+            status="ENABLED",
+        ))
+        db_session.add(Menu(
+            tenant_id=1,
+            parent_id=0,
+            type="BUTTON",
+            name="管理员按钮名",
+            perm_code="ims:system:dept:create",
+            sort=9,
+            icon="keep",
+            visible=True,
+            status="ENABLED",
+        ))
+        db_session.commit()
+
+        seed_menus(env="test")
+        page = db_session.query(Menu).filter(Menu.perm_code == "ims:system:dept:query").one()
+        button = db_session.query(Menu).filter(Menu.perm_code == "ims:system:dept:create").one()
+        directory = db_session.query(Menu).filter(
+            Menu.path == "/system",
+            Menu.type == "DIR",
+        ).one()
+        assert page.parent_id == directory.id
+        assert page.name == "管理员的部门"
+        assert page.sort == 3
+        assert button.parent_id == page.id
+        assert button.type == "BUTTON"
+        assert button.name == "管理员按钮名"
+        assert button.sort == 9
+        assert button.icon == "keep"
+        assert seed_menus(env="test") == 0
+
+    def test_admin_moved_parent_is_kept(self, db_session):
+        """已经挂到非根父级时，重跑不把它拽回种子父级，也不改名称。"""
+        from app.domains.sys.models import Menu
+        from tools.seed.menus import seed_menus
+
+        seed_menus(env="test")
+        page = db_session.query(Menu).filter(Menu.path == "/system/dept").one()
+        auth = db_session.query(Menu).filter(
+            Menu.path == "/ims/auth",
+            Menu.type == "DIR",
+        ).one()
+        org = db_session.query(Menu).filter(Menu.perm_code == "ims:system:org-sync:query").one()
+        run = db_session.query(Menu).filter(Menu.perm_code == "ims:system:org-sync:run").one()
+        assert org.parent_id == auth.id
+        assert org.type == "MENU"
+        assert run.parent_id == org.id
+        assert run.type == "BUTTON"
+
+        page.parent_id = auth.id
+        page.name = "部门（已移动）"
+        db_session.commit()
+        assert seed_menus(env="test") == 0
+        db_session.refresh(page)
+        assert page.parent_id == auth.id
+        assert page.name == "部门（已移动）"
 
     def test_missing_database_url_fails(self, db_session, monkeypatch):
         from app.core.config import get_settings
@@ -281,13 +355,24 @@ class TestSeedIdempotentAndPreserve:
 
 
 class TestE2EAccounts:
-    """02 §0.2 账号只在 e2e 创建，再次执行不重置密码。"""
+    """test_admin 在 test 和 e2e 可登录。其余 02 §0.2 账号只在 e2e，再次执行不重置密码。"""
 
     def test_e2e_accounts_once(self, db_session):
         from app.domains.sys.models import Dept, Role, Tenant, User, UserRole
         from tools.seed.runner import run_seeds
 
         assert run_seeds(env="e2e") is True
+        admin = db_session.query(User).filter(User.username == "test_admin").one()
+        assert admin.nickname == "测试管理员"
+        assert bcrypt.checkpw(b"Test1234", admin.password_hash.encode())
+        admin_role = db_session.query(Role).filter(Role.id == db_session.query(UserRole).filter(
+            UserRole.user_id == admin.id
+        ).one().role_id).one()
+        assert admin_role.role_key == "R1"
+        admin_dept = db_session.query(Dept).filter(Dept.id == admin.main_dept_id).one()
+        assert admin_dept.name == "信息部"
+        assert db_session.query(User).filter(User.username == "e2e_admin").count() == 0
+
         account = db_session.query(User).filter(User.username == "test_xz").one()
         assert account.nickname == "测试行政"
         assert bcrypt.checkpw(b"Test1234", account.password_hash.encode())
@@ -327,6 +412,10 @@ class TestE2EAccounts:
 
         assert run_seeds(env="test") is True
         assert db_session.query(User).filter(User.username == "test_r10").count() == 0
+        assert db_session.query(User).filter(User.username == "test_xz").count() == 0
+        assert db_session.query(User).filter(User.username == "e2e_admin").count() == 0
+        admin = db_session.query(User).filter(User.username == "test_admin").one()
+        assert bcrypt.checkpw(b"Test1234", admin.password_hash.encode())
 
         assert run_seeds(env="e2e") is True
         account = db_session.query(User).filter(User.username == "test_r10").one()
@@ -402,6 +491,71 @@ class TestE2EAccounts:
         db_session.commit()
         assert seed_grants(env="test") == 0
         assert db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).count() == 0
+
+
+class TestMeMenuTree:
+    """/me 只返回目录和菜单，按钮留在权限码里。"""
+
+    def test_tree_nests_auth_children_and_omits_buttons(self, db_session):
+        from app.domains.sys.models import Menu
+        from app.services.auth import AuthService
+        from tests.support.case_rest import _run
+        from tests.support.rows import add, bind_menu, bind_role, role, user
+
+        person = user(db_session, "tree_user")
+        the_role = role(db_session, "tree_r", "树")
+        directory = add(db_session, Menu(
+            tenant_id=1, parent_id=0, type="DIR", name="权限管理",
+            path="/ims/auth", sort=2, visible=True, status="ENABLED",
+        ))
+        org = add(db_session, Menu(
+            tenant_id=1, parent_id=directory.id, type="MENU", name="组织架构同步",
+            path="/ims/auth/org", perm_code="ims:system:org-sync:query",
+            sort=2, visible=True, status="ENABLED",
+        ))
+        position = add(db_session, Menu(
+            tenant_id=1, parent_id=directory.id, type="MENU", name="岗位-角色供给规则",
+            path="/ims/auth/position", perm_code="ims:auth:position-rule:query",
+            sort=1, visible=True, status="ENABLED",
+        ))
+        button = add(db_session, Menu(
+            tenant_id=1, parent_id=org.id, type="BUTTON", name="执行同步",
+            perm_code="ims:system:org-sync:run", sort=1, visible=True, status="ENABLED",
+        ))
+        orphan = add(db_session, Menu(
+            tenant_id=1, parent_id=99999, type="MENU", name="游离",
+            perm_code="ims:system:user:query", sort=0, visible=True, status="ENABLED",
+        ))
+        for item in (directory, org, position, button, orphan):
+            bind_menu(db_session, the_role.id, item.id)
+        bind_role(db_session, person.id, the_role.id)
+
+        info = _run(AuthService().get_current_user_info(person.id))
+        assert [item["name"] for item in info["menus"]] == ["游离", "权限管理"]
+        children = info["menus"][1]["children"]
+        assert [item["name"] for item in children] == ["岗位-角色供给规则", "组织架构同步"]
+        assert children[0]["type"] == "MENU"
+        assert children[1]["children"] == []
+        assert "BUTTON" not in _menu_types(info["menus"])
+        assert "执行同步" not in _menu_names(info["menus"])
+        assert "ims:system:org-sync:run" in info["perm_codes"]
+        assert button.id
+
+
+def _menu_types(nodes: list) -> set[str]:
+    found: set[str] = set()
+    for item in nodes:
+        found.add(item["type"])
+        found.update(_menu_types(item.get("children") or []))
+    return found
+
+
+def _menu_names(nodes: list) -> set[str]:
+    found: set[str] = set()
+    for item in nodes:
+        found.add(item["name"])
+        found.update(_menu_names(item.get("children") or []))
+    return found
 
 
 class TestB1Backfill:
