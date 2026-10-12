@@ -48,10 +48,19 @@ class TestB1SeedCatalog:
             if row["dict_type"] == "dict_reconcile_action"
         ]
         assert len(actions) == 10
-        assert "RETRYING" in {
-            row["dict_value"] for row in DICT_DATA
+        status = [
+            row for row in DICT_DATA
             if row["dict_type"] == "dict_org_sync_status"
-        }
+        ]
+        assert [row["dict_value"] for row in status] == [
+            "PENDING", "SUCCESS", "RETRYING", "DEAD",
+        ]
+        assert [row["dict_label"] for row in status] == [
+            "待处理", "已同步", "失败重试", "死信",
+        ]
+        assert [row["color_type"] for row in status] == [
+            "primary", "success", "warning", "danger",
+        ]
 
     def test_dry_run_does_not_need_database(self):
         from tools.seed.runner import run_seeds
@@ -130,6 +139,34 @@ class TestSeedIdempotentAndPreserve:
         db_session.refresh(param)
         assert pending.dict_label == "管理员改的待执行"
         assert param.value == "false"
+
+    def test_legacy_org_sync_status_labels_switch_once(self, db_session):
+        """Q17：旧文案改成 BG-07，再跑一次不再改。"""
+        from app.domains.sys.models import DictData
+        from tools.seed.dicts import seed_dicts
+
+        seed_dicts(env="test")
+        pending = db_session.query(DictData).filter(
+            DictData.dict_type == "dict_org_sync_status",
+            DictData.dict_value == "PENDING",
+        ).one()
+        success = db_session.query(DictData).filter(
+            DictData.dict_type == "dict_org_sync_status",
+            DictData.dict_value == "SUCCESS",
+        ).one()
+        pending.dict_label = "待执行"
+        pending.color_type = "neutral"
+        success.dict_label = "成功"
+        db_session.commit()
+
+        assert seed_dicts(env="test") == 2
+        db_session.refresh(pending)
+        db_session.refresh(success)
+        assert pending.dict_label == "待处理"
+        assert pending.color_type == "primary"
+        assert success.dict_label == "已同步"
+        assert success.color_type == "success"
+        assert seed_dicts(env="test") == 0
 
     def test_default_grants_and_removed_grant_stays_removed(self, db_session):
         from app.domains.sys.models import Menu, Role, RoleMenu

@@ -10,7 +10,7 @@ First batch dictionaries:
 - dict_position: (岗位，由钉钉同步补充)
 - dict_platform_type: DOUYIN/KUAISHOU/WECHAT_CHANNELS/XIAOHONGSHU/WECHAT_MP/OTHER
 - dict_common_status: ENABLED/DISABLED
-- dict_org_sync_status: PENDING/RUNNING/SUCCESS/FAILED
+- dict_org_sync_status: PENDING/SUCCESS/RETRYING/DEAD（Q17，BG-07 四态）
 - dict_todo_status, dict_msg_type, etc.
 """
 
@@ -80,15 +80,12 @@ DICT_DATA = [
     {"dict_type": "dict_common_status", "dict_value": "ENABLED", "dict_label": "启用", "color_type": "success", "sort": 1, "is_builtin": True},
     {"dict_type": "dict_common_status", "dict_value": "DISABLED", "dict_label": "停用", "color_type": "neutral", "sort": 2, "is_builtin": True},
 
-    # dict_org_sync_status
-    # B0a 已写入 PENDING/RUNNING/SUCCESS/FAILED 的中文。BG-07 还要「失败重试」「死信」。
-    # 已有值的标签不改（只补缺不覆盖）。新环境仍沿用 B0a 标签，避免同一字典两套文案。
-    {"dict_type": "dict_org_sync_status", "dict_value": "PENDING", "dict_label": "待执行", "color_type": "neutral", "sort": 1, "is_builtin": True},
-    {"dict_type": "dict_org_sync_status", "dict_value": "RUNNING", "dict_label": "执行中", "color_type": "primary", "sort": 2, "is_builtin": True},
-    {"dict_type": "dict_org_sync_status", "dict_value": "SUCCESS", "dict_label": "成功", "color_type": "success", "sort": 3, "is_builtin": True},
-    {"dict_type": "dict_org_sync_status", "dict_value": "FAILED", "dict_label": "失败", "color_type": "danger", "sort": 4, "is_builtin": True},
-    {"dict_type": "dict_org_sync_status", "dict_value": "RETRYING", "dict_label": "失败重试", "color_type": "warning", "sort": 5, "is_builtin": True},
-    {"dict_type": "dict_org_sync_status", "dict_value": "DEAD", "dict_label": "死信", "color_type": "danger", "sort": 6, "is_builtin": True},
+    # dict_org_sync_status（Q17 / 01 第 295 行，只用这 4 种）
+    # 待处理 primary / 已同步 success / 失败重试 warning / 死信 danger
+    {"dict_type": "dict_org_sync_status", "dict_value": "PENDING", "dict_label": "待处理", "color_type": "primary", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_org_sync_status", "dict_value": "SUCCESS", "dict_label": "已同步", "color_type": "success", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_org_sync_status", "dict_value": "RETRYING", "dict_label": "失败重试", "color_type": "warning", "sort": 3, "is_builtin": True},
+    {"dict_type": "dict_org_sync_status", "dict_value": "DEAD", "dict_label": "死信", "color_type": "danger", "sort": 4, "is_builtin": True},
 
     # dict_org_event_type（BG-01 的 7 种）
     {"dict_type": "dict_org_event_type", "dict_value": "HIRE", "dict_label": "入职", "color_type": "success", "sort": 1, "is_builtin": True},
@@ -135,14 +132,21 @@ DICT_DATA = [
     {"dict_type": "dict_msg_type", "dict_value": "TODO", "dict_label": "待办提醒", "color_type": "warning", "sort": 2, "is_builtin": True},
 ]
 
+# 本种子以前写过的组织同步状态文案。重跑时只把这些改成 Q17，管理员另改的标签不动。
+ORG_SYNC_STATUS_LEGACY_LABELS = {
+    "PENDING": "待执行",
+    "SUCCESS": "成功",
+}
+
 
 def seed_dicts(env: str, dry_run: bool = False) -> int:
     """
     Seed dictionary types and values.
     
     Rules per FP-H05-01:
-    - Upsert by unique business key (dict_type, dict_value)
+    - Insert by unique business key (dict_type, dict_value) when missing
     - Does not overwrite admin-modified fields
+    - Q17：dict_org_sync_status 若仍是旧文案「待执行」「成功」，改成 BG-07 文案
     
     Returns:
         Number of records upserted
@@ -202,6 +206,19 @@ def seed_dicts(env: str, dry_run: bool = False) -> int:
                 create_time=now,
             )
             session.add(obj)
+            count += 1
+            continue
+
+        legacy = ORG_SYNC_STATUS_LEGACY_LABELS.get(dd["dict_value"])
+        if (
+            dd["dict_type"] == "dict_org_sync_status"
+            and legacy is not None
+            and existing.dict_label == legacy
+        ):
+            existing.dict_label = dd["dict_label"]
+            existing.color_type = dd.get("color_type", "neutral")
+            existing.updater = 0
+            existing.update_time = now
             count += 1
 
     session.commit()
