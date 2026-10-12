@@ -20,6 +20,12 @@ from app.core.pagination import PageParam, PageResult
 from app.db.session import get_db_session
 from app.db.transaction import transactional
 
+# Callables (session, user_id) -> reference count. Non-zero blocks deletion.
+USER_REF_CHECKS: list = []
+
+# In-process domain events (user.resigned and similar).
+USER_EVENTS: list = []
+
 
 class UserService:
     """User management service."""
@@ -113,8 +119,26 @@ class UserService:
         if status:
             query = query.filter(User.status == status)
 
-        # Apply data scope filtering
-        # TODO: Implement data scope from ctx.dataScopes
+        # Data scope: only when the caller actually has scopes configured.
+        # An empty list keeps existing selector behavior; a non-ALL scope
+        # restricts rows (FP-B08-08 / FP-C02-02).
+        context = ctx.current_or_none
+        if context is not None and context.data_scopes:
+            scope_types = set()
+            for scope in context.data_scopes:
+                if isinstance(scope, dict):
+                    scope_types.add(scope.get("scope_type"))
+                else:
+                    scope_types.add(getattr(scope, "scope_type", None))
+            if "ALL" not in scope_types:
+                if "DEPT" in scope_types and context.dept_ids:
+                    scoped_ids = session.query(UserDept.user_id).filter(
+                        UserDept.dept_id.in_(context.dept_ids),
+                        UserDept.tenant_id == tenant_id,
+                    ).distinct()
+                    query = query.filter(User.id.in_(scoped_ids))
+                else:
+                    query = query.filter(User.id == -1)
 
         # Count total
         total = query.count()
@@ -298,6 +322,9 @@ class UserService:
             pwd_reset_required=True,
         )
 
+        from app.db.ids import assign_pk
+
+        assign_pk(session, user)
         session.add(user)
         session.flush()
 
@@ -310,6 +337,7 @@ class UserService:
                 is_main=(dept_id == main_dept_id),
                 source="LOCAL",
             )
+            assign_pk(session, user_dept)
             session.add(user_dept)
 
         session.flush()
@@ -425,6 +453,8 @@ class UserService:
         ).delete()
 
         # Create new associations
+        from app.db.ids import assign_pk
+
         for dept_id in dept_id_ints:
             user_dept = UserDept(
                 tenant_id=tenant_id,
@@ -433,6 +463,7 @@ class UserService:
                 is_main=(dept_id == main_dept_id_int),
                 source="LOCAL",
             )
+            assign_pk(session, user_dept)
             session.add(user_dept)
 
         # Update user's main dept
@@ -475,7 +506,10 @@ class UserService:
         if user.last_login_time is not None:
             raise BizError(1502, refs=[{"entity": "有登录记录的用户", "count": 1}])
 
-        # TODO: Check for business references (in future modules)
+        for check in USER_REF_CHECKS:
+            count = check(session, user_id_int)
+            if count:
+                raise BizError(1502, refs=[{"entity": "业务引用", "count": count}])
 
         # Delete user-dept associations
         session.query(UserDept).filter(
@@ -487,3 +521,88 @@ class UserService:
         user.deleted = user.id
 
         session.flush()
+
+    def _load_user(self, user_id: str):
+        from app.domains.sys.models import User
+        session = get_db_session()
+        user = session.query(User).filter(
+            User.id == int(user_id),
+            User.tenant_id == ctx.tenant_id,
+            User.deleted == 0,
+        ).first()
+        if not user:
+            raise BizError(1504)
+        return session, user
+
+    def _drop_sessions(self, user_id: int) -> None:
+        from app.core.cache import Cache
+        from app.services.auth import AuthService
+
+        auth = AuthService()
+        key = f"{auth.USER_SESSIONS_PREFIX}{user_id}"
+        for sid in list(Cache.smembers(key)):
+            Cache.delete(f"{auth.SESSION_PREFIX}{sid}")
+            Cache.set(f"{auth.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
+            Cache.srem(key, sid)
+
+    async def freeze_user(self, user_id: str) -> None:
+        """Freeze a user and invalidate every session (FP-B03-01)."""
+        _session, user = self._load_user(user_id)
+        user.status = "FROZEN"
+        user.token_version = (user.token_version or 0) + 1
+        self._drop_sessions(user.id)
+        _session.flush()
+
+    async def resign_user(self, user_id: str) -> None:
+        """Mark resigned, drop sessions, publish user.resigned (FP-B03-01)."""
+        session, user = self._load_user(user_id)
+        if user.status == "RESIGNED":
+            raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
+        user.status = "RESIGNED"
+        user.token_version = (user.token_version or 0) + 1
+        self._drop_sessions(user.id)
+        USER_EVENTS.append({"type": "user.resigned", "user_id": user.id})
+        session.flush()
+
+    async def reactivate_user(self, user_id: str) -> None:
+        """RESIGNED users cannot be reactivated."""
+        _session, user = self._load_user(user_id)
+        if user.status == "RESIGNED":
+            raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
+        user.status = "ACTIVE"
+        _session.flush()
+
+    async def set_position(self, user_id: str, position_code: str) -> None:
+        """Set position only when the dictionary value is enabled (FP-B03-04)."""
+        from app.domains.sys.models import DictData
+
+        session, user = self._load_user(user_id)
+        row = session.query(DictData).filter(
+            DictData.dict_type == "dict_position",
+            DictData.dict_value == position_code,
+            DictData.deleted == 0,
+        ).first()
+        if row is None or row.status != "ENABLED":
+            raise BizError(1503)
+        user.position_code = position_code
+        session.flush()
+
+    async def bind_dingtalk(self, user_id: str, dingtalk_user_id: str) -> None:
+        """One IMS user has at most one DingTalk mapping (FP-B03-03)."""
+        from app.domains.sys.models import UserMapping
+
+        session, user = self._load_user(user_id)
+        existing = session.query(UserMapping).filter(
+            UserMapping.user_id == user.id,
+            UserMapping.tenant_id == ctx.tenant_id,
+            UserMapping.deleted == 0,
+        ).first()
+        if existing and existing.dingtalk_user_id != dingtalk_user_id:
+            raise BizError(1001, msg="用户已绑定其他钉钉账号")
+        if existing is None:
+            session.add(UserMapping(
+                tenant_id=ctx.tenant_id,
+                user_id=user.id,
+                dingtalk_user_id=dingtalk_user_id,
+            ))
+            session.flush()

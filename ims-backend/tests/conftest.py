@@ -9,6 +9,7 @@ Rules:
 - All external integrations use Mock mode
 """
 
+import contextlib
 import os
 from datetime import datetime
 from typing import Generator
@@ -109,6 +110,21 @@ def db_session(db_engine) -> Generator[Session, None, None]:
         _db_session.reset(token)
         session.rollback()
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_clock_and_cache():
+    """Drop fake time and cached permissions so one test cannot affect the next."""
+    yield
+    from app.core import cache as cache_mod
+    from app.core.clock import reset_clock
+
+    reset_clock()
+    cache_mod._memory_cache.clear()
+    client = cache_mod._redis_client
+    if client is not None:
+        with contextlib.suppress(Exception):
+            client.flushdb()
 
 
 @pytest.fixture

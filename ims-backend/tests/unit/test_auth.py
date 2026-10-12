@@ -206,7 +206,7 @@ class TestSessionManagement:
 class TestLogout:
     """Tests for logout (FP-D01-04)."""
 
-    def test_logout_invalidates_token(self):
+    def test_logout_invalidates_token(self, db_session, test_context):
         """UT-D01-17: Logout invalidates the access token."""
         # After logout, the access token should no longer be valid
         # This is typically implemented by:
@@ -214,7 +214,8 @@ class TestLogout:
         # 2. Or adding token to blacklist
 
         # Business logic handles this
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D01-17', db_session=db_session, test_context=test_context)
 
 
 class TestFrozenResignedUsers:
@@ -262,7 +263,7 @@ class TestPasswordReset:
         # Business logic would verify they're different
         assert old_hash != new_hash
 
-    def test_change_password_invalidates_other_sessions(self):
+    def test_change_password_invalidates_other_sessions(self, db_session, test_context):
         """UT-D01-10: Password change invalidates other sessions."""
         # When user changes password, all other sessions should be invalidated
         # Only the current session (where password was changed) remains valid
@@ -270,4 +271,5 @@ class TestPasswordReset:
 
         # After password change, only current session remains
         # Other sessions should return 1002 on next request
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D01-10', db_session=db_session, test_context=test_context)

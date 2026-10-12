@@ -2940,6 +2940,7 @@
     },
     "/health": {
       "get": {
+        "tags": ["健康检查"],
         "description": "Health check endpoint.\n\nReturns system health status. Does not expose any connection strings.",
         "operationId": "health_check_health_get",
         "responses": {
@@ -2954,7 +2955,7 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Health Check"
+        "summary": "健康检查"
       }
     }
   }

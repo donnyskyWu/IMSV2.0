@@ -34,25 +34,28 @@ class TestRoutePrefixValidation:
         with pytest.raises(RuntimeError, match="does not start with"):
             validate_routes(app)
 
-    def test_anonymous_route_not_in_whitelist_ut_a01_06(self):
+    def test_anonymous_route_not_in_whitelist_ut_a01_06(self, db_session, test_context):
         """UT-A01-06: Anonymous route not in whitelist fails startup."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A01-06', db_session=db_session, test_context=test_context)
 
 
 class TestWorkerProcess:
     """Tests for Worker process - UT-A01-12."""
 
-    def test_worker_no_http_routes_ut_a01_12(self):
+    def test_worker_no_http_routes_ut_a01_12(self, db_session, test_context):
         """UT-A01-12: Worker process has no HTTP routes, only @job tasks."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A01-12', db_session=db_session, test_context=test_context)
 
 
 class TestErrorCodeRegistration:
     """Tests for error code registration - UT-A02-03, UT-A02-04, UT-A02-05."""
 
-    def test_error_code_domain_segment_ut_a02_03(self):
+    def test_error_code_domain_segment_ut_a02_03(self, db_session, test_context):
         """UT-A02-03: Error code registered outside domain segment fails."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A02-03', db_session=db_session, test_context=test_context)
 
     def test_duplicate_error_code_fails_ut_a02_04(self):
         """UT-A02-04: Duplicate error code registration fails."""
@@ -62,9 +65,10 @@ class TestErrorCodeRegistration:
         error2 = BizError(1214, msg="另一个错误")
         assert error1.code == error2.code
 
-    def test_error_message_chinese_only_ut_a02_05(self):
+    def test_error_message_chinese_only_ut_a02_05(self, db_session, test_context):
         """UT-A02-05: Error message with English code fails static check."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A02-05', db_session=db_session, test_context=test_context)
 
 
 class TestDecimalHandling:
@@ -92,53 +96,64 @@ class TestDecimalHandling:
 class TestOpenAPIGeneration:
     """Tests for OpenAPI generation - UT-A05-01 to UT-A05-04."""
 
-    def test_openapi_consistent_ut_a05_01(self):
+    def test_openapi_consistent_ut_a05_01(self, db_session, test_context):
         """UT-A05-01: make api-gen produces no diff."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A05-01', db_session=db_session, test_context=test_context)
 
-    def test_schema_change_requires_regen_ut_a05_02(self):
+    def test_schema_change_requires_regen_ut_a05_02(self, db_session, test_context):
         """UT-A05-02: Schema change without regen fails CI."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A05-02', db_session=db_session, test_context=test_context)
 
-    def test_route_requires_summary_ut_a05_03(self):
+    def test_route_requires_summary_ut_a05_03(self, db_session, test_context):
         """UT-A05-03: Route without summary fails CI."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A05-03', db_session=db_session, test_context=test_context)
 
-    def test_hardcoded_path_fails_static_ut_a05_04(self):
+    def test_hardcoded_path_fails_static_ut_a05_04(self, db_session, test_context):
         """UT-A05-04: Hardcoded API path in frontend fails static check."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A05-04', db_session=db_session, test_context=test_context)
 
 
 class TestScaffolding:
     """Tests for code scaffolding - UT-A06-*."""
 
-    def test_scaffold_validates_references_ut_a06_01(self):
+    def test_scaffold_validates_references_ut_a06_01(self, db_session, test_context):
         """UT-A06-01: Scaffold validates table/dict/perm references."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-01', db_session=db_session, test_context=test_context)
 
-    def test_scaffold_validates_delete_policy_ut_a06_02(self):
+    def test_scaffold_validates_delete_policy_ut_a06_02(self, db_session, test_context):
         """UT-A06-02: Scaffold validates delete policy declaration."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-02', db_session=db_session, test_context=test_context)
 
-    def test_scaffold_generates_migration_ut_a06_03(self):
+    def test_scaffold_generates_migration_ut_a06_03(self, db_session, test_context):
         """UT-A06-03: Scaffold generates working migration and tests."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-03', db_session=db_session, test_context=test_context)
 
-    def test_scaffold_file_header_ut_a06_04(self):
+    def test_scaffold_file_header_ut_a06_04(self, db_session, test_context):
         """UT-A06-04: Generated files have version/hash/time header."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-04', db_session=db_session, test_context=test_context)
 
-    def test_scaffold_frontend_components_ut_a06_05(self):
+    def test_scaffold_frontend_components_ut_a06_05(self, db_session, test_context):
         """UT-A06-05: Generated frontend uses PageHeader/QueryBar/etc."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-05', db_session=db_session, test_context=test_context)
 
-    def test_scaffold_no_overwrite_modified_ut_a06_06(self):
+    def test_scaffold_no_overwrite_modified_ut_a06_06(self, db_session, test_context):
         """UT-A06-06: Scaffold doesn't overwrite modified files."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-06', db_session=db_session, test_context=test_context)
 
-    def test_scaffold_force_overwrites_ut_a06_07(self):
+    def test_scaffold_force_overwrites_ut_a06_07(self, db_session, test_context):
         """UT-A06-07: Scaffold --force overwrites modified files."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-A06-07', db_session=db_session, test_context=test_context)
 
 
 class TestStaticChecks:
@@ -165,9 +180,10 @@ class TestStaticChecks:
         content = main_file.read_text()
         assert "ALTER TABLE" not in content
 
-    def test_no_live_room_in_migration_ut_b02_05(self):
+    def test_no_live_room_in_migration_ut_b02_05(self, db_session, test_context):
         """UT-B02-05: Migration referencing live_room fails CI."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-B02-05', db_session=db_session, test_context=test_context)
 
     def test_no_tenant_filter_hardcoded_ut_c02_13(self):
         """UT-C02-13: Hardcoded .where(tenant_id == 1) fails static check."""

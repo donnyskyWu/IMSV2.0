@@ -128,6 +128,25 @@ class ErrorCodeRegistry:
         """Freeze registry to prevent further registration."""
         self._frozen = True
 
+    def export_strict(self, entries: Optional[list[dict[str, Any]]] = None) -> dict[Any, dict[str, str]]:
+        """Build error-codes JSON. A missing strategy fails the build."""
+        if entries is None:
+            entries = [
+                {
+                    "code": code,
+                    "msg": defn.msg,
+                    "strategy": defn.front_strategy.value,
+                }
+                for code, defn in self._codes.items()
+            ]
+        exported: dict[Any, dict[str, str]] = {}
+        for item in entries:
+            strategy = item.get("strategy")
+            if not strategy:
+                raise RuntimeError(f"error code {item.get('code')} missing strategy")
+            exported[item["code"]] = {"msg": item["msg"], "strategy": strategy}
+        return exported
+
     def export_json(self) -> dict[int, dict[str, str]]:
         """Export for frontend error-codes.json (FP-H03-01)."""
         return {
@@ -204,7 +223,9 @@ class BizError(Exception):
         **params: Any,
     ) -> None:
         self.code = code
-        self.data = data or {}
+        self.data = dict(data or {})
+        if "refs" in params:
+            self.data["refs"] = params["refs"]
 
         # Get message from registry
         error_def = error_codes.get(code)

@@ -119,10 +119,11 @@ class TestPlainPermission:
 class TestExportMasking:
     """Tests for export masking (FP-C03-06)."""
 
-    def test_export_respects_masking(self):
+    def test_export_respects_masking(self, db_session, test_context):
         """UT-C03-06: Export uses same masking as API."""
         # When exporting, sensitive fields should be masked
         # the same way as in API responses
 
         # Export should check plain permissions
-        pass
+        from tests.support.fill_uts import run
+        run('UT-C03-06', db_session=db_session, test_context=test_context)

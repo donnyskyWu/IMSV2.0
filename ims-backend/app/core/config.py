@@ -160,14 +160,18 @@ class LockSettings(BaseSettings):
 
 
 class APISettings(BaseSettings):
-    """API configuration."""
+    """API configuration.
 
-    id_as_string: bool = Field(
-        default=True,
-        description="Output id/*Id as strings (D2: always true, no off switch)"
-    )
+    D2: id and *Id are always strings. There is no environment switch
+    (IMS_API_ID_AS_STRING is ignored).
+    """
 
-    model_config = SettingsConfigDict(env_prefix="IMS_API_")
+    model_config = SettingsConfigDict(env_prefix="IMS_API_", extra="ignore")
+
+    @property
+    def id_as_string(self) -> bool:
+        """Always True. D2 does not allow turning string ids off."""
+        return True
 
 
 class Settings(BaseSettings):

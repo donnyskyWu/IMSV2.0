@@ -649,7 +649,7 @@ class TestAuthServiceBuildDataScopeText:
 
     @pytest.mark.asyncio
     async def test_data_scope_text_empty(self, db_session, test_context):
-        """UT-D01-20: Test data scope text for empty scopes."""
+        """Data scope text for empty scopes (not an FP-D01 case id)."""
         from app.services.auth import AuthService
 
         service = AuthService()
@@ -664,7 +664,7 @@ class TestAuthServiceBuildDataScopeText:
 
     @pytest.mark.asyncio
     async def test_data_scope_text_multiple(self, db_session, test_context):
-        """UT-D01-21: Test data scope text for multiple scopes."""
+        """Data scope text for multiple scopes (not an FP-D01 case id)."""
         from app.services.auth import AuthService
 
         service = AuthService()
@@ -904,7 +904,7 @@ class TestDepsBranches:
 
     @pytest.mark.asyncio
     async def test_require_data_scope_with_scopes_succeeds(self, db_session):
-        """UT-D03-11: Test require_data_scope succeeds with data scopes."""
+        """require_data_scope succeeds when scopes are configured."""
         from app.api.deps import require_data_scope
         from app.core.context import RequestContext, ctx
 
@@ -1107,7 +1107,7 @@ class TestDictServiceBranches:
 
     @pytest.mark.asyncio
     async def test_get_dict_data_simple_list_from_db(self, db_session, sample_dict):
-        """UT-B07-14: Test get_dict_data_simple_list queries DB when not cached."""
+        """get_dict_data_simple_list queries the database when the key is not cached."""
         from app.core.cache import Cache
         from app.services.dict import DictService
 
@@ -1125,3 +1125,78 @@ class TestDictServiceBranches:
 
         # Cleanup
         Cache.delete(cache_key)
+
+
+class TestRoleMutationBranches:
+    """Cover delete, disable, and permission-detail branches on RoleService."""
+
+    @pytest.mark.asyncio
+    async def test_delete_and_disable_missing_role(self, db_session, test_context):
+        from app.core.errors import BizError
+        from app.services.role import RoleService
+
+        service = RoleService()
+        with pytest.raises(BizError) as missing_delete:
+            await service.delete_role(999999)
+        assert missing_delete.value.code == 1504
+        with pytest.raises(BizError) as missing_disable:
+            await service.disable_role(999999)
+        assert missing_disable.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_delete_role_with_members_then_plain_role(self, db_session, test_context):
+        from app.core.errors import BizError
+        from app.domains.sys.models import Role, User, UserRole
+        from app.services.role import RoleService
+
+        user = User(
+            id=910, tenant_id=1, username="role_member", nickname="成员",
+            status="ACTIVE", source="LOCAL",
+        )
+        bound = Role(
+            id=910, tenant_id=1, role_key="with_member", name="有成员",
+            status="ENABLED", source="MANUAL",
+        )
+        plain = Role(
+            id=911, tenant_id=1, role_key="plain_role", name="可删",
+            status="ENABLED", source="MANUAL",
+        )
+        db_session.add_all([user, bound, plain, UserRole(id=910, user_id=910, role_id=910)])
+        db_session.flush()
+
+        service = RoleService()
+        with pytest.raises(BizError) as caught:
+            await service.delete_role(910)
+        assert caught.value.code == 1502
+        await service.delete_role(911)
+        db_session.refresh(plain)
+        assert plain.deleted == plain.id
+
+    @pytest.mark.asyncio
+    async def test_save_perm_detail_read_only_then_update(self, db_session, test_context):
+        from app.domains.sys.models import Menu, Role, RolePermDetail
+        from app.services.role import RoleService
+
+        role = Role(
+            id=912, tenant_id=1, role_key="perm_branch", name="权限分支",
+            status="ENABLED", source="MANUAL",
+        )
+        menu = Menu(
+            id=912, tenant_id=1, parent_id=0, name="只读",
+            type="BUTTON", status="ENABLED", perm_code="ims:branch:read",
+        )
+        db_session.add_all([role, menu])
+        db_session.flush()
+
+        service = RoleService()
+        created = await service.save_perm_detail(912, "ims:branch:read", True, False, False)
+        assert created == {"r": True, "w": False, "d": False}
+        updated = await service.save_perm_detail(912, "ims:branch:read", False, False, True)
+        assert updated["r"] is True
+        assert updated["d"] is True
+        stored = db_session.query(RolePermDetail).filter(
+            RolePermDetail.role_id == 912,
+            RolePermDetail.perm_code == "ims:branch:read",
+        ).one()
+        assert stored.r is True
+        assert stored.d is True

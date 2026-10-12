@@ -159,6 +159,7 @@ async def logout(request: Request) -> CommonResult:
 
 @router.get("/me", response_model=CommonResult[MeResponse], summary="获取当前用户信息")
 async def get_current_user_info() -> CommonResult[MeResponse]:
+    # LOGIN_ONLY: authentication without a business permission code.
     """
     Get current user's info, menus, and permissions.
 
@@ -175,6 +176,9 @@ async def get_current_user_info() -> CommonResult[MeResponse]:
     user_id = ctx.require_user_id()
     result = await auth_service.get_current_user_info(user_id)
     return CommonResult.success(data=result)
+
+
+get_current_user_info.__login_only__ = True
 
 
 @router.get("/sso/dingtalk/redirect", summary="钉钉SSO跳转")

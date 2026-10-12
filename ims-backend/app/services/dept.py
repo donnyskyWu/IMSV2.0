@@ -50,6 +50,12 @@ class DeptService:
         from app.domains.sys.models import Dept, User, UserDept
         session = get_db_session()
 
+        context = ctx.current_or_none
+        if context is not None and not context.is_system:
+            allowed = {"ims:system:dept:query", "ims:system:user:query"}
+            if not context.perm_codes.intersection(allowed):
+                raise BizError(1008)
+
         tenant_id = ctx.tenant_id
 
         # Base query for departments
@@ -591,6 +597,65 @@ class DeptService:
             raise BizError(1001, msg="该部门不是待确认状态")
 
         dept.local_orphan = False
+        session.flush()
+
+    async def ensure_tenant_bootstrap(self) -> None:
+        """Create the root department and the SYSTEM 待分配 node for a new tenant."""
+        from app.domains.sys.models import Dept
+        session = get_db_session()
+        tenant_id = ctx.tenant_id
+        root = session.query(Dept).filter(
+            Dept.tenant_id == tenant_id,
+            Dept.parent_id == 0,
+            Dept.deleted == 0,
+        ).first()
+        if root is None:
+            root = Dept(
+                tenant_id=tenant_id,
+                parent_id=0,
+                name="根部门",
+                path="/",
+                source="LOCAL",
+                status="ENABLED",
+            )
+            session.add(root)
+            session.flush()
+            root.path = f"/{root.id}/"
+        pending = session.query(Dept).filter(
+            Dept.tenant_id == tenant_id,
+            Dept.source == "SYSTEM",
+            Dept.deleted == 0,
+        ).first()
+        if pending is None:
+            pending = Dept(
+                tenant_id=tenant_id,
+                parent_id=root.id,
+                name="待分配",
+                source="SYSTEM",
+                status="ENABLED",
+            )
+            session.add(pending)
+            session.flush()
+            pending.path = f"{root.path}{pending.id}/"
+        session.flush()
+
+    async def assign_dingtalk_id(self, dept_id: int, dingtalk_dept_id: str) -> None:
+        """Reject a second department that reuses a DingTalk department id."""
+        from app.domains.sys.models import Dept
+        session = get_db_session()
+        tenant_id = ctx.tenant_id
+        clash = session.query(Dept).filter(
+            Dept.tenant_id == tenant_id,
+            Dept.dingtalk_dept_id == dingtalk_dept_id,
+            Dept.deleted == 0,
+            Dept.id != dept_id,
+        ).first()
+        if clash is not None:
+            raise BizError(1001, msg="钉钉部门ID已存在")
+        dept = session.query(Dept).filter(Dept.id == dept_id).first()
+        if dept is None:
+            raise BizError(1504)
+        dept.dingtalk_dept_id = dingtalk_dept_id
         session.flush()
 
     def _dept_to_response(self, dept) -> dict[str, Any]:

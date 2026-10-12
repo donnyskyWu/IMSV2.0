@@ -485,9 +485,101 @@ class AuthService:
     async def _build_user_menu_tree(
         self, user_id: int, tenant_id: int
     ) -> list[dict[str, Any]]:
-        """Build user's menu tree (tenant package ∩ role menus)."""
-        # TODO: Implement proper menu tree building
-        return []
+        """Menu tree = tenant package menus ∩ enabled role menus (FP-D06-01)."""
+        from app.domains.sys.models import Menu, Role, RoleMenu, Tenant, TenantPackageMenu, UserRole
+        session = get_db_session()
+
+        role_ids = [
+            row.role_id
+            for row in session.query(UserRole).join(
+                Role, Role.id == UserRole.role_id
+            ).filter(
+                UserRole.user_id == user_id,
+                Role.status == "ENABLED",
+                Role.deleted == 0,
+            ).all()
+        ]
+        if not role_ids:
+            return []
+
+        role_menu_ids = {
+            row.menu_id
+            for row in session.query(RoleMenu).filter(RoleMenu.role_id.in_(role_ids)).all()
+        }
+        tenant = session.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if tenant is not None and tenant.package_id:
+            package_ids = {
+                row.menu_id
+                for row in session.query(TenantPackageMenu).filter(
+                    TenantPackageMenu.package_id == tenant.package_id
+                ).all()
+            }
+            role_menu_ids &= package_ids
+
+        if not role_menu_ids:
+            return []
+
+        menus = session.query(Menu).filter(
+            Menu.id.in_(role_menu_ids),
+            Menu.status == "ENABLED",
+            Menu.deleted == 0,
+        ).all()
+        return [
+            {
+                "id": str(menu.id),
+                "name": menu.name,
+                "perm_code": menu.perm_code,
+                "type": menu.type,
+            }
+            for menu in menus
+        ]
+
+    async def change_password(
+        self, user_id: int, new_password: str, keep_session_id: str
+    ) -> None:
+        """Change password and invalidate every session except the current one."""
+        from app.domains.sys.models import User
+        session = get_db_session()
+        user = session.query(User).filter(User.id == user_id, User.deleted == 0).first()
+        if user is None:
+            raise BizError(1002)
+        user.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        user.token_version = (user.token_version or 0) + 1
+        user.pwd_reset_required = False
+        sessions_key = f"{self.USER_SESSIONS_PREFIX}{user_id}"
+        for sid in list(Cache.smembers(sessions_key)):
+            if sid == keep_session_id:
+                continue
+            Cache.delete(f"{self.SESSION_PREFIX}{sid}")
+            Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
+            Cache.srem(sessions_key, sid)
+        session.flush()
+
+    async def map_dingtalk_user_by_mobile(self, dingtalk_user_id: str, mobile: str) -> int:
+        """Bind an unmapped DingTalk user to the local user with the same mobile."""
+        from app.domains.sys.models import User, UserMapping
+        from app.services.user import UserService
+
+        session = get_db_session()
+        mobile_hash = UserService()._hash_mobile(mobile)
+        user = session.query(User).filter(
+            User.mobile_hash == mobile_hash,
+            User.deleted == 0,
+        ).first()
+        if user is None:
+            raise BizError(1217)
+        existing = session.query(UserMapping).filter(
+            UserMapping.dingtalk_user_id == dingtalk_user_id,
+            UserMapping.deleted == 0,
+        ).first()
+        if existing is None:
+            session.add(UserMapping(
+                tenant_id=user.tenant_id,
+                user_id=user.id,
+                dingtalk_user_id=dingtalk_user_id,
+            ))
+            session.flush()
+        return user.id
 
     async def _write_login_log(
         self,

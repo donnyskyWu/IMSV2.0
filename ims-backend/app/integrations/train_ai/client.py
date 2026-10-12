@@ -55,6 +55,10 @@ class TrainAIClient(BaseAdapter[list[GeneratedQuestion]]):
         self.base_url = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
         self.api_key = api_key
         self.model = model
+        self.transport = None
+        self.last_log = ""
+        self.task_rows: list[object] = []
+        self.call_records: list[dict] = []
 
         # Mock responses
         self._mock_questions = [
@@ -113,10 +117,29 @@ class TrainAIClient(BaseAdapter[list[GeneratedQuestion]]):
         """
         from app.core.errors import BizError
 
+        if self.mode == "timeout":
+            raise BizError(1107, msg="生成超时，请稍后再试")
+        if self.mode == "fail":
+            raise BizError(1106, msg="调用失败，请稍后再试")
         if self.mode == "mock":
-            questions = self._mock_questions[:question_count]
+            questions = self._accept(self._mock_questions[:question_count])
             if not questions:
                 raise BizError(1108, msg="生成的题目数量为0")
+            self._remember(questions)
+            return questions
+        if self.mode == "real" and self.transport is not None:
+            if not self.is_configured:
+                raise BizError(1109, msg="培训AI未配置或未启用")
+            raw = self.transport(self.base_url, self.api_key, self.model)
+            self.call_records.append({
+                "url": self.base_url,
+                "model": self.model,
+                "authorization": "Bearer ******",
+            })
+            questions = self._accept(raw)
+            if not questions:
+                raise BizError(1108, msg="生成的题目数量为0")
+            self._remember(questions)
             return questions
 
         if not self.is_configured:
@@ -142,3 +165,45 @@ class TrainAIClient(BaseAdapter[list[GeneratedQuestion]]):
     def set_mock_questions(self, questions: list[GeneratedQuestion]) -> None:
         """Set mock questions for testing."""
         self._mock_questions = questions
+
+    def _accept(self, questions: list[GeneratedQuestion]) -> list[GeneratedQuestion]:
+        """Drop questions that have no answer."""
+        return [item for item in questions if item.answer]
+
+    def _remember(self, questions: list[GeneratedQuestion]) -> None:
+        text = " ".join(item.question for item in questions)
+        if self.api_key:
+            text = text.replace(self.api_key, SECRET_MASK)
+        self.last_log = text
+
+    async def generate_for_material(
+        self,
+        material: dict,
+        question_count: int = 5,
+    ) -> list[GeneratedQuestion]:
+        """Unpublished material is rejected before any model call."""
+        from app.core.errors import BizError
+
+        if not material.get("published"):
+            raise BizError(1101, msg="资料未发布或不存在")
+        return await self.generate_questions("material", question_count=question_count)
+
+
+SECRET_MASK = "******"
+TASK_ROWS: list[object] = []
+
+
+def seed_placeholder(store: dict) -> dict:
+    """Fill missing train-ai settings and never overwrite an edited model."""
+    defaults = {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen3.8-max",
+        "api_key": "",
+        "mode": "mock",
+        "enabled": True,
+    }
+    for key, value in defaults.items():
+        if key == "model" and store.get("model"):
+            continue
+        store.setdefault(key, value)
+    return store

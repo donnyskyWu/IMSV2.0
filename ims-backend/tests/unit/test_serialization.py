@@ -138,6 +138,9 @@ class TestIdAsString:
         settings = get_settings()
 
         assert settings.api.id_as_string is True
+        from app.core.config import APISettings
+        forced = APISettings()
+        assert forced.id_as_string is True
 
     def test_integer_id_serializes_to_string(self):
         """Integer ID should serialize to string."""

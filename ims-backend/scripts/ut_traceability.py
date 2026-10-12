@@ -10,46 +10,91 @@ Output:
     - List of uncovered UT IDs
 """
 
+import ast
 import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 
+UT_PATTERN = re.compile(r'\bUT-[A-Z]\d{2}-\d{2}\b')
+UT_PATTERN_LOOSE = re.compile(r'\b[Uu][Tt]-[A-Za-z]\d{2}-\d{2}\b')
+
+
+def _is_pass_only(node: ast.FunctionDef) -> bool:
+    """True when the function body is only a docstring and/or `pass`."""
+    body = list(node.body)
+    if (
+        body
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    ):
+        body = body[1:]
+    return len(body) == 1 and isinstance(body[0], ast.Pass)
+
+
+def _ids_in_text(text: str) -> set[str]:
+    return {m.group().upper() for m in UT_PATTERN_LOOSE.finditer(text)}
+
 
 # Parse UT IDs from spec
 def parse_ut_ids_from_spec(spec_path: str) -> set[str]:
     """Extract all UT-xxx IDs from the spec document."""
-    ut_ids = set()
-    pattern = re.compile(r'\bUT-[A-Z]\d{2}-\d{2}\b')
-
     with open(spec_path, 'r', encoding='utf-8') as f:
         content = f.read()
-        matches = pattern.findall(content)
-        ut_ids.update(matches)
+    return set(UT_PATTERN.findall(content))
 
-    return ut_ids
+
+def _function_source(lines: list[str], node: ast.FunctionDef) -> str:
+    end = node.end_lineno or node.lineno
+    return "\n".join(lines[node.lineno - 1:end])
+
 
 # Parse UT IDs from test files
 def parse_ut_ids_from_tests(tests_dir: str) -> dict[str, list[str]]:
-    """Extract UT-xxx IDs from test function names and docstrings."""
+    """Extract UT IDs from tests whose body is not an empty `pass`.
+
+    A function whose executable body is only `pass` does not count as coverage,
+    even if its name or docstring mentions a UT ID.
+    """
     ut_to_tests = defaultdict(list)
-    pattern = re.compile(r'\b[Uu][Tt]-[A-Za-z]\d{2}-\d{2}\b', re.IGNORECASE)
 
     for py_file in Path(tests_dir).rglob('test_*.py'):
-        with open(py_file, 'r', encoding='utf-8') as f:
-            content = f.read()
+        content = py_file.read_text(encoding='utf-8')
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+        lines = content.splitlines()
+        pass_ranges: list[tuple[int, int]] = []
 
-        # Find all UT references
-        for match in pattern.finditer(content):
-            ut_id = match.group().upper()  # Normalize to uppercase
-            # Get surrounding context (test function name)
-            start = content.rfind('\ndef ', 0, match.start())
-            if start != -1:
-                end = content.find('(', start)
-                func_name = content[start+5:end].strip() if end != -1 else 'unknown'
-                ut_to_tests[ut_id].append(f"{py_file.stem}::{func_name}")
-            else:
-                ut_to_tests[ut_id].append(str(py_file.stem))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if not node.name.startswith('test_'):
+                continue
+            if _is_pass_only(node):
+                end = node.end_lineno or node.lineno
+                pass_ranges.append((node.lineno, end))
+                continue
+            ids = _ids_in_text(node.name.replace('_', '-'))
+            ids |= _ids_in_text(ast.get_docstring(node) or '')
+            ids |= _ids_in_text(_function_source(lines, node))
+            for ut_id in ids:
+                ut_to_tests[ut_id].append(f"{py_file.stem}::{node.name}")
+
+        # Module-level mentions outside pass-only functions still count.
+        masked = content
+        # Drop pass-only function text so their IDs cannot leak in.
+        for start, end in reversed(pass_ranges):
+            block = "\n".join(lines[start - 1:end])
+            masked = masked.replace(block, "")
+        for ut_id in _ids_in_text(masked):
+            key = f"{py_file.stem}::module"
+            if key not in ut_to_tests[ut_id] and not any(
+                item.startswith(f"{py_file.stem}::") for item in ut_to_tests[ut_id]
+            ):
+                ut_to_tests[ut_id].append(key)
 
     return ut_to_tests
 

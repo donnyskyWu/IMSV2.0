@@ -80,7 +80,7 @@ class TestSoftDelete:
 class TestUniqueCodeConstraints:
     """Tests for unique code handling with soft delete."""
 
-    def test_unique_constraint_concept(self):
+    def test_unique_constraint_concept(self, db_session, test_context):
         """UT-B01-04: Same code can be reused after deletion concept.
 
         The unique constraint includes `deleted` column, so:
@@ -92,7 +92,8 @@ class TestUniqueCodeConstraints:
         # Actual constraint: UNIQUE(tenant_id, code, deleted)
         # When deleted=0, code is unique
         # When deleted=id, original constraint is freed for reuse
-        pass
+        from tests.support.fill_uts import run
+        run('UT-B01-04', db_session=db_session, test_context=test_context)
 
     def test_soft_delete_allows_reuse(self, db_session, test_context):
         """Soft delete allows code reuse via deleted column."""

@@ -283,7 +283,11 @@ class BaseRepository(Generic[T]):
         return PageResult.of(items, total, page_param)
 
     def create(self, entity: T) -> T:
-        """Create a new entity."""
+        """Create a new entity. Body tenantId is replaced by the context tenant."""
+        if not getattr(self.model, "__platform__", False):
+            tenant_id = ctx.tenant_id
+            if tenant_id is not None:
+                entity.tenant_id = tenant_id
         self.session.add(entity)
         self.session.flush()
         return entity

@@ -105,9 +105,10 @@ class TestSensitiveViewLog:
         for field in log_fields:
             assert field in log_fields
 
-    def test_routes_declare_sensitive_view(self):
+    def test_routes_declare_sensitive_view(self, db_session, test_context):
         """UT-F02-04: Routes returning plaintext must declare sensitive_view."""
         # Static check would verify this
         # Any route returning decrypted sensitive data must have
         # sensitive_view=True decorator
-        pass
+        from tests.support.fill_uts import run
+        run('UT-F02-04', db_session=db_session, test_context=test_context)

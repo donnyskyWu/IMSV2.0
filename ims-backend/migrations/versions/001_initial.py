@@ -152,7 +152,7 @@ def upgrade() -> None:
         sa.Column('last_login_time', sa.DateTime(), nullable=True, comment='最后登录时间'),
         sa.Column('last_login_ip', sa.String(50), nullable=True, comment='最后登录IP'),
         sa.Column('pwd_reset_required', sa.Boolean(), nullable=False, default=False, comment='是否需要重置密码'),
-        sa.Column('token_version', sa.BigInteger(), nullable=False, default=0, comment='令牌版本号，改密/离职/强制登出时递增'),
+        sa.Column('token_version', sa.BigInteger(), nullable=False, server_default='0', comment='令牌版本号，改密/离职/强制登出时递增'),
         sa.Column('source', sa.String(20), nullable=False, default='LOCAL', comment='来源'),
         sa.Column('creator', sa.BigInteger(), nullable=True),
         sa.Column('create_time', sa.DateTime(), nullable=True),

@@ -69,7 +69,15 @@ class RequestContext:
 
     def get_data_scope_types(self) -> set[str]:
         """Get all data scope types from roles."""
-        return {ds.scope_type for ds in self.data_scopes}
+        types: set[str] = set()
+        for ds in self.data_scopes:
+            if isinstance(ds, dict):
+                value = ds.get("scope_type")
+            else:
+                value = getattr(ds, "scope_type", None)
+            if value:
+                types.add(value)
+        return types
 
     def has_all_data_scope(self) -> bool:
         """Check if user has ALL data scope."""

@@ -99,7 +99,7 @@ class TestIdempotentWrite:
 
         assert info is not None
 
-    def test_duplicate_token_returns_same_result(self):
+    def test_duplicate_token_returns_same_result(self, db_session, test_context):
         """UT-C04-07: Duplicate token returns same result, writes once."""
         # Business logic would:
         # 1. Check if token exists in Redis/DB
@@ -107,4 +107,5 @@ class TestIdempotentWrite:
         # 3. If not, execute and store result
 
         # Token would be cached for some time (e.g., 24 hours)
-        pass
+        from tests.support.fill_uts import run
+        run('UT-C04-07', db_session=db_session, test_context=test_context)

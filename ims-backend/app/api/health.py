@@ -33,7 +33,12 @@ class HealthData(BaseModel):
         populate_by_name = True
 
 
-@router.get("/health", response_model=CommonResult[HealthData])
+@router.get(
+    "/health",
+    response_model=CommonResult[HealthData],
+    tags=["健康检查"],
+    summary="健康检查",
+)
 async def health_check() -> CommonResult[HealthData]:
     """
     Health check endpoint.

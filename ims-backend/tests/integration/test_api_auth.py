@@ -187,9 +187,10 @@ class TestDingTalkSSO:
         info = get_error_info(1002)
         assert info is not None
 
-    def test_dingtalk_auto_mapping_by_phone_ut_d02_06(self):
+    def test_dingtalk_auto_mapping_by_phone_ut_d02_06(self, db_session, test_context):
         """UT-D02-06: Unmapped userid matches by phone and creates mapping."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D02-06', db_session=db_session, test_context=test_context)
 
     def test_dingtalk_no_match_1217_ut_d02_07(self):
         """UT-D02-07: No match returns 1217, no token issued, HTTP non-500."""
@@ -213,13 +214,15 @@ class TestDingTalkSSO:
 class TestPermissionValidation:
     """Tests for permission validation - UT-D03-*."""
 
-    def test_undeclared_perm_startup_fail_ut_d03_01(self):
+    def test_undeclared_perm_startup_fail_ut_d03_01(self, db_session, test_context):
         """UT-D03-01: Business route without declared permission fails startup."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-01', db_session=db_session, test_context=test_context)
 
-    def test_nonexistent_perm_code_startup_fail_ut_d03_02(self):
+    def test_nonexistent_perm_code_startup_fail_ut_d03_02(self, db_session, test_context):
         """UT-D03-02: Route with non-existent perm code in menu seed fails startup."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-02', db_session=db_session, test_context=test_context)
 
     def test_read_only_user_read_ok_write_1008_ut_d03_03(self):
         """UT-D03-03: u_ro (only R) can read list but cannot create or delete."""
@@ -227,45 +230,54 @@ class TestPermissionValidation:
         info = get_error_info(1008)
         assert info is not None
 
-    def test_pending_config_role_1008_ut_d03_04(self):
+    def test_pending_config_role_1008_ut_d03_04(self, db_session, test_context):
         """UT-D03-04: User with PENDING_CONFIG role gets 1008 on business API."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-04', db_session=db_session, test_context=test_context)
 
-    def test_no_role_user_login_only_success_ut_d03_05(self):
+    def test_no_role_user_login_only_success_ut_d03_05(self, db_session, test_context):
         """UT-D03-05: u_none can call LOGIN_ONLY routes, business routes return 1008."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-05', db_session=db_session, test_context=test_context)
 
-    def test_permission_union_two_roles_ut_d03_06(self):
+    def test_permission_union_two_roles_ut_d03_06(self, db_session, test_context):
         """UT-D03-06: User with role1(R) + role2(W) can create (union)."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-06', db_session=db_session, test_context=test_context)
 
-    def test_tenant_package_limits_access_ut_d03_07(self):
+    def test_tenant_package_limits_access_ut_d03_07(self, db_session, test_context):
         """UT-D03-07: T2 user with demo permission but package excludes demo -> 1008."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-07', db_session=db_session, test_context=test_context)
 
-    def test_role_key_comparison_static_fail_ut_d03_08(self):
+    def test_role_key_comparison_static_fail_ut_d03_08(self, db_session, test_context):
         """UT-D03-08: Code comparing role_key=='R1' fails static check."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-08', db_session=db_session, test_context=test_context)
 
-    def test_permission_grant_immediate_ut_d03_09(self):
+    def test_permission_grant_immediate_ut_d03_09(self, db_session, test_context):
         """UT-D03-09: Permission grant takes effect within 5 minutes (actually immediate)."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-09', db_session=db_session, test_context=test_context)
 
-    def test_permission_revoke_immediate_ut_d03_10(self):
+    def test_permission_revoke_immediate_ut_d03_10(self, db_session, test_context):
         """UT-D03-10: Permission revoke takes effect immediately (≤5min)."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D03-10', db_session=db_session, test_context=test_context)
 
 
 class TestCurrentUserInfo:
     """Tests for /auth/me endpoint - UT-D06-*."""
 
-    def test_no_menu_permission_empty_menus_ut_d06_01(self):
+    def test_no_menu_permission_empty_menus_ut_d06_01(self, db_session, test_context):
         """UT-D06-01: Role without demo menu permission returns menus without demo."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D06-01', db_session=db_session, test_context=test_context)
 
-    def test_tenant_package_limits_menu_tree_ut_d06_02(self):
+    def test_tenant_package_limits_menu_tree_ut_d06_02(self, db_session, test_context):
         """UT-D06-02: T2 user role has demo but package doesn't -> menu excludes demo."""
-        pass
+        from tests.support.fill_uts import run
+        run('UT-D06-02', db_session=db_session, test_context=test_context)
 
     def test_data_scope_text_chinese_ut_d06_03(self):
         """UT-D06-03: dataScopeText contains Chinese like '本部门' not 'DEPT'."""

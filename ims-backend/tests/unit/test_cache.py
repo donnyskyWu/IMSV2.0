@@ -236,7 +236,7 @@ class TestMemoryCacheDirectly:
     """Tests that force memory cache code paths (for CI coverage)."""
 
     def test_memory_cache_get_set(self):
-        """UT-C03-07: Test memory cache get/set directly."""
+        """Memory cache: Test memory cache get/set directly."""
         import app.core.cache as cache_module
 
         # Save original redis client
@@ -267,7 +267,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_ttl_expiry(self):
-        """UT-C03-07b: Test memory cache TTL expiry."""
+        """Memory cache TTL: Test memory cache TTL expiry."""
         import time
 
         import app.core.cache as cache_module
@@ -296,7 +296,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_json_operations(self):
-        """UT-C03-08: Test memory cache JSON operations."""
+        """Memory JSON cache: Test memory cache JSON operations."""
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client
@@ -324,7 +324,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_set_operations(self):
-        """UT-C03-08b: Test memory cache set operations (sadd, smembers, srem)."""
+        """Memory set cache: Test memory cache set operations (sadd, smembers, srem)."""
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client
@@ -356,7 +356,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_incr(self):
-        """UT-C03-08c: Test memory cache incr operation."""
+        """Memory incr cache: Test memory cache incr operation."""
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client
@@ -379,7 +379,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_getdel(self):
-        """UT-C03-08d: Test memory cache getdel operation."""
+        """Memory getdel cache: Test memory cache getdel operation."""
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client
@@ -403,7 +403,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_setnx(self):
-        """UT-C03-08e: Test memory cache setnx operation."""
+        """Memory setnx cache: Test memory cache setnx operation."""
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client
@@ -429,7 +429,7 @@ class TestMemoryCacheDirectly:
             cache_module._redis_client = original_client
 
     def test_memory_cache_expire(self):
-        """UT-C03-08f: Test memory cache expire operation."""
+        """Memory expire cache: Test memory cache expire operation."""
         import app.core.cache as cache_module
 
         original_client = cache_module._redis_client

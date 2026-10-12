@@ -19,6 +19,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
+from app.db import ids as _ids  # noqa: F401  # registers the SQLite primary-key listener
 
 settings = get_settings()
 

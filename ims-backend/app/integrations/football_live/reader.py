@@ -36,6 +36,8 @@ class FootballRoom:
     reserve_count: int
     like_count: int
     viewer_count: int
+    tenant_id: Optional[int] = None
+    deleted: int = 0
 
 
 class FootballUnavailable:
@@ -59,7 +61,9 @@ class FootballLiveReader:
     def __init__(self, mode: str = "mock"):
         self.mode = mode
         self._mock_rooms: dict[int, FootballRoom] = {}
+        self._durations: list[tuple[int, datetime, datetime, int]] = []
         self._tenant_map: dict[int, int] = {1: 1}  # Football tenant 1 -> IMS tenant 1
+        self.statements: list[str] = []
 
     def get_room(
         self,
@@ -75,9 +79,14 @@ class FootballLiveReader:
             - UNAVAILABLE if Football service is down
         """
         if self.mode == "mock":
+            self.statements.append("SELECT")
             room = self._mock_rooms.get(room_id)
-            if room is None:
+            if room is None or room.deleted:
                 return None
+            if room.tenant_id is not None and room.tenant_id != tenant_id:
+                mapped = self._tenant_map.get(room.tenant_id, room.tenant_id)
+                if mapped != tenant_id:
+                    return None
             return room
 
         # Real implementation would:
@@ -121,10 +130,40 @@ class FootballLiveReader:
             Total minutes of live time, or UNAVAILABLE
         """
         if self.mode == "mock":
-            # Return mock duration
-            return 120  # 2 hours
+            self.statements.append("SELECT")
+            total = 0
+            for author, begin, finish, _deleted in self._durations:
+                if author != author_id:
+                    continue
+                if finish < start or begin > end:
+                    continue
+                overlap_start = begin if begin > start else start
+                overlap_end = finish if finish < end else end
+                minutes = int((overlap_end - overlap_start).total_seconds() // 60)
+                if minutes > 0:
+                    total += minutes
+            if not self._durations:
+                return 120
+            return total
 
         return UNAVAILABLE
+
+    def add_duration(
+        self,
+        author_id: int,
+        start: datetime,
+        end: datetime,
+        deleted: int = 0,
+    ) -> None:
+        """Record a live span. Deleted spans still count (FP-H06-04)."""
+        self._durations.append((author_id, start, end, deleted))
+
+    def execute_sql(self, sql: str) -> None:
+        """Read-only session. Anything other than SELECT is rejected."""
+        stripped = sql.strip().upper()
+        if not stripped.startswith("SELECT"):
+            raise RuntimeError("read-only session rejected non-SELECT")
+        self.statements.append("SELECT")
 
     def set_mock_room(self, room: FootballRoom) -> None:
         """Add a mock room for testing."""

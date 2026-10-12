@@ -110,13 +110,9 @@ def require_permission(perm_code: str) -> Callable:
         @router.get("/users", dependencies=[Depends(require_permission("ims:system:user:query"))])
     """
     async def dependency(user_id: int = Depends(get_current_user)) -> int:
-        context = ctx.current_or_none
-        if context is None:
-            raise BizError.no_permission()
+        from app.services.access import authorize
 
-        if perm_code not in context.perm_codes:
-            raise BizError.no_permission()
-
+        authorize(perm_code)
         return user_id
 
     return dependency

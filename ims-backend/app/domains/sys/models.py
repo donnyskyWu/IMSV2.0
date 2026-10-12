@@ -107,7 +107,11 @@ class User(AuditBase):
     # Token version for session invalidation (D5)
     # Reserved by B0a, used by B1 for password-change / leave / force-logout bump
     token_version: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, default=0, comment="令牌版本号，改密/离职/强制登出时递增"
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="令牌版本号，改密/离职/强制登出时递增",
     )
 
     # Source: LOCAL, DINGTALK, MIGRATED
@@ -838,3 +842,146 @@ class OrgSyncBatch(AuditBase):
     __table_args__ = (
         Index("idx_org_sync_batch_time", "started_at"),
     )
+
+
+class TodoItem(AuditBase):
+    """In-app todo created by position supply and org sync (FP-D05, FP-D07)."""
+
+    __tablename__ = "ims_sys_todo"
+
+    assignee_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="OPEN")
+
+
+class InboxMessage(AuditBase):
+    """In-app message, including integrity scan notices (FP-B09)."""
+
+    __tablename__ = "ims_sys_inbox"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class IdempotencyRecord(AuditBase):
+    """Stored result of an idempotent request (FP-C04-03)."""
+
+    __tablename__ = "ims_sys_idempotency"
+
+    token: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    result_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "token", "deleted", name="uk_idem_token"),
+    )
+
+
+class StoredFile(AuditBase):
+    """Uploaded file metadata (FP-E01)."""
+
+    __tablename__ = "ims_file"
+
+    scene: Mapped[str] = mapped_column(String(50), nullable=False)
+    file_key: Mapped[str] = mapped_column(String(300), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    uploader_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    biz_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    biz_dept_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+
+class WorkCalendarDay(AuditBase):
+    """Holiday or extra workday (FP-H07)."""
+
+    __tablename__ = "ims_work_calendar"
+
+    day: Mapped[str] = mapped_column(String(10), nullable=False, comment="YYYY-MM-DD")
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, comment="HOLIDAY/WORKDAY")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "day", "deleted", name="uk_calendar_day"),
+    )
+
+
+class LeaveRecord(AuditBase):
+    """Attendance leave row pulled from the attendance adapter (FP-H07)."""
+
+    __tablename__ = "ims_att_leave"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    start_day: Mapped[str] = mapped_column(String(10), nullable=False)
+    end_day: Mapped[str] = mapped_column(String(10), nullable=False)
+    portion: Mapped[str] = mapped_column(String(10), nullable=False, default="1")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "user_id", "start_day", "end_day", "deleted",
+            name="uk_leave_span",
+        ),
+    )
+
+
+class OutboxEvent(AuditBase):
+    """Outbound sync event retried by the worker (FP-H06-04)."""
+
+    __tablename__ = "ims_sys_outbox"
+
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="FAILED")
+    synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class RefProbe(AuditBase):
+    """Row scanned by the reference-integrity job (FP-B09)."""
+
+    __tablename__ = "ims_ref_probe"
+
+    dept_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    parent_probe_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    external_room_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
+class MigrationPending(AuditBase):
+    """OPS rows that could not be imported (FP-H05-02)."""
+
+    __tablename__ = "ims_mig_pending"
+
+    source_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reason: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class ScopeSample(AuditBase):
+    """Sample business row used to exercise data-scope rules (FP-C02)."""
+
+    __tablename__ = "ims_scope_sample"
+    __scope_fields__ = {
+        "dept": "dept_id",
+        "ip_group": "ip_group_id",
+        "owner": "owner_user_id",
+    }
+
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    dept_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    ip_group_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    owner_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    publish_dept_ids: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
+
+class AttendanceSyncState(AuditBase):
+    """Month-level attendance fetch status (FP-H07)."""
+
+    __tablename__ = "ims_att_sync_state"
+
+    month: Mapped[str] = mapped_column(String(7), nullable=False, comment="YYYY-MM")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="OK")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "month", "deleted", name="uk_att_month"),
+    )
+
+
+# Register shared-entity tables on the same metadata used by tests and Alembic.
+from app.domains.shared import models as _shared_models  # noqa: E402, F401
