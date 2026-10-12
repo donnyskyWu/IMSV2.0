@@ -123,6 +123,19 @@ describe('visibleMenus', () => {
     expect(visible).toEqual([])
   })
 
+  it('已登记的组织与岗位叶子进侧栏，未登记的部门管理和工作台不画', () => {
+    const visible = visibleMenus(
+      [
+        leaf('/ims/auth/org', '组织架构同步'),
+        leaf('/ims/auth/position', '岗位-角色供给规则'),
+        leaf('/system/dept', '部门管理'),
+        leaf('/ims/workbench', '工作台'),
+      ],
+      ['/ims/auth/org', '/ims/auth/position'],
+    )
+    expect(visible.map((item) => item.path)).toEqual(['/ims/auth/org', '/ims/auth/position'])
+  })
+
   it('工作台路由登记后可以出现在侧栏', () => {
     const visible = visibleMenus(
       [leaf('/ims/workbench', '工作台')],

@@ -317,6 +317,49 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page.locator('.no-menu-tip')).toHaveText('您的账号尚未分配权限，请联系管理员')
   })
 
+  test('已登记的组织与岗位叶子可点并跳转，未登记的部门管理不画', async ({ page }) => {
+    await installAuth(page, async (route) => {
+      await fulfillLogin(route, ok({
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+        expiresIn: 7200,
+        pwdResetRequired: false,
+      }))
+    })
+    await page.unroute('**/admin-api/ims/auth/me')
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      await route.fulfill(json(mePayload({
+        menus: [
+          menu('/ims/auth/org', '组织架构同步'),
+          menu('/ims/auth/position', '岗位-角色供给规则'),
+          menu('/system/dept', '部门管理'),
+        ],
+        permCodes: ['ims:system:org-sync:query', 'ims:auth:position-rule:query'],
+      })))
+    })
+    await page.goto('/login')
+    await submitLogin(page, 'test_admin', 'Test1234')
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/ims/auth/org')
+    await expect(page.getByTestId('b1-page-title')).toHaveText('组织架构同步')
+    await expect(page.getByTestId('denied-panel')).toHaveCount(0)
+
+    const sidebar = page.locator('.app-sidebar')
+    await expect(sidebar.locator('.el-menu-item')).toHaveCount(2)
+    await expect(sidebar.getByText('组织架构同步')).toHaveCount(1)
+    await expect(sidebar.getByText('岗位-角色供给规则')).toHaveCount(1)
+    await expect(sidebar.getByText('部门管理')).toHaveCount(0)
+
+    const width = page.viewportSize()?.width ?? 1440
+    if (width <= 390) {
+      await page.locator('.app-layout').first().locator('> .app-main > .app-topbar .menu-btn').click()
+    }
+    await sidebar.getByRole('menuitem', { name: '岗位-角色供给规则' }).click()
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/ims/auth/position')
+    await expect(page.getByTestId('b1-page-title')).toHaveText('岗位-角色供给规则')
+    await expect(page.getByTestId('denied-panel')).toHaveCount(0)
+    await expect(page.locator('.el-table')).toHaveCount(0)
+  })
+
   test('E2E-B1-LG-23 仅工作台菜单在 B3 前落在未分配权限提示', async ({ page }) => {
     await installAuth(page, async (route) => {
       await fulfillLogin(route, ok({

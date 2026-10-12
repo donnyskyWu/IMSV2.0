@@ -119,6 +119,25 @@ const changePasswordAliasRoute: RouteRecordRaw = {
   meta: { title: '请先修改密码', menuless: true },
 }
 
+/**
+ * B1 已登记业务页。标题以 01 功能点清单为准。
+ * 不登记工作台，也不登记 /system/dept 等后续菜单。
+ */
+const b1Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/auth/org',
+    name: 'AuthOrg',
+    component: () => import('@/views/auth/OrgSync.vue'),
+    meta: { title: '组织架构同步' },
+  },
+  {
+    path: '/ims/auth/position',
+    name: 'AuthPosition',
+    component: () => import('@/views/auth/PositionRules.vue'),
+    meta: { title: '岗位-角色供给规则' },
+  },
+]
+
 /** 壳路径。无菜单时停在这里，提示由 AppLayout 内容区展示。 */
 const shellRoute: RouteRecordRaw = {
   path: '/',
@@ -144,6 +163,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       loginRoute,
       changePasswordRoute,
       changePasswordAliasRoute,
+      ...b1Routes,
       ...demoRoutes,
       unknownRoute,
     ]
@@ -157,6 +177,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       loginRoute,
       changePasswordRoute,
       changePasswordAliasRoute,
+      ...b1Routes,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',

@@ -52,7 +52,7 @@ const showUnassigned = computed(() => {
 
 /**
  * 无权限页：
- * - 未登记的业务地址（如 /ims/auth/org）直接遮住，不展示数据；
+ * - 未登记的业务地址，以及已登记但菜单里没有的地址，直接遮住，不展示数据；
  * - 已登记的 /demo 示例页只在权限码为空时遮住（VC-R-16），避免挡住 B0b 演示。
  */
 const showDenied = computed(() => {
