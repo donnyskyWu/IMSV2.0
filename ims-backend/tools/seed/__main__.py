@@ -3,7 +3,10 @@
 Seed script entry point (FP-H05-01).
 
 Usage:
-    python -m tools.seed --env dev [--only dicts,params,menus,roles,tenant]
+    python -m tools.seed --env dev [--only dicts,params,menus,roles,grants,tenant,depts,users]
+
+先执行 alembic upgrade head。连接串从 IMS_DB_URL 读取。
+--env e2e 才会创建 02 §0.2 测试账号，密码 Test1234。
 """
 
 import argparse
@@ -25,7 +28,7 @@ def main():
         "--only",
         type=str,
         default=None,
-        help="Comma-separated list: dicts,params,menus,roles,tenant,depts"
+        help="Comma-separated list: tenant,dicts,params,menus,roles,grants,depts,access,users"
     )
     parser.add_argument(
         "--dry-run",

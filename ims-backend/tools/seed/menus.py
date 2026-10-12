@@ -1,15 +1,38 @@
 """
-Menu seed data (FP-B04-02, FP-H05-01).
+Menu seed data (FP-B04-02, FP-H05-01, FP-B1-BG-07).
 
 Menu tree with all ims:* permission codes.
 Permission code format: ims:<domain>:<resource>[:<action>]
+
+已有菜单不改名称、排序、图标。
+parent_id 仍是 0、而种子父级不是根时，补成目录 → 菜单 → 按钮。
+已经挂到别的父级视为管理员调整，不再改。
+B0a 的「组织同步」若名称和路径都还是占位值，才同时改名称和路径。
+新写入的组织同步菜单不是占位路径，见下方「权限管理」子菜单（01 清单第 45 行）。
 """
 
-from datetime import datetime
+from tools.seed.timeutil import seed_now
+
+# 只用于认出 B0a 未改过的旧行。新菜单不写这个 path，写入值见 MENUS 里的 /ims/auth/org。
+B0A_ORG_MENU = {
+    "name": "组织同步",
+    "path": "/system/org-sync",
+    "perm_code": "ims:system:org-sync:query",
+}
 
 # Menu tree structure
 # type: DIR (directory), MENU (page), BUTTON (action)
 MENUS = [
+    # 个人工作台。页面在 B3，菜单行本批就要有，供 R10 只授这一条。
+    {
+        "name": "工作台",
+        "type": "MENU",
+        "path": "/ims/workbench",
+        "component": "ims/workbench/index",
+        "perm_code": "ims:workbench:query",
+        "icon": "home",
+        "sort": 0,
+    },
     # 系统管理
     {
         "name": "系统管理",
@@ -97,17 +120,6 @@ MENUS = [
                 ],
             },
             {
-                "name": "组织同步",
-                "type": "MENU",
-                "path": "/system/org-sync",
-                "component": "system/org-sync/index",
-                "perm_code": "ims:system:org-sync:query",
-                "sort": 7,
-                "children": [
-                    {"name": "执行同步", "type": "BUTTON", "perm_code": "ims:system:org-sync:run", "sort": 1},
-                ],
-            },
-            {
                 "name": "操作日志",
                 "type": "MENU",
                 "path": "/system/operate-log",
@@ -147,17 +159,56 @@ MENUS = [
             },
         ],
     },
+    # Q18：工作台页面在 B3。菜单行已在本列表 sort=0，「权限管理」仍排第 2（系统管理 sort=1）。
+    # 01 清单第 45 行：父级「权限管理」下两个叶子，path 与权限码按该行逐字写入。
+    {
+        "name": "权限管理",
+        "type": "DIR",
+        "path": "/ims/auth",
+        "icon": "lock",
+        "sort": 2,
+        "children": [
+            {
+                # 第 45 行菜单名与 path；权限码是第 32 行 ims:system:org-sync:query。
+                "name": "组织架构同步",
+                "type": "MENU",
+                "path": "/ims/auth/org",
+                "component": "ims/auth/org/index",
+                "perm_code": "ims:system:org-sync:query",
+                "sort": 1,
+                "children": [
+                    {"name": "执行同步", "type": "BUTTON", "perm_code": "ims:system:org-sync:run", "sort": 1},
+                    {"name": "导出", "type": "BUTTON", "perm_code": "ims:system:org-sync:export", "sort": 2},
+                ],
+            },
+            {
+                # 第 45 行菜单名与 path；权限码是第 35 行 ims:auth:position-rule:query。
+                "name": "岗位-角色供给规则",
+                "type": "MENU",
+                "path": "/ims/auth/position",
+                "component": "ims/auth/position/index",
+                "perm_code": "ims:auth:position-rule:query",
+                "sort": 2,
+                "children": [
+                    {"name": "新建规则", "type": "BUTTON", "perm_code": "ims:auth:position-rule:create", "sort": 1},
+                    {"name": "编辑规则", "type": "BUTTON", "perm_code": "ims:auth:position-rule:update", "sort": 2},
+                    {"name": "删除规则", "type": "BUTTON", "perm_code": "ims:auth:position-rule:delete", "sort": 3},
+                    {"name": "按新版本刷新", "type": "BUTTON", "perm_code": "ims:auth:position-rule:refresh", "sort": 4},
+                ],
+            },
+        ],
+    },
 ]
 
 
 def seed_menus(env: str, dry_run: bool = False) -> int:
     """
     Seed menu tree.
-    
+
     Rules per FP-H05-01:
     - Upsert by perm_code (for MENU/BUTTON) or path (for DIR)
     - Does not overwrite admin-modified fields (name, sort, icon)
-    
+
     Returns:
         Number of records upserted
     """
@@ -169,7 +220,7 @@ def seed_menus(env: str, dry_run: bool = False) -> int:
     from app.db.session import get_db_session
 
     session = get_db_session()
-    now = datetime.now()
+    now = seed_now()
 
     count = _seed_menu_tree(session, MENUS, parent_id=0, now=now)
 
@@ -185,25 +236,14 @@ def _count_menus(menus: list) -> int:
     return count
 
 
-def _seed_menu_tree(session, menus: list, parent_id: int, now: datetime) -> int:
-    """Recursively seed menu tree."""
+def _seed_menu_tree(session, menus: list, parent_id: int, now) -> int:
+    """递归补菜单。已有行不改名称、排序、图标。"""
     from app.domains.sys.models import Menu
 
     count = 0
 
     for m in menus:
-        # Find by perm_code or path
-        existing = None
-        if m.get("perm_code"):
-            existing = session.query(Menu).filter(
-                Menu.perm_code == m["perm_code"],
-                Menu.deleted == 0,
-            ).first()
-        elif m.get("path"):
-            existing = session.query(Menu).filter(
-                Menu.path == m["path"],
-                Menu.deleted == 0,
-            ).first()
+        existing = _find_menu(session, Menu, m)
 
         if not existing:
             menu = Menu(
@@ -224,15 +264,51 @@ def _seed_menu_tree(session, menus: list, parent_id: int, now: datetime) -> int:
             session.add(menu)
             session.flush()
             count += 1
-
-            # Seed children
             children = m.get("children", [])
             if children:
                 count += _seed_menu_tree(session, children, menu.id, now)
-        else:
-            # Update parent_id if needed, seed children
-            children = m.get("children", [])
-            if children:
-                count += _seed_menu_tree(session, children, existing.id, now)
+            continue
+
+        # 仍是 B0a 占位时迁到权限管理。管理员改过名称或路径则不改这两项。
+        if _is_untouched_b0a_org(existing, m):
+            existing.parent_id = parent_id
+            existing.name = m["name"]
+            existing.path = m.get("path")
+            existing.component = m.get("component")
+        elif _needs_flat_parent(existing, parent_id):
+            existing.parent_id = parent_id
+        children = m.get("children", [])
+        if children:
+            count += _seed_menu_tree(session, children, existing.id, now)
 
     return count
+
+
+def _find_menu(session, menu_cls, item: dict):
+    """按钮和菜单按权限码找，目录按路径找。"""
+    if item.get("perm_code"):
+        return session.query(menu_cls).filter(
+            menu_cls.perm_code == item["perm_code"],
+            menu_cls.deleted == 0,
+        ).first()
+    if item.get("path"):
+        return session.query(menu_cls).filter(
+            menu_cls.path == item["path"],
+            menu_cls.type == item["type"],
+            menu_cls.deleted == 0,
+        ).first()
+    return None
+
+
+def _needs_flat_parent(existing, parent_id: int) -> bool:
+    """旧数据挂在根上时补父级。父级已经不是 0，说明管理员移动过，保持不动。"""
+    return bool(parent_id) and (existing.parent_id or 0) == 0
+
+
+def _is_untouched_b0a_org(existing, item: dict) -> bool:
+    """名称和路径仍等于 B0a 种子时，才允许迁到 B1 路径。"""
+    return (
+        item.get("perm_code") == B0A_ORG_MENU["perm_code"]
+        and existing.name == B0A_ORG_MENU["name"]
+        and existing.path == B0A_ORG_MENU["path"]
+    )

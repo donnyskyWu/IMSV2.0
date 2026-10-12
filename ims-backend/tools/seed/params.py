@@ -13,7 +13,7 @@ First batch parameters per FP-B07-02:
 Note: Train AI config is NOT in system params (goes to B10 AI Resource Center).
 """
 
-from datetime import datetime
+from tools.seed.timeutil import seed_now
 
 PARAMS = [
     # 通用
@@ -172,7 +172,7 @@ def seed_params(env: str, dry_run: bool = False) -> int:
 
     session = get_db_session()
     count = 0
-    now = datetime.now()
+    now = seed_now()
 
     for p in PARAMS:
         existing = session.query(SysParam).filter(

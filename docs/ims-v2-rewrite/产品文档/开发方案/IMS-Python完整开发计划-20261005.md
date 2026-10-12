@@ -9,7 +9,7 @@
 
 - 后端 Python 3.11、FastAPI、SQLAlchemy 2、Alembic。进程：`api` 与 `worker`。
 - 前端 Vue 3、Vite、Element Plus、Pinia。同一套路由适配 PC（≥1024）与手机（390）。
-- MySQL `127.0.0.1:3306`，账号 `root` / `root`。库：`ims`（自建表）、`opsbiz`（`oa_*`，只加列）。
+- MySQL 8。主机、端口、账号和库名只放在环境变量，不写入仓库。
 - 用户表 `ims.ims_sys_user`。本地密码登录 + 钉钉 SSO 按手机号命中本地用户。上线用导入命令灌入 Football/OPS 用户并保留主键。
 - 每片出口：CHECKLIST 全勾、该片 TESTCASES 的 P0 全过、Playwright 在 1440×900 与 390×844 走通主路径。失败只修该片再回归。
 - 列表一律分页。空权限 / 待配置 / 未登记表 / 非法数据范围 → 1008。跨租户与不存在 → 1504「资源不可用」。

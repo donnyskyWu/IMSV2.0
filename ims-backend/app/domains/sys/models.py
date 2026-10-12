@@ -119,10 +119,16 @@ class User(AuditBase):
         String(20), nullable=False, default="LOCAL", comment="来源"
     )
 
+    # 工号（FP-B1-BG-06）。钉钉 job_number，可空且不强制唯一。
+    emp_no: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="工号"
+    )
+
     __table_args__ = (
         UniqueConstraint("tenant_id", "username", "deleted", name="uk_user_username"),
         Index("idx_user_mobile_hash", "mobile_hash"),
         Index("idx_user_status", "status"),
+        Index("idx_user_emp_no", "tenant_id", "emp_no"),
     )
 
 
@@ -408,9 +414,20 @@ class UserRole(AssociationBase):
     manual_removed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, comment="手工移除例外标记"
     )
+    # 岗位供给扩展（FP-B1-BG-02/03）。本批只加列，供给逻辑在后续 PR。
+    rule_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="授予来源规则"
+    )
+    rule_version: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="授予时的规则版本"
+    )
+    revoke_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, comment="调岗缓冲到期回收时间"
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "role_id", name="uk_user_role"),
+        Index("idx_user_role_rule", "rule_id"),
     )
 
 
@@ -838,6 +855,22 @@ class OrgSyncBatch(AuditBase):
     error_msg: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, comment="错误信息"
     )
+    # B1 §0.5 加列。B0a 实现表名是 ims_sys_org_sync_batch，不另建 ims_auth_org_sync_batch。
+    trigger_type: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="SCHEDULE/MANUAL"
+    )
+    operator_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="手动对账操作人"
+    )
+    diff_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="差异数"
+    )
+    fixed_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="修正数"
+    )
+    fail_reason: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="失败原因"
+    )
 
     __table_args__ = (
         Index("idx_org_sync_batch_time", "started_at"),
@@ -981,6 +1014,192 @@ class AttendanceSyncState(AuditBase):
     __table_args__ = (
         UniqueConstraint("tenant_id", "month", "deleted", name="uk_att_month"),
     )
+
+
+class SeedApply(AuditBase):
+    """种子已种过的标记（FP-H05-01）。
+
+    默认授权写入后，管理员删除该授权不会在下次种子时被补回。
+    """
+
+    __tablename__ = "ims_sys_seed_apply"
+
+    seed_key: Mapped[str] = mapped_column(
+        String(200), nullable=False, comment="种子项键"
+    )
+
+    __table_args__ = (
+        UniqueConstraint("seed_key", "deleted", name="uk_seed_apply"),
+    )
+
+
+class PositionRoleRule(AuditBase):
+    """岗位-角色供给规则（B0a FP-D05-01 + B1 §0.5）。
+
+    本批只建表。供给、版本切换、归档不在本 PR。
+    role_id 是主角色。
+    """
+
+    __tablename__ = "ims_auth_position_role_rule"
+
+    position_code: Mapped[str] = mapped_column(
+        String(50), nullable=False, comment="岗位字典值"
+    )
+    role_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="主角色"
+    )
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, comment="当前版本"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="ENABLED", comment="ENABLED/DISABLED"
+    )
+    archived: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, comment="是否归档"
+    )
+    rule_name: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="规则名称"
+    )
+    description: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True, comment="说明"
+    )
+
+    __table_args__ = (
+        Index("idx_position_rule_code", "position_code"),
+        Index("idx_position_rule_role", "role_id"),
+    )
+
+
+class PositionRuleRole(AuditBase):
+    """规则当前版本授予的角色（B1 §0.5）。
+
+    唯一键带 deleted，便于逻辑删除后按同一规则和角色重建。
+    """
+
+    __tablename__ = "ims_auth_position_rule_role"
+
+    rule_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    role_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    role_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="MAIN/EXTRA"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "rule_id", "role_id", "deleted",
+            name="uk_position_rule_role",
+        ),
+    )
+
+
+class PositionRuleVersion(AuditBase):
+    """规则版本历史（B1 §0.5）。extra_role_ids 存 JSON 文本。"""
+
+    __tablename__ = "ims_auth_position_rule_version"
+
+    rule_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    rule_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    main_role_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    extra_role_ids: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="附加角色 ID 的 JSON 数组"
+    )
+    description: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    change_type: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+        comment="CREATE/EDIT/ENABLE/DISABLE/REPLACED/ARCHIVE/UNARCHIVE/AUTO_CREATE",
+    )
+    operator_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "rule_id", "version", "deleted",
+            name="uk_position_rule_version",
+        ),
+    )
+
+
+class OrgSyncEvent(AuditBase):
+    """组织同步事件（B0a FP-D07-01 + B1 §0.5）。本批只建表。"""
+
+    __tablename__ = "ims_auth_org_sync_event"
+
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, comment="事件业务 ID")
+    event_type: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="钉钉事件类型"
+    )
+    event_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="事件原文 JSON")
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING",
+        comment="PENDING/SUCCESS/RETRYING/DEAD",
+    )
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    biz_type: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True, comment="HIRE/TRANSFER/USER_UPDATE/RESIGN/DEPT_*"
+    )
+    subject_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    subject_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    dept_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="数据范围用部门"
+    )
+    before_dept_names: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    after_dept_names: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    received_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    processed_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    delay_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "event_id", "deleted", name="uk_org_sync_event"
+        ),
+        Index("idx_org_sync_event_dept", "dept_id"),
+        Index("idx_org_sync_event_status", "status"),
+        Index("idx_org_sync_event_time", "event_time"),
+    )
+
+
+class OrgSyncEventAttempt(AuditBase):
+    """事件处理时间线（B1 §0.5）。event_id 存事件表主键。"""
+
+    __tablename__ = "ims_auth_org_sync_event_attempt"
+
+    event_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    trigger: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="AUTO/RETRY/REPLAY"
+    )
+    operator_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    result: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="SUCCESS/FAIL"
+    )
+    error_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    error_msg: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+
+class OrgSyncBatchItem(AuditBase):
+    """对账明细（B1 §0.5）。本批只建表。"""
+
+    __tablename__ = "ims_auth_org_sync_batch_item"
+
+    batch_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    object_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="DEPT/USER/POSITION"
+    )
+    object_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    object_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    dept_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
+    action: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    before_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    after_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="FIXED/FAILED/NOTICE"
+    )
+    error_msg: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
 
 # Register shared-entity tables on the same metadata used by tests and Alembic.

@@ -72,16 +72,6 @@ def _strip_package_grants(url: str) -> None:
         engine.dispose()
 
 
-def _menu_leaf_paths(nodes: list) -> dict[str, str]:
-    """收集种子里 type=MENU 的 perm_code → path。目录和按钮不算叶子。"""
-    found: dict[str, str] = {}
-    for node in nodes:
-        if node.get("type") == "MENU":
-            found[node["perm_code"]] = node["path"]
-        found.update(_menu_leaf_paths(node.get("children") or []))
-    return found
-
-
 def _assert_package_grants(session) -> None:
     """套餐、套餐菜单、R1 角色菜单必须和当前菜单数一致。"""
     from app.domains.sys.models import (
@@ -113,42 +103,90 @@ def _assert_package_grants(session) -> None:
     assert tenant.package_id == package.id
 
 
-def test_real_login_me_and_health(tmp_path):
-    """种子用户登录后 /me 返回菜单，/health 的 db 为 UP，登录时间已提交。"""
+def _prepare_real_db(tmp_path: Path) -> tuple[str, str, object]:
+    """建表、清掉旧套餐授权，再执行 e2e 种子。不替换 get_db。"""
     from app.db.base import Base
     from app.db.session import _db_session
     from app.domains.sys import models  # noqa: F401
-    from app.domains.sys.models import User
     from app.main import app
-    from tools.seed.users import E2E_PASSWORD, E2E_USERNAME
 
-    # 不能靠夹具预先塞会话，否则拆掉 get_db 这条测试仍会通过。
     assert app.dependency_overrides == {}
     context_token = _db_session.set(None)
     db_url, original_url = _shared_url(tmp_path)
     schema_engine = create_engine(db_url)
+    Base.metadata.create_all(schema_engine)
+    schema_engine.dispose()
+    _strip_package_grants(db_url)
+
+    env = os.environ.copy()
+    env["IMS_DB_URL"] = db_url
+    env.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
+    # e2e 启动校验要求 redis.url 非空；种子本身不连 Redis。
+    if not env.get("IMS_REDIS_URL"):
+        env["IMS_REDIS_URL"] = "redis://127.0.0.1:6379/0"
+    seeded = subprocess.run(
+        [sys.executable, "-m", "tools.seed", "--env", "e2e"],
+        cwd=BACKEND_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert seeded.returncode == 0, seeded.stdout + "\n" + seeded.stderr
+    return db_url, original_url, context_token
+
+
+def _release_real_db(original_url: str, context_token: object) -> None:
+    from app.core.config import get_settings
+    from app.db.session import _db_session
+
+    get_settings().db.url = original_url
+    _db_session.reset(context_token)
+
+
+def _walk_menus(nodes: list) -> list[dict]:
+    found: list[dict] = []
+    for node in nodes:
+        found.append(node)
+        found.extend(_walk_menus(node.get("children") or []))
+    return found
+
+
+def _login(client: TestClient, username: str, password: str) -> str:
+    """真实登录，返回访问令牌。不伪造令牌，也不替换依赖。"""
+    login = client.post(
+        "/admin-api/ims/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login.status_code == 200
+    login_body = login.json()
+    assert login_body["code"] == 0, login_body
+    token = login_body["data"]["accessToken"]
+    assert isinstance(token, str) and token.count(".") == 2
+    return token
+
+
+def _login_me(client: TestClient, username: str, password: str) -> dict:
+    """真实登录后请求 /me。"""
+    token = _login(client, username, password)
+    me = client.get(
+        "/admin-api/ims/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert me.status_code == 200
+    me_body = me.json()
+    assert me_body["code"] == 0, me_body
+    return me_body
+
+
+def test_real_login_me_and_health(tmp_path):
+    """种子用户登录后 /me 返回菜单，/health 的 db 为 UP，登录时间已提交。"""
+    from app.domains.sys.models import User
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD, E2E_USERNAME
+
+    db_url, original_url, context_token = _prepare_real_db(tmp_path)
     try:
-        Base.metadata.create_all(schema_engine)
-        schema_engine.dispose()
-        # 先拆掉套餐授权，避免“库里本来就有”把漏跑的 access 种子掩盖掉。
-        _strip_package_grants(db_url)
-
-        env = os.environ.copy()
-        env["IMS_DB_URL"] = db_url
-        env.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
-        # e2e 启动校验要求 redis.url 非空；种子本身不连 Redis。
-        if not env.get("IMS_REDIS_URL"):
-            env["IMS_REDIS_URL"] = "redis://127.0.0.1:6379/0"
-        seeded = subprocess.run(
-            [sys.executable, "-m", "tools.seed", "--env", "e2e"],
-            cwd=BACKEND_ROOT,
-            env=env,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert seeded.returncode == 0, seeded.stdout + "\n" + seeded.stderr
-
         grant_engine, grant_session = _connect(db_url)
         try:
             _assert_package_grants(grant_session)
@@ -174,37 +212,13 @@ def test_real_login_me_and_health(tmp_path):
             assert health_body["data"]["db"] == "UP"
             assert db_url not in health.text
 
-            login = client.post(
-                "/admin-api/ims/auth/login",
-                json={"username": E2E_USERNAME, "password": E2E_PASSWORD},
-            )
-            assert login.status_code == 200
-            login_body = login.json()
-            assert login_body["code"] == 0, login_body
-            token = login_body["data"]["accessToken"]
-            assert isinstance(token, str) and token.count(".") == 2
-
-            me = client.get(
-                "/admin-api/ims/auth/me",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            assert me.status_code == 200
-            me_body = me.json()
-            assert me_body["code"] == 0, me_body
-            assert me_body["data"]["user"]["username"] == E2E_USERNAME
+            me_body = _login_me(client, E2E_USERNAME, E2E_PASSWORD)
+            assert me_body["data"]["user"]["username"] == "test_admin"
             menus = me_body["data"]["menus"]
             assert isinstance(menus, list)
             assert len(menus) > 0
-            assert any(item["name"] == "部门管理" for item in menus)
-            # 叶子 path 来自主干 tools/seed/menus.py，不在这里另造工作台或 B1 路由。
-            from tools.seed.menus import MENUS
-
-            expected = _menu_leaf_paths(MENUS)
-            leaves = [item for item in menus if item.get("type") == "MENU"]
-            got = {item["permCode"]: item["path"] for item in leaves}
-            assert got == expected
-            assert all(isinstance(path, str) and path.strip() for path in got.values())
-            assert "/ims/workbench" not in got.values()
+            # 部门管理挂在「系统管理」目录下，不在根上。
+            assert any(item["name"] == "部门管理" for item in _walk_menus(menus))
 
         check_engine, check = _connect(db_url)
         try:
@@ -217,7 +231,230 @@ def test_real_login_me_and_health(tmp_path):
             check.close()
             check_engine.dispose()
     finally:
-        from app.core.config import get_settings
+        _release_real_db(original_url, context_token)
 
-        get_settings().db.url = original_url
-        _db_session.reset(context_token)
+
+def test_test_admin_me_includes_system_and_auth_menus(tmp_path):
+    """test_admin 真实登录后，/me 同时包含系统管理和权限管理。"""
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            me_body = _login_me(client, "test_admin", E2E_PASSWORD)
+            assert me_body["data"]["user"]["username"] == "test_admin"
+            names = {item["name"] for item in me_body["data"]["menus"]}
+            assert "系统管理" in names
+            assert "权限管理" in names
+    finally:
+        _release_real_db(original_url, context_token)
+
+
+def _assert_auth_leaves(menus: list) -> dict:
+    """01 清单第 45 行：权限管理下两个叶子的名称、父级、path、权限码。"""
+    auth = next(item for item in menus if item["name"] == "权限管理")
+    assert auth["type"] == "DIR"
+    assert auth["path"] == "/ims/auth"
+    children = auth["children"]
+    assert [item["name"] for item in children] == ["组织架构同步", "岗位-角色供给规则"]
+    org_sync, position = children
+    # 第 32 行查看码挂在组织同步叶子上，path 不是 B0a 占位 /system/org-sync。
+    assert org_sync["name"] == "组织架构同步"
+    assert org_sync["path"] == "/ims/auth/org"
+    assert org_sync["permCode"] == "ims:system:org-sync:query"
+    assert org_sync["type"] == "MENU"
+    assert org_sync["parentId"] == auth["id"]
+    assert not org_sync.get("children")
+    # 第 35 行查看码挂在岗位规则叶子上。
+    assert position["name"] == "岗位-角色供给规则"
+    assert position["path"] == "/ims/auth/position"
+    assert position["permCode"] == "ims:auth:position-rule:query"
+    assert position["type"] == "MENU"
+    assert position["parentId"] == auth["id"]
+    assert not position.get("children")
+    nodes = _walk_menus(menus)
+    assert "/system/org-sync" not in {item.get("path") for item in nodes}
+    assert "BUTTON" not in {item["type"] for item in nodes}
+    return auth
+
+
+def test_auth_menu_children_are_org_and_position_without_buttons(tmp_path):
+    """第 45 行：权限管理下只有组织架构同步和岗位规则，树里没有按钮。"""
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            me_body = _login_me(client, "test_admin", E2E_PASSWORD)
+            menus = me_body["data"]["menus"]
+            _assert_auth_leaves(menus)
+
+            nodes = _walk_menus(menus)
+            assert "执行同步" not in {item["name"] for item in nodes}
+            assert "新建规则" not in {item["name"] for item in nodes}
+            perms = set(me_body["data"]["permCodes"])
+            # 按钮不进菜单树，R1 仍能在 permCodes 里看到第 33、36 行。
+            assert "ims:system:org-sync:run" in perms
+            assert "ims:auth:position-rule:create" in perms
+    finally:
+        _release_real_db(original_url, context_token)
+
+
+def test_r1_r2_r4_me_auth_leaves_follow_feature_list(tmp_path):
+    """第 32、35 行：R1、R2、R4 都能在 /me 菜单树里看到两个叶子；写操作只有 R1。"""
+    from app.main import app
+    from tools.seed.grants import B1_PERM_ALL, B1_PERM_READONLY
+    from tools.seed.users import E2E_PASSWORD
+
+    # 第 32、34、35 行三方都有；第 33、36–39 行只有 R1。
+    shared = {
+        "ims:system:org-sync:query",
+        "ims:system:org-sync:export",
+        "ims:auth:position-rule:query",
+    }
+    r1_only = {
+        "ims:system:org-sync:run",
+        "ims:auth:position-rule:create",
+        "ims:auth:position-rule:update",
+        "ims:auth:position-rule:delete",
+        "ims:auth:position-rule:refresh",
+    }
+    assert shared == set(B1_PERM_READONLY)
+    assert shared | r1_only == set(B1_PERM_ALL)
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            admin = _login_me(client, "test_admin", E2E_PASSWORD)
+            admin_menus = admin["data"]["menus"]
+            _assert_auth_leaves(admin_menus)
+            admin_names = {item["name"] for item in admin_menus}
+            assert "系统管理" in admin_names
+            assert "权限管理" in admin_names
+            admin_codes = set(admin["data"]["permCodes"])
+            assert shared <= admin_codes
+            assert r1_only <= admin_codes
+
+            for username in ("test_xz", "test_yyzj"):
+                body = _login_me(client, username, E2E_PASSWORD)
+                menus = body["data"]["menus"]
+                _assert_auth_leaves(menus)
+                # R2、R4 本批只挂权限管理，看不到系统管理和写操作按钮码。
+                assert [item["name"] for item in menus] == ["权限管理"]
+                codes = set(body["data"]["permCodes"])
+                assert codes == shared
+                assert r1_only.isdisjoint(codes)
+    finally:
+        _release_real_db(original_url, context_token)
+
+
+def test_me_menu_parent_points_at_directory(tmp_path):
+    """种子 parent_id 为目录→菜单→按钮。/me 中菜单 parentId 指向目录，按钮只在 permCodes。"""
+    from app.domains.sys.models import Menu
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        engine, session = _connect(db_url)
+        try:
+            rows = session.query(Menu).filter(Menu.deleted == 0).all()
+            by_id = {row.id: row for row in rows}
+            auth = next(row for row in rows if row.type == "DIR" and row.name == "权限管理")
+            auth_menus = [row for row in rows if row.parent_id == auth.id]
+            assert [row.name for row in sorted(auth_menus, key=lambda item: item.sort)] == [
+                "组织架构同步",
+                "岗位-角色供给规则",
+            ]
+            assert {row.type for row in auth_menus} == {"MENU"}
+            for row in rows:
+                if row.type == "DIR":
+                    assert (row.parent_id or 0) == 0, row.name
+                elif row.type == "MENU" and row.path == "/ims/workbench":
+                    # 工作台是顶层菜单，不挂目录。
+                    assert (row.parent_id or 0) == 0
+                elif row.type == "MENU":
+                    parent = by_id[row.parent_id]
+                    assert parent.type == "DIR", row.name
+                elif row.type == "BUTTON":
+                    parent = by_id[row.parent_id]
+                    assert parent.type == "MENU", row.name
+            button_codes = {
+                row.perm_code for row in rows if row.type == "BUTTON" and row.perm_code
+            }
+            button_names = {row.name for row in rows if row.type == "BUTTON"}
+        finally:
+            session.close()
+            engine.dispose()
+
+        with TestClient(app) as client:
+            me_body = _login_me(client, "test_admin", E2E_PASSWORD)
+            menus = me_body["data"]["menus"]
+            root_names = [item["name"] for item in menus]
+            assert "组织架构同步" not in root_names
+            assert "岗位-角色供给规则" not in root_names
+            assert all(item.get("parentId") is None for item in menus)
+
+            auth_node = next(item for item in menus if item["name"] == "权限管理")
+            assert auth_node["type"] == "DIR"
+            assert [item["name"] for item in auth_node["children"]] == [
+                "组织架构同步",
+                "岗位-角色供给规则",
+            ]
+            for directory in menus:
+                if directory["type"] != "DIR":
+                    continue
+                assert directory["children"], directory["name"]
+                for child in directory["children"]:
+                    assert child["type"] == "MENU"
+                    assert child["parentId"] == directory["id"]
+                    assert not child.get("children")
+
+            nodes = _walk_menus(menus)
+            assert "BUTTON" not in {item["type"] for item in nodes}
+            assert button_names.isdisjoint({item["name"] for item in nodes})
+            assert button_codes <= set(me_body["data"]["permCodes"])
+    finally:
+        _release_real_db(original_url, context_token)
+
+
+def test_r10_me_only_workbench_and_other_api_forbidden(tmp_path):
+    """test_r10 真实登录后 /me 只有工作台，其它受保护接口返回 1008。"""
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    _db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            token = _login(client, "test_r10", E2E_PASSWORD)
+            me = client.get(
+                "/admin-api/ims/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert me.status_code == 200
+            me_body = me.json()
+            assert me_body["code"] == 0, me_body
+            nodes = _walk_menus(me_body["data"]["menus"])
+            assert [item["name"] for item in nodes] == ["工作台"]
+            assert nodes[0]["type"] == "MENU"
+            assert nodes[0]["path"] == "/ims/workbench"
+            assert "BUTTON" not in {item["type"] for item in nodes}
+            assert "ims:system:user:query" not in set(me_body["data"]["permCodes"])
+
+            forbidden = client.get(
+                "/admin-api/ims/system/user/page",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert forbidden.status_code == 200
+            assert forbidden.json()["code"] == 1008
+            # B1 组织同步查询（ims:system:org-sync:query）。R10 没有这个码，同样 1008。
+            org_sync = client.get(
+                "/admin-api/ims/system/org-sync/latest-batch",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert org_sync.status_code == 200
+            assert org_sync.json()["code"] == 1008
+    finally:
+        _release_real_db(original_url, context_token)

@@ -49,8 +49,7 @@ pip install -e ".[dev]"
 
 ```bash
 IMS_ENV=dev
-IMS_DB_URL=mysql+pymysql://user:pass@localhost:3306/imsV2.0
-IMS_REDIS_URL=redis://localhost:6379/0
+# IMS_DB_URL、IMS_REDIS_URL 由部署环境注入。仓库不写主机、端口或库名。
 IMS_JWT_SECRET=your-secret-key
 ```
 
@@ -134,6 +133,22 @@ async def get_users(
     ...
 ```
 
+## 种子
+
+先迁移再灌种子。连接串只放在环境变量 `IMS_DB_URL`，不要写进仓库。
+
+```bash
+alembic upgrade head
+python -m tools.seed --env dev
+# test_admin（密码 Test1234）在 test 和 e2e 创建，dev / prod 不创建
+python -m tools.seed --env test
+# 02 §0.2 其余测试账号（密码 Test1234）只在 e2e 环境创建
+# test_r10 只绑角色 R10，并且只授「工作台」菜单
+python -m tools.seed --env e2e
+```
+
+重复执行只补缺：不改管理员已经改过的角色、菜单名称、字典标签、参数值；管理员删掉的默认授权不会被加回去。
+
 ## 数据库迁移
 
 ```bash
@@ -159,5 +174,7 @@ mypy app/ --ignore-missing-imports
 
 ## 版本历史
 
+- **2.0.2**: 合入刷新令牌原子轮换（GETDEL、重放吊销整段会话、登录起绝对 7 天、登录和刷新共用 1008）。`/me` 仍按目录 → 菜单嵌套，按钮只进 `permCodes`，目录节点保留库里的 `path`。
 - **2.0.1**: 刷新令牌用 Redis Lua（SET NX + GETDEL）原子轮换；重放已轮换的刷新令牌会吊销整段会话。`/me` 的 MENU 节点返回种子里的 `path`。
 - **2.0.0**: 初始版本，框架核心实现
+- **B1-M01 PR1**: 种子与迁移基础（标准角色 R2=`DEPT`、B1 菜单授权、§0.5 加列）

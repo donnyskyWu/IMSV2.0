@@ -1,6 +1,7 @@
 """默认套餐、R1 菜单授权和 e2e 账号的种子。
 
-只断言 main 上已经存在的菜单，不要求 B1 权限码或 R2/R4/R10 授权。
+access 只补套餐和 R1，不给 R2/R4/R10 授权。
+菜单种子里的 B1 菜单会随「全部已有菜单」进套餐。
 """
 
 from app.domains.sys.models import (
@@ -57,9 +58,10 @@ def test_package_and_r1_grants_are_idempotent(db_session):
         role = db_session.query(Role).filter(Role.role_key == role_key, Role.deleted == 0).one()
         assert db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).count() == 0
 
-    # 不新增菜单，也不写入 B1 权限码。
+    # access 不新增菜单。菜单种子本身已含 B1 的 ims:auth:*。
     assert _perm_codes(db_session) == before_codes
-    assert all(code.startswith("ims:system:") for code in before_codes)
+    assert "ims:system:user:query" in before_codes
+    assert "ims:auth:position-rule:query" in before_codes
 
     package.name = "已改名"
     package.status = "DISABLED"
@@ -85,32 +87,47 @@ def test_package_and_r1_grants_are_idempotent(db_session):
 
 
 def test_e2e_user_keeps_existing_password(db_session):
-    """e2e 账号只在 e2e 环境创建，重复执行不覆盖密码。"""
+    """test_admin 在 test 和 e2e 创建，prod 不创建。重复执行不覆盖密码。"""
     import bcrypt
 
+    from app.domains.sys.models import UserRole
     from tools.seed.roles import seed_roles
     from tools.seed.tenant import seed_tenant
     from tools.seed.users import E2E_PASSWORD, E2E_USERNAME, seed_users
 
-    assert seed_users(env="test") == 0
-    assert db_session.query(User).filter(User.username == E2E_USERNAME).first() is None
+    seed_tenant(env="test")
+    seed_roles(env="test")
+    assert seed_users(env="prod") == 0
+    assert seed_users(env="dev") == 0
+    assert db_session.query(User).filter(User.username == "e2e_admin").first() is None
 
-    seed_tenant(env="e2e")
-    seed_roles(env="e2e")
-    assert seed_users(env="e2e") == 2  # 用户 + R1 关联
-
+    # 用户 + R1。其余场景账号只在 e2e。
+    assert seed_users(env="test") == 2
     user = db_session.query(User).filter(User.username == E2E_USERNAME).one()
-    assert user.nickname == "测试-管理员"
+    assert user.username == "test_admin"
+    assert user.nickname == "测试管理员"
     assert user.status == "ACTIVE"
+    assert user.main_dept_id is None
     assert bcrypt.checkpw(E2E_PASSWORD.encode(), user.password_hash.encode())
+    assert db_session.query(User).filter(User.username == "test_r10").first() is None
 
     replacement = bcrypt.hashpw(b"Other1234", bcrypt.gensalt(rounds=4)).decode()
     user.password_hash = replacement
     user.nickname = "管理员改过"
+    db_session.query(UserRole).filter(UserRole.user_id == user.id).delete()
     db_session.commit()
 
-    assert seed_users(env="e2e") == 0
+    assert seed_users(env="test") == 1
     db_session.refresh(user)
     assert user.password_hash == replacement
     assert user.nickname == "管理员改过"
+    assert db_session.query(UserRole).filter(UserRole.user_id == user.id).count() == 1
     assert bcrypt.checkpw(b"Other1234", user.password_hash.encode())
+
+    seed_tenant(env="e2e")
+    seed_roles(env="e2e")
+    # test_r10、test_t2 各是用户 + 角色。有部门名的账号要等部门种子。
+    assert seed_users(env="e2e") == 4
+    db_session.refresh(user)
+    assert user.password_hash == replacement
+    assert db_session.query(User).filter(User.username == "e2e_admin").first() is None

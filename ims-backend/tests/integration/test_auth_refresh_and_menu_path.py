@@ -3,7 +3,7 @@
 
 不替换 get_db，也不 mock AuthService。
 并发与原子性断言只打真实 Redis，不用 fakeredis。
-侧栏两条叶子由本用例按 01 功能点清单的权限码写入，不把主干种子的 path 当成裁定 23 的结果。
+两条侧栏叶子直接用种子里的 /ims/auth/org、/ims/auth/position，用例不再手插菜单。
 """
 import asyncio
 import threading
@@ -500,77 +500,51 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     assert late_resp.json()["code"] == 1002
 
 
+def _walk_menu_nodes(nodes: list) -> list[dict]:
+    found: list[dict] = []
+    for node in nodes:
+        found.append(node)
+        found.extend(_walk_menu_nodes(node.get("children") or []))
+    return found
+
+
 def test_me_menu_paths_use_feature_list_codes_inserted_by_test(
     app_client, db_session, test_context,
 ):
-    """/me 的 MENU 节点带回 path。裁定 23：不新造工作台路由。
+    """种子里的两个菜单在 /me 中挂在「权限管理」下，并带上清单 path。
 
-    下面两条侧栏不是主干种子里的 path，是本用例自己写入的占位。
-    B1 种子落地前，权限码用 01 功能点清单里的码，path 仍是清单路由：
+    不再手插菜单行。种子已经写入这两条，再插会撞 perm_code 唯一约束：
     - ims:system:org-sync:query → /ims/auth/org
     - ims:auth:position-rule:query → /ims/auth/position
-    组织同步在种子模板里已有同名权限码（path 为 /system/org-sync）。
-    本用例插入时把 path 改成清单占位，避免 perm_code 唯一约束冲突。
-    岗位规则种子里没有，由本用例额外插入。
+    目录节点按嵌套树带上库里的 path（权限管理是 /ims/auth）。
+    只授菜单、不授目录时 parentId 规格未定，不作为通过条件。
+    当前实现：父目录不在结果里时，该菜单出现在根上，parentId 仍是库里的父级 id。
     """
     from app.domains.sys.models import Menu
-    from tests.support.rows import add, bind_menu, bind_role, role
-    from tools.seed.menus import MENUS
+    from tests.support.rows import bind_menu, bind_role, role
+    from tools.seed.menus import seed_menus
 
-    # 插入种子模板时改掉组织同步的 path。权限码保持清单里的 ims:system:org-sync:query。
-    placeholder_path = {
-        "ims:system:org-sync:query": "/ims/auth/org",
-    }
-
-    def insert(nodes: list, parent_id: int) -> list:
-        created: list = []
-        for node in nodes:
-            perm_code = node.get("perm_code")
-            menu = add(db_session, Menu(
-                tenant_id=1,
-                parent_id=parent_id,
-                type=node["type"],
-                name=node["name"],
-                perm_code=perm_code,
-                path=placeholder_path.get(perm_code, node.get("path")),
-                status="ENABLED",
-                sort=node.get("sort", 0),
-                visible=True,
-            ))
-            created.append(menu)
-            created.extend(insert(node.get("children") or [], menu.id))
-        return created
-
-    created = insert(MENUS, 0)
-    expected = {
-        menu.perm_code: menu.path
-        for menu in created
-        if menu.type == "MENU"
-    }
-    # 岗位规则不在主干种子里，本用例自己插入。权限码用清单里的 ims:auth:position-rule:query。
-    position_rule = add(db_session, Menu(
-        tenant_id=1,
-        parent_id=0,
-        type="MENU",
-        name="岗位-角色供给规则",
-        perm_code="ims:auth:position-rule:query",
-        path="/ims/auth/position",
-        status="ENABLED",
-        sort=0,
-        visible=True,
-    ))
-    created.append(position_rule)
-    expected[position_rule.perm_code] = position_rule.path
-
-    assert expected
-    assert all(path and path.strip() for path in expected.values())
-    assert "/ims/workbench" not in expected.values()
-    assert expected["ims:system:org-sync:query"] == "/ims/auth/org"
-    assert expected["ims:auth:position-rule:query"] == "/ims/auth/position"
+    # 菜单行只来自种子。本用例只给角色挂上已有的目录和两个叶子。
+    seed_menus(env="test")
+    org = db_session.query(Menu).filter(
+        Menu.path == "/ims/auth/org", Menu.deleted == 0,
+    ).one()
+    position = db_session.query(Menu).filter(
+        Menu.path == "/ims/auth/position", Menu.deleted == 0,
+    ).one()
+    directory = db_session.query(Menu).filter(Menu.id == org.parent_id).one()
+    assert directory.type == "DIR"
+    assert directory.name == "权限管理"
+    assert directory.path == "/ims/auth"
+    assert position.parent_id == directory.id
+    assert org.type == "MENU"
+    assert position.type == "MENU"
+    assert org.perm_code == "ims:system:org-sync:query"
+    assert position.perm_code == "ims:auth:position-rule:query"
 
     person = _add_user(db_session, "menu_path_user")
     granted = role(db_session, "menu_path_role", "菜单路径")
-    for menu in created:
+    for menu in (directory, org, position):
         bind_menu(db_session, granted.id, menu.id)
     bind_role(db_session, person.id, granted.id)
 
@@ -582,15 +556,25 @@ def test_me_menu_paths_use_feature_list_codes_inserted_by_test(
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 0, body
-    nodes = body["data"]["menus"]
-    leaves = [item for item in nodes if item.get("type") == "MENU"]
-    got = {item["permCode"]: item["path"] for item in leaves}
-    assert got == expected
-    sample = leaves[0]
-    assert sample["id"]
-    assert sample["name"]
-    assert sample["type"] == "MENU"
-    assert "permCode" in sample
-    directories = [item for item in nodes if item.get("type") == "DIR"]
-    assert directories
-    assert all(not item.get("path") for item in directories)
+    roots = body["data"]["menus"]
+    assert [item["name"] for item in roots] == ["权限管理"]
+    auth_node = roots[0]
+    assert auth_node["type"] == "DIR"
+    # 嵌套树里目录带 path，不是空。
+    assert auth_node["path"] == "/ims/auth"
+    assert auth_node.get("parentId") is None
+    children = auth_node["children"]
+    assert [item["name"] for item in children] == ["组织架构同步", "岗位-角色供给规则"]
+    assert children[0]["type"] == "MENU"
+    assert children[0]["path"] == "/ims/auth/org"
+    assert children[0]["permCode"] == "ims:system:org-sync:query"
+    assert children[0]["parentId"] == auth_node["id"]
+    assert not children[0].get("children")
+    assert children[1]["type"] == "MENU"
+    assert children[1]["path"] == "/ims/auth/position"
+    assert children[1]["permCode"] == "ims:auth:position-rule:query"
+    assert children[1]["parentId"] == auth_node["id"]
+    assert not children[1].get("children")
+    nodes = _walk_menu_nodes(roots)
+    assert "BUTTON" not in {item["type"] for item in nodes}
+    assert "/ims/workbench" not in {item.get("path") for item in nodes}

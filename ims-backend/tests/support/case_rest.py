@@ -469,6 +469,16 @@ def ut_d05_05(db, _ctx, _clock):
     assert archived.after_value == str(new.id)
 
 
+def _menu_perm_codes(nodes: list) -> set[str]:
+    """菜单树改成嵌套后，权限码在子节点上。"""
+    found: set[str] = set()
+    for item in nodes:
+        if item.get("perm_code"):
+            found.add(item["perm_code"])
+        found.update(_menu_perm_codes(item.get("children") or []))
+    return found
+
+
 def ut_d06_01(db, _ctx, _clock):
     from app.services.auth import AuthService
 
@@ -479,7 +489,7 @@ def ut_d06_01(db, _ctx, _clock):
     rows.bind_menu(db, the_role.id, system.id)
     rows.bind_role(db, person.id, the_role.id)
     info = _run(AuthService().get_current_user_info(person.id))
-    codes = {item["perm_code"] for item in info["menus"]}
+    codes = _menu_perm_codes(info["menus"])
     assert "ims:demo:order:query" not in codes
     assert demo.id
     assert "ims:demo:order:query" not in info["perm_codes"]
@@ -500,7 +510,7 @@ def ut_d06_02(db, _ctx, _clock):
     rows.bind_role(db, person.id, the_role.id)
     rows.add(db, TenantPackageMenu(tenant_id=1, package_id=package.id, menu_id=kept.id))
     info = _run(AuthService().get_current_user_info(person.id))
-    codes = {item["perm_code"] for item in info["menus"]}
+    codes = _menu_perm_codes(info["menus"])
     assert "ims:demo:order:query" not in codes
     assert "ims:system:user:query" in codes
 
