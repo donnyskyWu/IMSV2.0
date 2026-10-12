@@ -31,3 +31,4 @@
 ### 审批
 - 文档中 "zhang wu" 的审批即 who kong 的审批。
 - 最终闸门由 who kong 拍板。
+- 进度看板：`docs/ims-v2-rewrite/看板.md`。每完成一项，在同一个 PR 里更新自己那一行；合并后由 Grok Bot 核对。
