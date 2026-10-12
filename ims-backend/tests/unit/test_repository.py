@@ -6,7 +6,6 @@ Covers app/db/repository.py
 """
 import os
 
-
 os.environ["IMS_ENV"] = "test"
 os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
 os.environ["IMS_REDIS_URL"] = ""
@@ -24,7 +23,7 @@ class TestRepositoryBasics:
     def test_repository_has_methods(self):
         """Test repository has required methods."""
         from app.db.repository import BaseRepository
-        
+
         methods = ["get", "list", "create", "update", "delete"]
         for method in methods:
             assert hasattr(BaseRepository, method)

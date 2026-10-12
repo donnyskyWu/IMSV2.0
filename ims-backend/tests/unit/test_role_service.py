@@ -6,7 +6,6 @@ Covers app/services/role.py
 """
 import os
 
-
 os.environ["IMS_ENV"] = "test"
 os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
 os.environ["IMS_REDIS_URL"] = ""
@@ -26,7 +25,7 @@ class TestRoleServiceBasics:
         """Test role service has required methods."""
         from app.services.role import RoleService
         service = RoleService()
-        
+
         methods = ["get_role_page", "get_role_detail", "create_role"]
         for method in methods:
             assert hasattr(service, method) or True

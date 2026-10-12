@@ -33,7 +33,7 @@ def parse_ut_ids_from_spec(spec_path: str) -> set[str]:
 def parse_ut_ids_from_tests(tests_dir: str) -> dict[str, list[str]]:
     """Extract UT-xxx IDs from test function names and docstrings."""
     ut_to_tests = defaultdict(list)
-    pattern = re.compile(r'\bUT-[A-Z]\d{2}-\d{2}\b')
+    pattern = re.compile(r'\b[Uu][Tt]-[A-Za-z]\d{2}-\d{2}\b', re.IGNORECASE)
     
     for py_file in Path(tests_dir).rglob('test_*.py'):
         with open(py_file, 'r', encoding='utf-8') as f:
@@ -41,7 +41,7 @@ def parse_ut_ids_from_tests(tests_dir: str) -> dict[str, list[str]]:
         
         # Find all UT references
         for match in pattern.finditer(content):
-            ut_id = match.group()
+            ut_id = match.group().upper()  # Normalize to uppercase
             # Get surrounding context (test function name)
             start = content.rfind('\ndef ', 0, match.start())
             if start != -1:

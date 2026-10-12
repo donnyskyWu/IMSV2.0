@@ -6,7 +6,6 @@ Covers app/services/user.py
 """
 import os
 
-
 os.environ["IMS_ENV"] = "test"
 os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
 os.environ["IMS_REDIS_URL"] = ""
@@ -80,8 +79,9 @@ class TestUserServiceWithDb:
 
     def test_get_user_page_with_keyword(self, db_session, test_context):
         """Test getting user page with keyword filter."""
-        from app.domains.sys.models import User
         from sqlalchemy import or_
+
+        from app.domains.sys.models import User
 
         user1 = User(
             id=1, tenant_id=1, username="admin", nickname="Admin User",

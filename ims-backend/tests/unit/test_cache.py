@@ -6,7 +6,6 @@ Covers app/core/cache.py
 """
 import os
 
-
 os.environ["IMS_ENV"] = "test"
 os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
 os.environ["IMS_REDIS_URL"] = ""
@@ -24,7 +23,7 @@ class TestCacheBasics:
     def test_cache_has_methods(self):
         """Test cache has required methods."""
         from app.core.cache import Cache
-        
+
         methods = ["get", "set", "delete", "get_json", "set_json"]
         for method in methods:
             assert hasattr(Cache, method)
