@@ -156,8 +156,8 @@ function handleCategoryChange() {
               <el-table-column prop="createTime" label="创建时间" width="120" />
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default>
-                  <el-button text type="primary" size="small">编辑</el-button>
-                  <el-button text type="primary" size="small">删除</el-button>
+                  <el-button v-perm="'ims:demo:order:update'" text type="primary" size="small">编辑</el-button>
+                  <el-button v-perm="'ims:demo:order:delete'" text type="primary" size="small">删除</el-button>
                 </template>
               </el-table-column>
             </el-table>

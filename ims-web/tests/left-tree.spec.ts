@@ -446,25 +446,20 @@ test.describe('L03. 左树右表', () => {
   test('VC-L03-24: 只读用户无操作按钮', async ({ page }) => {
     test.skip(page.viewportSize()?.width! < 768, '仅限桌面视口')
 
-    // 设置只读权限
+    // 设置只读权限。后注册的路由要盖住 beforeEach 里的管理员 mock
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
     await setupApiMocks(page, { userType: 'readonly' })
     await page.reload()
     await page.waitForSelector('.left-tree-right-table-demo, .app-layout')
 
-    // 验证无新建按钮
-    const addBtn = page.locator('button:has-text("新建人员"), button:has-text("新建")')
-    expect(await addBtn.count()).toBe(0)
-
-    // 验证无删除按钮
-    const deleteBtn = page.locator('button:has-text("删除")')
-    expect(await deleteBtn.count()).toBe(0)
-
-    // 验证表格中无操作列
     const table = page.locator('.el-table').first()
-    if (await table.isVisible()) {
-      const operationCol = table.locator('th:has-text("操作")')
-      // 可能有操作列但内容为空，或直接没有操作列
-    }
+    await expect(table).toBeVisible()
+    await expect(table.locator('tbody tr').first()).toBeVisible()
+
+    // 右表已渲染后再断言：只读用户没有新建/删除（VC-L03-24）
+    await expect(page.locator('button:has-text("新建人员"), button:has-text("新建")')).toHaveCount(0)
+    await expect(page.locator('button:has-text("删除")')).toHaveCount(0)
+    await expect(table.locator('th:has-text("操作") button:has-text("删除")')).toHaveCount(0)
   })
 
   test('VC-L03-25: 无权限用户暂无权限页', async ({ page }) => {

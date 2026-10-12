@@ -125,7 +125,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
 
   // 生产构建不提供示例页：/demo/* 跳首页，且不经过登录（§2.3 U4）
@@ -150,6 +150,17 @@ router.beforeEach((to, _from, next) => {
     }
     next({ path: '/login', query: { redirect: to.fullPath } })
     return
+  }
+
+  // 刷新后 Pinia 清空，用 /me 恢复权限（只读用户因此看不到写操作）
+  if (!to.meta.public && authStore.permCodes.length === 0) {
+    try {
+      await authStore.fetchUserInfo()
+    } catch {
+      if (demoEnabled && to.path.startsWith('/demo')) {
+        authStore.mockLogin()
+      }
+    }
   }
 
   // 需要修改密码 (FP-R-04)

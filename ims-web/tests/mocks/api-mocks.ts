@@ -109,6 +109,10 @@ export const mockMeResponse = {
     'system:dept:create',
     'system:dept:update',
     'system:dept:delete',
+    'ims:demo:order:query',
+    'ims:demo:order:create',
+    'ims:demo:order:update',
+    'ims:demo:order:delete',
   ],
   permDetails: {
     'system:user': { r: true, w: true, d: true },
@@ -120,7 +124,7 @@ export const mockMeResponse = {
 // 只读用户的 /me 响应
 export const mockReadOnlyMeResponse = {
   ...mockMeResponse,
-  permCodes: ['system:user:list', 'system:dept:list'],
+  permCodes: ['system:user:list', 'system:dept:list', 'ims:demo:order:query'],
   permDetails: {
     'system:user': { r: true, w: false, d: false },
     'system:dept': { r: true, w: false, d: false },
