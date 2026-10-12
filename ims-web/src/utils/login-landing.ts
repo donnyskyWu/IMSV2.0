@@ -1,13 +1,16 @@
 /**
- * 登录落地与 redirect 校验（FP-B1-LG-01 / LG-08）
- * redirect 只接受站内相对路径；落地顺序：合法且在菜单中的 redirect → 已登记的工作台 → 第一个已登记叶子菜单 → 账号首页。
+ * 登录落地与 redirect 校验（FP-B1-LG-08，裁定 21）
+ * 顺序：站内且在菜单中的 redirect → 已登记的工作台（B3 之后）→ 第一个已登记叶子菜单。
+ * 没有可落地页面时返回 null，调用方停在壳路径，由 AppLayout 内容区提示，不另开页面。
  */
 import type { MenuItem } from '@/types'
 
 /** 强制改密页。/user/change-password 保留给 B0b 已登记路径，页面与 /password-reset 相同。 */
 export const PASSWORD_RESET_PATH = '/password-reset'
 export const PASSWORD_RESET_ALIAS = '/user/change-password'
-export const ACCOUNT_HOME_PATH = '/account/home'
+
+/** 壳路径。菜单为空或叶子都未登记时停在这里，不使用独立账号首页。 */
+export const APP_SHELL_PATH = '/'
 
 const PASSWORD_PATHS = new Set([PASSWORD_RESET_PATH, PASSWORD_RESET_ALIAS])
 
@@ -40,19 +43,34 @@ export function collectLeafPaths(menus: MenuItem[]): string[] {
   return paths
 }
 
+function businessRoutes(paths: string[]): Set<string> {
+  return new Set(paths.filter((path) => path && path !== APP_SHELL_PATH && !path.includes(':')))
+}
+
 export function resolveLanding(options: {
   redirect?: unknown
   menus: MenuItem[]
   registeredPaths: string[]
-}): string {
-  const registered = new Set(options.registeredPaths)
+}): string | null {
+  const registered = businessRoutes(options.registeredPaths)
   const redirect = sanitizeRedirect(options.redirect)
+  const redirectPath = redirect ? (redirect.split('?')[0] || redirect) : ''
   const leaves = collectLeafPaths(options.menus)
-  if (redirect && leaves.includes(redirect.split('?')[0] || redirect) && registered.has(redirect.split('?')[0] || redirect)) {
-    return redirect
+  // 菜单为空时停在壳路径提示，不因为工作台路由已登记就把人送进去（LG-08 ④ / LG-09）。
+  if (leaves.length === 0) return null
+  if (redirectPath && leaves.includes(redirectPath) && registered.has(redirectPath)) {
+    return redirectPath
   }
   if (registered.has('/ims/workbench')) return '/ims/workbench'
   const first = leaves.find((path) => registered.has(path))
-  if (first) return first
-  return ACCOUNT_HOME_PATH
+  return first || null
+}
+
+/** 没有业务落地页时回到壳路径，页面不跳到账号首页。 */
+export function landingPath(options: {
+  redirect?: unknown
+  menus: MenuItem[]
+  registeredPaths: string[]
+}): string {
+  return resolveLanding(options) ?? APP_SHELL_PATH
 }

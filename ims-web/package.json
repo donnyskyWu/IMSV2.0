@@ -12,6 +12,7 @@
     "lint:stylelint": "stylelint \"src/**/*.{css,scss,vue}\" --fix",
     "test": "playwright test",
     "test:live-proxy": "playwright test --config=playwright.live.config.ts",
+    "test:unit": "vitest run --coverage",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report"
   },
@@ -34,6 +35,7 @@
     "@playwright/test": "^1.64.0",
     "@types/node": "^24.19.2",
     "@vitejs/plugin-vue": "^6.0.8",
+    "@vitest/coverage-v8": "^5.0.4",
     "@vue/tsconfig": "^0.9.1",
     "eslint": "^10.12.0",
     "eslint-plugin-vue": "^10.11.1",
@@ -47,6 +49,7 @@
     "unplugin-auto-import": "^21.1.0",
     "unplugin-vue-components": "^32.1.0",
     "vite": "^8.3.0",
+    "vitest": "^5.0.4",
     "vue-tsc": "^3.3.11"
   }
 }

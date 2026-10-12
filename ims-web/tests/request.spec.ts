@@ -296,7 +296,8 @@ test.describe('R. 请求层', () => {
     await page.getByPlaceholder('请输入新密码').fill('Abcd5678')
     await page.getByPlaceholder('请再次输入新密码').fill('Abcd5678')
     await page.getByRole('button', { name: '确认修改' }).click()
-    await expect(page).toHaveURL(/\/account\/home/)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
+    await expect(page.getByTestId('unassigned-panel')).toContainText('您的账号尚未分配权限，请联系管理员')
   })
 
   test('VC-R-13: 权限变更无感知刷新', async ({ page }) => {
@@ -343,8 +344,9 @@ test.describe('R. 请求层', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' })
     await setupApiMocks(page, { userType: 'noperm' })
     await page.reload()
-    await expect(page.getByRole('main').getByText('您的账号尚未分配权限，请联系管理员')).toBeVisible()
-    await expect(page.getByText('暂无权限查看此内容')).toBeVisible()
+    await expect(page.locator('.no-menu-tip')).toHaveText('您的账号尚未分配权限，请联系管理员')
+    await expect(page.getByRole('main').getByText('暂无权限查看此内容')).toBeVisible()
+    await expect(page.getByRole('main').getByText('您的账号尚未分配权限，请联系管理员')).toHaveCount(0)
     await expect(page.locator('.app-content .el-table')).toHaveCount(0)
   })
 })

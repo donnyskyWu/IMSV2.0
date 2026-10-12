@@ -233,7 +233,7 @@ test.describe('B1 账号登录与改密', () => {
     await page.goto('/login?redirect=https://www.baidu.com')
     await expect(page).toHaveURL(/\/demo\/layout/)
     expect(page.url()).not.toContain('baidu')
-    await expect(page.locator('.account-home, .layout-demo, .app-layout').first()).toBeVisible()
+    await expect(page.locator('.app-layout').first()).toBeVisible()
   })
 
   test('用户 id 按字符串保留，超长数字不被改写', async ({ page }) => {
@@ -255,12 +255,12 @@ test.describe('B1 账号登录与改密', () => {
     })
     await page.goto('/login')
     await submitLogin(page, 'test_admin', 'Test1234')
-    await expect(page).toHaveURL(/\/account\/home/)
-    await expect(page.locator('.account-home')).toHaveAttribute('data-user-id', BIG_USER_ID)
-    await expect(page.getByRole('heading', { name: '测试管理员' })).toBeVisible()
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
+    await expect(page.locator('.app-layout')).toHaveAttribute('data-user-id', BIG_USER_ID)
+    await expect(page.getByTestId('unassigned-panel')).toContainText('您的账号尚未分配权限，请联系管理员')
   })
 
-  test('无菜单时内容区提示尚未分配权限', async ({ page }) => {
+  test('E2E-B1-LG-09 无角色用户停在内容区未分配权限提示', async ({ page }) => {
     await installAuth(page, async (route) => {
       await fulfillLogin(route, ok({
         accessToken: 'access-1',
@@ -275,9 +275,59 @@ test.describe('B1 账号登录与改密', () => {
     })
     await page.goto('/login')
     await submitLogin(page, 'test_norole', 'Test1234')
-    await expect(page).toHaveURL(/\/account\/home/)
-    await expect(page.getByText('您的账号尚未分配权限，请联系管理员').first()).toBeVisible()
-    await expect(page.getByText('暂无权限查看此内容')).toBeVisible()
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
+    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
+    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
+    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
+    await page.goto('/ims/auth/org')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table, .org-page')).toHaveCount(0)
+    await expect(page.locator('.no-menu-tip')).toHaveText('您的账号尚未分配权限，请联系管理员')
+  })
+
+  test('E2E-B1-LG-23 仅工作台菜单在 B3 前落在未分配权限提示', async ({ page }) => {
+    await installAuth(page, async (route) => {
+      await fulfillLogin(route, ok({
+        accessToken: 'r10-token',
+        refreshToken: 'r10-refresh',
+        expiresIn: 7200,
+        pwdResetRequired: false,
+      }))
+    })
+    await page.unroute('**/admin-api/ims/auth/me')
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      await route.fulfill(json(mePayload({
+        id: '10',
+        menus: [menu('/ims/workbench', '工作台')],
+        permCodes: [],
+      })))
+    })
+    await page.route('**/admin-api/ims/system/user/page**', async (route) => {
+      await route.fulfill(json(fail(1008, '暂无权限')))
+    })
+    await page.goto('/login')
+    await submitLogin(page, 'test_r10', 'Test1234')
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
+    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
+    await expect(page.locator('.app-sidebar').getByText('工作台')).toBeVisible()
+    await expect(page.locator('.app-sidebar').getByText('权限管理')).toHaveCount(0)
+    await expect(page.getByTestId('denied-panel')).toHaveCount(0)
+
+    await page.goto('/ims/auth/org')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    const code = await page.evaluate(async () => {
+      const mod = await import('/src/api/request.ts')
+      try {
+        await mod.default.get('/admin-api/ims/system/user/page')
+        return 0
+      } catch (err) {
+        return (err as { code?: number }).code ?? -1
+      }
+    })
+    expect(code).toBe(1008)
+    await expect(page.locator('.el-message').filter({ hasText: '暂无权限' })).toBeVisible()
+    await expect(page).toHaveURL(/\/ims\/auth\/org/)
   })
 
   test('1215 锁定提示按用户名禁用登录，改用户名后恢复', async ({ page }) => {
@@ -454,7 +504,13 @@ test.describe('B1 账号登录与改密', () => {
     }
     await submitLogin(page, 'test_lock', 'Wrong1234')
     await expect(page.getByTestId('login-banner')).toHaveText('账号已锁定，请 15 分钟后再试')
-    await submitLogin(page, 'test_lock', 'Test1234')
+    // 锁定后按钮已禁用，只填表单，不再 click，否则会一直等到超时。
+    await page.getByPlaceholder('请输入用户名').fill('test_lock')
+    await page.getByPlaceholder('请输入密码').fill('Test1234')
+    await expect(page.getByRole('button', { name: '登录' })).toBeDisabled()
+    await page.getByPlaceholder('请输入用户名').fill('test_yg')
+    await expect(page.getByRole('button', { name: '登录' })).toBeEnabled()
+    await page.getByPlaceholder('请输入用户名').fill('test_lock')
     await expect(page.getByRole('button', { name: '登录' })).toBeDisabled()
     await expect(page).toHaveURL(/\/login/)
   })
@@ -468,9 +524,15 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page.getByTestId('login-banner')).toHaveCount(0)
     await submitLogin(page, 'test_resigned', 'Test1234')
     await expect(page.getByTestId('login-banner')).toHaveText('账号已冻结或已离职，无法登录，请联系管理员')
+    // 第 4 步是从未登录的工作台入口再登录，不能沿用上一页已经消失的提示条。
     await page.goto('/ims/workbench')
     await expect(page).toHaveURL(/\/login/)
-    await expect(page.getByText('账号已冻结或已离职，无法登录，请联系管理员')).toBeVisible()
+    expect(decodeURIComponent(page.url())).toContain('redirect=/ims/workbench')
+    await submitLogin(page, 'test_resigned', 'Test1234')
+    await expect(page.getByTestId('login-banner')).toHaveText('账号已冻结或已离职，无法登录，请联系管理员')
+    await expect(page).toHaveURL(/\/login/)
+    expect(page.url()).not.toContain('/ims/workbench')
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
   })
 
   test.skip('E2E-B1-LG-10 改密落库后旧密码失效（等后端第 2 个 PR 联调）', async ({ page }) => {
@@ -482,11 +544,39 @@ test.describe('B1 账号登录与改密', () => {
     await page.getByPlaceholder('请再次输入新密码').fill('Abcd5678')
     await page.getByRole('button', { name: '确认修改' }).click()
     await expect(page.locator('.el-message').filter({ hasText: '密码已修改' })).toBeVisible()
-    await page.getByRole('button', { name: '退出登录' }).click()
+    await expect(page).not.toHaveURL(/\/password-reset/)
+    // 成功后已离开改密页，退出在布局头像菜单里，不在改密页按钮上。
+    await page.locator('.user-dropdown').click()
+    await page.getByRole('menuitem', { name: '退出登录' }).click()
+    await expect(page).toHaveURL(/\/login/)
     await submitLogin(page, 'test_reset', 'Test1234')
     await expect(page.getByText('用户名或密码错误')).toBeVisible()
     await submitLogin(page, 'test_reset', 'Abcd5678')
     await expect(page).not.toHaveURL(/\/password-reset/)
     await expect(page).not.toHaveURL(/\/login/)
+  })
+
+  test.skip('E2E-B1-LG-23 种子账号 test_r10（依赖后端 PR #11，未合入）', async ({ page }) => {
+    // #11 未合入，仓库里还没有仅 R10 的 test_r10。合入后去掉 skip 再跑。
+    await page.goto('/login')
+    await submitLogin(page, 'test_r10', 'Test1234')
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
+    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
+    await expect(page.locator('.app-sidebar').getByText('工作台')).toBeVisible()
+    await expect(page.locator('.app-sidebar').getByText('权限管理')).toHaveCount(0)
+    await page.goto('/ims/auth/org')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    const code = await page.evaluate(async () => {
+      const mod = await import('/src/api/request.ts')
+      try {
+        await mod.default.get('/admin-api/ims/system/user/page')
+        return 0
+      } catch (err) {
+        return (err as { code?: number }).code ?? -1
+      }
+    })
+    expect(code).toBe(1008)
+    await expect(page.locator('.el-message').filter({ hasText: '暂无权限' })).toBeVisible()
   })
 })

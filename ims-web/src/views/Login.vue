@@ -10,7 +10,7 @@ import FormField from '@/components/form/FormField.vue'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { LOGIN_COPY, lockMessage, parseLockMinutes } from '@/utils/login-errors'
-import { resolveLanding, sanitizeRedirect } from '@/utils/login-landing'
+import { landingPath, sanitizeRedirect } from '@/utils/login-landing'
 
 const router = useRouter()
 const route = useRoute()
@@ -72,7 +72,7 @@ function goAfterLogin(pwdResetRequired: boolean) {
     })
     return
   }
-  router.push(resolveLanding({
+  router.push(landingPath({
     redirect,
     menus: authStore.menus,
     registeredPaths: registeredPaths(),
@@ -136,7 +136,7 @@ async function handleLogin() {
     </section>
 
     <section class="login-panel">
-      <div class="login-card" data-testid="login-card">
+      <div class="login-card auth-card" data-testid="login-card">
         <h2 class="login-title">登录</h2>
         <p
           v-if="banner"
@@ -147,7 +147,7 @@ async function handleLogin() {
           {{ banner }}
         </p>
 
-        <el-form @submit.prevent="handleLogin">
+        <el-form class="auth-form" @submit.prevent="handleLogin">
           <FormField label="用户名" required>
             <div class="field-block">
               <el-input
@@ -228,12 +228,7 @@ async function handleLogin() {
 }
 
 .login-card {
-  width: 400px;
-  max-width: 100%;
   padding: 32px 28px 24px;
-  background-color: var(--card);
-  border-radius: var(--r);
-  box-shadow: var(--sh);
 }
 
 .login-title {
@@ -254,32 +249,6 @@ async function handleLogin() {
 }
 
 .field-block {
-  width: 100%;
-}
-
-/* 标签在输入框上方，避免窄屏下和输入框叠在一起 */
-:deep(.el-form-item) {
-  display: block;
-}
-
-:deep(.el-form-item__label) {
-  display: flex;
-  width: 100% !important;
-  height: auto;
-  justify-content: flex-start;
-  margin-bottom: 6px;
-  padding: 0;
-  line-height: 1.4;
-  text-align: left;
-}
-
-:deep(.el-form-item__content) {
-  display: block;
-  width: 100%;
-  margin-left: 0 !important;
-}
-
-:deep(.el-input) {
   width: 100%;
 }
 
@@ -315,10 +284,6 @@ async function handleLogin() {
 
   .login-panel {
     flex: none;
-    width: 100%;
-  }
-
-  .login-card {
     width: 100%;
   }
 

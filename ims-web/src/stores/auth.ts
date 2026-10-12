@@ -140,6 +140,8 @@ export const useAuthStore = defineStore('auth', () => {
       username: profile.username,
       nickname: profile.nickname,
       avatar: profile.avatar || undefined,
+      // B0a MeResponse.user 只有 deptNames / mainDeptName，没有 deptId。
+      // 部门 id 等 B2 用户接口再补，这里不能把部门名称写进 id。
       deptId: '',
       deptName: profile.mainDeptName || profile.deptNames?.[0] || '',
       permCodes: data.permCodes || [],

@@ -7,6 +7,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   isPasswordPath,
+  landingPath,
   PASSWORD_RESET_PATH,
   resolveLanding,
   sanitizeRedirect,
@@ -117,11 +118,20 @@ const changePasswordAliasRoute: RouteRecordRaw = {
   meta: { title: '请先修改密码', menuless: true },
 }
 
-const accountHomeRoute: RouteRecordRaw = {
-  path: '/account/home',
-  name: 'AccountHome',
-  component: () => import('@/views/AccountHome.vue'),
-  meta: { title: '首页' },
+/** 壳路径。无菜单时停在这里，提示由 AppLayout 内容区展示。 */
+const shellRoute: RouteRecordRaw = {
+  path: '/',
+  name: 'AppShell',
+  component: () => import('@/views/AppShell.vue'),
+  meta: { title: 'IMS', shell: true },
+}
+
+/** 未登记的地址走无权限页，不展示业务数据。 */
+const unknownRoute: RouteRecordRaw = {
+  path: '/:pathMatch(.*)*',
+  name: 'UnknownRoute',
+  component: () => import('@/views/AppShell.vue'),
+  meta: { title: '无权限' },
 }
 
 // dev/test 注册示例页；生产构建不注册，/demo/* 回首页（§2.2 #9、§2.3 U4）
@@ -129,28 +139,28 @@ const demoEnabled = import.meta.env.DEV || import.meta.env.MODE === 'test'
 
 const routes: RouteRecordRaw[] = demoEnabled
   ? [
-      { path: '/', redirect: '/demo/tokens' },
+      shellRoute,
       loginRoute,
       changePasswordRoute,
       changePasswordAliasRoute,
-      accountHomeRoute,
       ...demoRoutes,
+      unknownRoute,
     ]
   : [
       {
         path: '/',
         name: 'Home',
         component: () => import('@/views/Home.vue'),
-        meta: { title: '首页', public: true },
+        meta: { title: '首页', public: true, shell: true },
       },
       loginRoute,
       changePasswordRoute,
       changePasswordAliasRoute,
-      accountHomeRoute,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
       },
+      unknownRoute,
     ]
 
 const router = createRouter({
@@ -193,7 +203,7 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: PASSWORD_RESET_PATH, query: redirect ? { redirect } : {} })
       return
     }
-    next(resolveLanding({
+    next(landingPath({
       redirect: to.query.redirect,
       menus: authStore.menus,
       registeredPaths: registeredRoutePaths(),
@@ -201,13 +211,19 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  if (to.meta.public) {
+  // 生产首页对未登录仍公开。已登录停在壳路径时继续往下走，以便套布局。
+  if (to.meta.public && !(loggedIn && to.meta.shell)) {
     next()
     return
   }
 
   if (!loggedIn) {
     const requireAuth = sessionStorage.getItem('ims_require_auth') === '1'
+    // 开发环境打开 / 仍进示例页，避免壳路径挡住 B0b 演示。
+    if (demoEnabled && to.path === '/' && !requireAuth) {
+      next('/demo/tokens')
+      return
+    }
     // 示例页自动登录 (模拟)。VC-R-15 写入 ims_require_auth 后走真实跳转。
     if (demoEnabled && to.path.startsWith('/demo') && !requireAuth) {
       authStore.mockLogin()
@@ -241,6 +257,18 @@ router.beforeEach(async (to, _from, next) => {
   if (mustResetPassword() && !isPasswordPath(to.path)) {
     next(PASSWORD_RESET_PATH)
     return
+  }
+
+  // 已登录打开壳路径，且菜单里有可落地页面时，按 LG-08 进入该页。
+  if (to.meta.shell) {
+    const landing = resolveLanding({
+      menus: authStore.menus,
+      registeredPaths: registeredRoutePaths(),
+    })
+    if (landing && landing !== to.path) {
+      next(landing)
+      return
+    }
   }
 
   next()

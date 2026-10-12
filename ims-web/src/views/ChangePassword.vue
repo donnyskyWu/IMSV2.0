@@ -9,7 +9,7 @@ import FormField from '@/components/form/FormField.vue'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { LOGIN_COPY } from '@/utils/login-errors'
-import { resolveLanding, sanitizeRedirect } from '@/utils/login-landing'
+import { landingPath, sanitizeRedirect } from '@/utils/login-landing'
 import {
   PASSWORD_COPY,
   hasPasswordErrors,
@@ -72,7 +72,7 @@ async function handleSubmit() {
     if (outcome.pwdResetRequired) return
     toast.success(PASSWORD_COPY.updated)
     const redirect = sanitizeRedirect(route.query.redirect)
-    await router.push(resolveLanding({
+    await router.push(landingPath({
       redirect,
       menus: authStore.menus,
       registeredPaths: registeredPaths(),
@@ -90,14 +90,14 @@ async function handleLogout() {
 
 <template>
   <div class="pwd-page">
-    <div class="pwd-card" data-testid="password-card">
+    <div class="pwd-card auth-card" data-testid="password-card">
       <div class="pwd-toolbar">
         <button type="button" class="logout-link" @click="handleLogout">退出登录</button>
       </div>
       <h1 class="pwd-title">请先修改密码</h1>
       <p class="pwd-desc">管理员已为您重置密码，为了账号安全，请设置新密码后继续使用</p>
 
-      <el-form @submit.prevent="handleSubmit">
+      <el-form class="auth-form" @submit.prevent="handleSubmit">
         <FormField label="当前密码" required>
           <div class="field-block">
             <el-input
@@ -161,12 +161,7 @@ async function handleLogout() {
 }
 
 .pwd-card {
-  width: 100%;
-  max-width: 400px;
   padding: 20px 28px 28px;
-  background-color: var(--card);
-  border-radius: var(--r);
-  box-shadow: var(--sh);
 }
 
 .pwd-toolbar {
@@ -200,32 +195,6 @@ async function handleLogout() {
 }
 
 .field-block {
-  width: 100%;
-}
-
-/* 标签在输入框上方，避免窄屏下和输入框叠在一起 */
-:deep(.el-form-item) {
-  display: block;
-}
-
-:deep(.el-form-item__label) {
-  display: flex;
-  width: 100% !important;
-  height: auto;
-  justify-content: flex-start;
-  margin-bottom: 6px;
-  padding: 0;
-  line-height: 1.4;
-  text-align: left;
-}
-
-:deep(.el-form-item__content) {
-  display: block;
-  width: 100%;
-  margin-left: 0 !important;
-}
-
-:deep(.el-input) {
   width: 100%;
 }
 

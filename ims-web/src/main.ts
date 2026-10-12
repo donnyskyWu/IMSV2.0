@@ -16,6 +16,7 @@ import { vPerm } from './directives/perm'
 import 'element-plus/dist/index.css'
 import './styles/global.scss'
 import './styles/element-theme.scss'
+import './styles/auth-form.scss'
 
 const app = createApp(App)
 
