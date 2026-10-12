@@ -230,3 +230,242 @@ class TestCacheTTL:
 
         result = Cache.expire("nonexistent_expire_key", 60)
         assert result is False
+
+
+class TestMemoryCacheDirectly:
+    """Tests that force memory cache code paths (for CI coverage)."""
+
+    def test_memory_cache_get_set(self):
+        """UT-C03-07: Test memory cache get/set directly."""
+        import app.core.cache as cache_module
+
+        # Save original redis client
+        original_client = cache_module._redis_client
+
+        try:
+            # Force memory cache mode
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Test set
+            result = cache_module.Cache.set("mem_test_key", "mem_value")
+            assert result is True
+
+            # Test get
+            result = cache_module.Cache.get("mem_test_key")
+            assert result == "mem_value"
+
+            # Test delete
+            result = cache_module.Cache.delete("mem_test_key")
+            assert result is True
+
+            # Test get after delete
+            result = cache_module.Cache.get("mem_test_key")
+            assert result is None
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_ttl_expiry(self):
+        """UT-C03-07b: Test memory cache TTL expiry."""
+        import time
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Set with very short TTL
+            cache_module.Cache.set("ttl_test_key", "ttl_value", ttl=1)
+
+            # Should exist immediately
+            result = cache_module.Cache.get("ttl_test_key")
+            assert result == "ttl_value"
+
+            # Wait for expiry
+            time.sleep(1.5)
+
+            # Should be expired now
+            result = cache_module.Cache.get("ttl_test_key")
+            assert result is None
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_json_operations(self):
+        """UT-C03-08: Test memory cache JSON operations."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Test set_json
+            data = {"key": "value", "number": 42}
+            result = cache_module.Cache.set_json("json_test_key", data)
+            assert result is True
+
+            # Test get_json
+            result = cache_module.Cache.get_json("json_test_key")
+            assert result == data
+            assert result["key"] == "value"
+            assert result["number"] == 42
+
+            # Test get_json nonexistent
+            result = cache_module.Cache.get_json("nonexistent_json_key")
+            assert result is None
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_set_operations(self):
+        """UT-C03-08b: Test memory cache set operations (sadd, smembers, srem)."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Clean up first
+            cache_module.Cache.delete("mem_set_key")
+
+            # Test sadd
+            cache_module.Cache.sadd("mem_set_key", "a", "b", "c")
+
+            # Test smembers
+            result = cache_module.Cache.smembers("mem_set_key")
+            assert isinstance(result, set)
+            assert "a" in result
+            assert "b" in result
+            assert "c" in result
+
+            # Test srem
+            cache_module.Cache.srem("mem_set_key", "b")
+            result = cache_module.Cache.smembers("mem_set_key")
+            assert "b" not in result
+            assert "a" in result
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_incr(self):
+        """UT-C03-08c: Test memory cache incr operation."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Set initial value
+            cache_module.Cache.set("incr_test_key", "10")
+
+            # Test incr
+            result = cache_module.Cache.incr("incr_test_key")
+            assert result == 11
+
+            result = cache_module.Cache.incr("incr_test_key")
+            assert result == 12
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_getdel(self):
+        """UT-C03-08d: Test memory cache getdel operation."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Set value
+            cache_module.Cache.set("getdel_key", "getdel_value")
+
+            # Get and delete
+            result = cache_module.Cache.getdel("getdel_key")
+            assert result == "getdel_value"
+
+            # Should be gone now
+            result = cache_module.Cache.get("getdel_key")
+            assert result is None
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_setnx(self):
+        """UT-C03-08e: Test memory cache setnx operation."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Delete any existing
+            cache_module.Cache.delete("setnx_key")
+
+            # First setnx should succeed
+            result = cache_module.Cache.setnx("setnx_key", "original")
+            assert result is True
+            assert cache_module.Cache.get("setnx_key") == "original"
+
+            # Second setnx should fail (key exists)
+            result = cache_module.Cache.setnx("setnx_key", "new")
+            assert result is False
+            assert cache_module.Cache.get("setnx_key") == "original"
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_memory_cache_expire(self):
+        """UT-C03-08f: Test memory cache expire operation."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            # Set value without TTL
+            cache_module.Cache.set("expire_mem_key", "value")
+
+            # Set expire
+            result = cache_module.Cache.expire("expire_mem_key", 3600)
+            assert result is True
+
+            # Expire on nonexistent key
+            result = cache_module.Cache.expire("nonexistent_mem_key", 60)
+            assert result is False
+
+        finally:
+            cache_module._redis_client = original_client
+
+    def test_cache_health_check_memory_mode(self):
+        """UT-C03-06b: Test cache health check in memory mode."""
+        import app.core.cache as cache_module
+
+        original_client = cache_module._redis_client
+        original_mode = cache_module._cache_mode
+
+        try:
+            cache_module._redis_client = None
+            cache_module._cache_mode = "MEMORY"
+
+            is_up, status = cache_module.CacheHealth.check()
+            assert is_up is True
+            assert status == "MEMORY"
+
+        finally:
+            cache_module._redis_client = original_client
+            cache_module._cache_mode = original_mode
