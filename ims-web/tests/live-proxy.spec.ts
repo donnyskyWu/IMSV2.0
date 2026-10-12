@@ -8,7 +8,8 @@
  * 1. GET /health 的 data.db 为 UP
  * 2. 种子账号经登录页真实登录并拿到访问令牌
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
- * 4. 登录后进入带侧栏的页面，侧栏至少出现一个 /me 返回的菜单名
+ * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏里出现的名字必须来自 /me。
+ *    现在的 main 会进示例页并画出这些名字；#12 只画已登记叶子，没登记时可以没有菜单项。
  */
 import { expect, test } from '@playwright/test'
 
@@ -35,12 +36,12 @@ function collectMenuNames(menus: MenuNode[] | undefined): string[] {
 
 test.describe('Vite 代理联通真实后端', () => {
   test('health 为 UP，种子账号登录后 /me 有菜单且侧栏可见', async ({ page }) => {
-    await page.goto('/login?redirect=/demo/layout')
+    await page.goto('/login')
     await page.evaluate(() => {
       localStorage.clear()
       sessionStorage.clear()
     })
-    await page.goto('/login?redirect=/demo/layout')
+    await page.goto('/login')
 
     const health = await page.evaluate(async () => {
       const response = await fetch('/health')
@@ -84,10 +85,22 @@ test.describe('Vite 代理联通真实后端', () => {
     const menuNames = collectMenuNames(me.body.data?.menus)
     expect(menuNames.length).toBeGreaterThan(0)
 
-    await page.waitForURL('**/demo/layout')
-    const sidebarEntries = page.locator('[data-testid="app-sidebar"] .el-menu-item, [data-testid="app-sidebar"] .el-sub-menu__title')
-    await expect(sidebarEntries.first()).toBeVisible()
+    // 不带 redirect。现在会进 /demo/tokens；#12 只落到已登记的菜单叶子，否则停在壳路径。
+    await page.waitForURL((url) => url.pathname !== '/login')
+    const sidebar = page.locator('[data-testid="app-sidebar"]')
+    await expect(sidebar).toBeVisible()
+    const sidebarEntries = sidebar.locator('.el-menu-item, .el-sub-menu__title')
     const sidebarText = (await sidebarEntries.allTextContents()).join('\n')
-    expect(menuNames.some((name) => sidebarText.includes(name))).toBe(true)
+    const matched = menuNames.filter((name) => sidebarText.includes(name))
+    // 画出的每一项都得是 /me 的名字。示例 mock（Token 演示等）不在种子菜单里，出现即失败。
+    const shown = (await sidebarEntries.allTextContents()).map((text) => text.trim()).filter(Boolean)
+    for (const text of shown) {
+      expect(menuNames.some((name) => text.includes(name))).toBe(true)
+    }
+    // 当前 main 的示例页会把 /me 铺进侧栏，至少对上一个名字。
+    // #12 在叶子都未登记时侧栏没有菜单项；上面的循环已经保证画出来的名字都属于 /me。
+    if (new URL(page.url()).pathname.startsWith('/demo/')) {
+      expect(matched.length).toBeGreaterThan(0)
+    }
   })
 })
