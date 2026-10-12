@@ -137,9 +137,10 @@ function getActiveMenuPaths(): string[] {
   return paths
 }
 
-// 退出登录
+// 退出登录。记下需要真实登录，避免开发环境在浏览器后退时又自动进入示例页。
 function handleLogout() {
   authStore.clearSession()
+  sessionStorage.setItem('ims_require_auth', '1')
   router.push('/login')
 }
 </script>

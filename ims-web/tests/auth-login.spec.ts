@@ -220,14 +220,16 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page).toHaveURL(/\/demo\/tokens$/)
   })
 
-  test('E2E-B1-LG-12 已登录访问登录页进入系统', async ({ page }) => {
+  test('E2E-B1-LG-12 已登录访问登录页进入系统，退出后后退仍停在登录页', async ({ page }) => {
     await page.route('**/admin-api/ims/auth/me', async (route) => {
       await route.fulfill(json(mePayload({
         id: BIG_USER_ID,
         menus: [menu('/not-registered', '未登记'), menu('/demo/layout', '布局演示')],
       })))
     })
-    await page.addInitScript(() => {
+    // 不用 addInitScript：它会在每次跳转前把令牌写回去，后退用例就失真了。
+    await page.goto('/login')
+    await page.evaluate(() => {
       localStorage.setItem('ims_access_token', 'already')
       localStorage.setItem('ims_refresh_token', 'already-r')
     })
@@ -235,6 +237,22 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page).toHaveURL(/\/demo\/layout/)
     expect(page.url()).not.toContain('baidu')
     await expect(page.locator('.app-layout').first()).toBeVisible()
+    await expect(page.getByText('布局演示').first()).toBeVisible()
+
+    // 布局演示页里还有一层示例框架，只点最外层顶栏的头像。
+    await page.locator('.app-layout').first().locator('> .app-main > .app-topbar .user-dropdown').click()
+    await page.locator('.el-dropdown-menu:visible').getByRole('menuitem', { name: '退出登录' }).click()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByPlaceholder('请输入用户名')).toBeVisible()
+    await expect(page.locator('.app-layout')).toHaveCount(0)
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.getByPlaceholder('请输入用户名')).toBeVisible()
+    await expect(page.locator('.app-layout')).toHaveCount(0)
+    await expect(page.getByText('布局演示')).toHaveCount(0)
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
   })
 
   test('用户 id 按字符串保留，超长数字不被改写', async ({ page }) => {
