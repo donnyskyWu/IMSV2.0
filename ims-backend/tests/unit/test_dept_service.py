@@ -10,6 +10,8 @@ Covers:
 - UT-B08-07-01 through UT-B08-07-03: Delete/disable department
 """
 
+import os
+
 import pytest
 
 from app.core.errors import BizError
@@ -131,7 +133,10 @@ class TestDeptCreate:
     """Tests for department creation (FP-B08-04)."""
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="SQLite doesn't support BIGINT auto-increment properly; test with MySQL")
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
     async def test_create_dept_success(self, db_session, admin_context, sample_dept):
         """UT-B08-04-01: Create department successfully."""
         from unittest.mock import MagicMock

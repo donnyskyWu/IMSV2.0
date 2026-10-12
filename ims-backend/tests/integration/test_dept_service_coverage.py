@@ -257,7 +257,10 @@ class TestDeptServiceGetDeptTree:
 class TestDeptServiceCreateDept:
     """Tests for DeptService.create_dept."""
 
-    @pytest.mark.skip(reason="SQLite autoincrement issue - needs sequence or different test setup")
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
     def test_create_dept_success(self, dept_service, dept_tree_data, db_session, test_context):
         """Test creating a new department."""
         class Request:
@@ -272,7 +275,10 @@ class TestDeptServiceCreateDept:
         assert result["name"] == "New Department"
         assert result["source"] == "LOCAL"
 
-    @pytest.mark.skip(reason="SQLite autoincrement issue - needs sequence or different test setup")
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
     def test_create_dept_with_leader(self, dept_service, dept_tree_data, db_session, test_context):
         """Test creating department with leader."""
         class Request:

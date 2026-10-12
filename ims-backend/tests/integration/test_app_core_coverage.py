@@ -145,6 +145,180 @@ class TestDepsModule:
         assert callable(checker.delete)
 
 
+class TestDepsModuleWithContext:
+    """Tests for dependency injection with context."""
+
+    def test_get_current_user_optional_no_token(self, db_session, test_context):
+        """Test get_current_user_optional returns None without token."""
+        import asyncio
+
+        from app.api.deps import get_current_user_optional
+
+        result = asyncio.get_event_loop().run_until_complete(
+            get_current_user_optional(None)
+        )
+        assert result is None
+
+    def test_get_current_user_raises_without_auth(self, db_session, test_context):
+        """Test get_current_user raises BizError without user."""
+        import asyncio
+
+        from app.api.deps import get_current_user
+        from app.core.errors import BizError
+
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(
+                get_current_user(None)
+            )
+        assert exc_info.value.code == 1002
+
+    def test_require_login_with_valid_user(self, db_session, test_context):
+        """Test require_login succeeds with valid user."""
+        import asyncio
+
+        from app.api.deps import require_login
+
+        result = asyncio.get_event_loop().run_until_complete(
+            require_login(1)
+        )
+        assert result == 1
+
+    def test_require_permission_missing_perm_raises(self, db_session, test_context):
+        """Test require_permission raises when permission not in context."""
+        import asyncio
+
+        from app.api.deps import require_permission
+        from app.core.errors import BizError
+
+        dep = require_permission("ims:nonexistent:permission")
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(dep(1))
+        assert exc_info.value.code == 1008
+
+    def test_require_permission_with_perm_succeeds(self, db_session, admin_context):
+        """Test require_permission succeeds when permission exists."""
+        import asyncio
+
+        from app.api.deps import require_permission
+
+        dep = require_permission("ims:system:user:query")
+        result = asyncio.get_event_loop().run_until_complete(dep(1))
+        assert result == 1
+
+    def test_require_any_permission_none_match_raises(self, db_session, test_context):
+        """Test require_any_permission raises when no permission matches."""
+        import asyncio
+
+        from app.api.deps import require_any_permission
+        from app.core.errors import BizError
+
+        dep = require_any_permission(["ims:no:match1", "ims:no:match2"])
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(dep(1))
+        assert exc_info.value.code == 1008
+
+    def test_require_any_permission_one_match_succeeds(self, db_session, admin_context):
+        """Test require_any_permission succeeds when one permission matches."""
+        import asyncio
+
+        from app.api.deps import require_any_permission
+
+        dep = require_any_permission(["ims:system:user:query", "ims:no:match"])
+        result = asyncio.get_event_loop().run_until_complete(dep(1))
+        assert result == 1
+
+    def test_require_all_permissions_missing_one_raises(self, db_session, admin_context):
+        """Test require_all_permissions raises when one is missing."""
+        import asyncio
+
+        from app.api.deps import require_all_permissions
+        from app.core.errors import BizError
+
+        dep = require_all_permissions(["ims:system:user:query", "ims:nonexistent"])
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(dep(1))
+        assert exc_info.value.code == 1008
+
+    def test_require_all_permissions_all_match_succeeds(self, db_session, admin_context):
+        """Test require_all_permissions succeeds when all match."""
+        import asyncio
+
+        from app.api.deps import require_all_permissions
+
+        dep = require_all_permissions(["ims:system:user:query", "ims:system:dept:query"])
+        result = asyncio.get_event_loop().run_until_complete(dep(1))
+        assert result == 1
+
+    def test_require_data_scope_no_scopes_raises(self, db_session, test_context):
+        """Test require_data_scope raises when no data scopes configured."""
+        import asyncio
+
+        from app.api.deps import require_data_scope
+        from app.core.context import RequestContext, ctx
+        from app.core.errors import BizError
+
+        ctx.set(RequestContext(
+            trace_id="test",
+            user_id=1,
+            tenant_id=1,
+            perm_codes=set(),
+            data_scopes=[],
+            dept_ids=[],
+            client_ip="127.0.0.1",
+        ))
+
+        dep = require_data_scope("User")
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(dep(1))
+        assert exc_info.value.code == 1008
+
+    def test_permission_checker_read_without_perm_raises(self, db_session, test_context):
+        """Test PermissionChecker.read raises when perm missing."""
+        import asyncio
+
+        from app.api.deps import PermissionChecker
+        from app.core.errors import BizError
+
+        checker = PermissionChecker(read_perm="ims:nonexistent")
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(checker.read(1))
+        assert exc_info.value.code == 1008
+
+    def test_permission_checker_read_with_perm_succeeds(self, db_session, admin_context):
+        """Test PermissionChecker.read succeeds when perm exists."""
+        import asyncio
+
+        from app.api.deps import PermissionChecker
+
+        checker = PermissionChecker(read_perm="ims:system:user:query")
+        result = asyncio.get_event_loop().run_until_complete(checker.read(1))
+        assert result == 1
+
+    def test_permission_checker_write_without_perm_raises(self, db_session, test_context):
+        """Test PermissionChecker.write raises when perm missing."""
+        import asyncio
+
+        from app.api.deps import PermissionChecker
+        from app.core.errors import BizError
+
+        checker = PermissionChecker(write_perm="ims:nonexistent")
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(checker.write(1))
+        assert exc_info.value.code == 1008
+
+    def test_permission_checker_delete_without_perm_raises(self, db_session, test_context):
+        """Test PermissionChecker.delete raises when perm missing."""
+        import asyncio
+
+        from app.api.deps import PermissionChecker
+        from app.core.errors import BizError
+
+        checker = PermissionChecker(delete_perm="ims:nonexistent")
+        with pytest.raises(BizError) as exc_info:
+            asyncio.get_event_loop().run_until_complete(checker.delete(1))
+        assert exc_info.value.code == 1008
+
+
 class TestCacheModule:
     """Tests for cache module coverage."""
 
@@ -374,3 +548,407 @@ class TestMainAppModels:
 
         assert menu.id == 500
         assert menu.name == "Test Menu"
+
+
+class TestSerializationModule:
+    """Tests for serialization module coverage."""
+
+    def test_to_snake_conversion(self):
+        """Test camelCase to snake_case conversion."""
+        from app.core.serialization import to_snake
+
+        assert to_snake("camelCase") == "camel_case"
+        assert to_snake("PascalCase") == "pascal_case"
+        assert to_snake("simpleword") == "simpleword"
+        assert to_snake("APIKey") == "a_p_i_key"
+
+    def test_snake_to_camel_conversion(self):
+        """Test snake_case to camelCase conversion."""
+        from app.core.serialization import snake_to_camel
+
+        assert snake_to_camel("snake_case") == "snakeCase"
+        assert snake_to_camel("simple") == "simple"
+        assert snake_to_camel("multi_word_name") == "multiWordName"
+
+    def test_camel_to_snake_conversion(self):
+        """Test camelCase to snake_case conversion."""
+        from app.core.serialization import camel_to_snake
+
+        assert camel_to_snake("camelCase") == "camel_case"
+        assert camel_to_snake("simple") == "simple"
+        assert camel_to_snake("multiWordName") == "multi_word_name"
+
+    def test_serialize_id_field(self):
+        """Test id field serialization."""
+        from app.core.serialization import serialize_id_field
+
+        assert serialize_id_field(123) == "123"
+        assert serialize_id_field(None) == ""
+        assert serialize_id_field("abc") == "abc"
+
+    def test_validate_datetime_with_datetime(self):
+        """Test datetime validation with datetime object."""
+        from datetime import datetime
+
+        from app.core.serialization import validate_datetime
+
+        dt = datetime(2026, 10, 12, 10, 0, 0)
+        result = validate_datetime(dt)
+        assert result is not None
+        assert result.tzinfo is not None
+
+    def test_validate_datetime_with_string(self):
+        """Test datetime validation with ISO string."""
+        from app.core.serialization import validate_datetime
+
+        result = validate_datetime("2026-10-12T10:00:00+08:00")
+        assert result is not None
+
+    def test_validate_datetime_with_none(self):
+        """Test datetime validation with None."""
+        from app.core.serialization import validate_datetime
+
+        result = validate_datetime(None)
+        assert result is None
+
+    def test_serialize_datetime(self):
+        """Test datetime serialization."""
+        from datetime import datetime
+
+        from app.core.clock import BEIJING_TZ
+        from app.core.serialization import serialize_datetime
+
+        dt = datetime(2026, 10, 12, 10, 0, 0, tzinfo=BEIJING_TZ)
+        result = serialize_datetime(dt)
+        assert result is not None
+        assert "+08:00" in result
+
+    def test_serialize_datetime_none(self):
+        """Test datetime serialization with None."""
+        from app.core.serialization import serialize_datetime
+
+        result = serialize_datetime(None)
+        assert result is None
+
+    def test_validate_date_with_date(self):
+        """Test date validation with date object."""
+        from datetime import date
+
+        from app.core.serialization import validate_date
+
+        d = date(2026, 10, 12)
+        result = validate_date(d)
+        assert result == d
+
+    def test_validate_date_with_string(self):
+        """Test date validation with string."""
+        from datetime import date
+
+        from app.core.serialization import validate_date
+
+        result = validate_date("2026-10-12")
+        assert result == date(2026, 10, 12)
+
+    def test_validate_date_invalid_format(self):
+        """Test date validation with invalid format."""
+        from app.core.serialization import validate_date
+
+        with pytest.raises(ValueError) as exc_info:
+            validate_date("12/10/2026")
+        assert "yyyy-MM-dd" in str(exc_info.value)
+
+    def test_serialize_date(self):
+        """Test date serialization."""
+        from datetime import date
+
+        from app.core.serialization import serialize_date
+
+        d = date(2026, 10, 12)
+        result = serialize_date(d)
+        assert result == "2026-10-12"
+
+    def test_validate_money(self):
+        """Test money validation."""
+        from decimal import Decimal
+
+        from app.core.serialization import validate_money
+
+        result = validate_money("123.45")
+        assert result == Decimal("123.45")
+
+        result = validate_money(123.45)
+        assert result is not None
+
+        result = validate_money(None)
+        assert result is None
+
+    def test_serialize_money(self):
+        """Test money serialization."""
+        from decimal import Decimal
+
+        from app.core.serialization import serialize_money
+
+        result = serialize_money(Decimal("123.45"))
+        assert result == "123.45"
+
+        result = serialize_money(None)
+        assert result is None
+
+    def test_validate_percent(self):
+        """Test percent validation."""
+        from decimal import Decimal
+
+        from app.core.serialization import validate_percent
+
+        result = validate_percent(5)
+        assert result == Decimal("0.0500")
+
+        result = validate_percent(None)
+        assert result is None
+
+    def test_serialize_percent(self):
+        """Test percent serialization."""
+        from decimal import Decimal
+
+        from app.core.serialization import serialize_percent
+
+        result = serialize_percent(Decimal("0.0500"))
+        assert result == 5.0
+
+        result = serialize_percent(None)
+        assert result is None
+
+    def test_base_schema_inherits(self):
+        """Test BaseSchema configuration."""
+        from app.core.serialization import BaseSchema
+
+        class TestSchema(BaseSchema):
+            user_name: str
+            user_id: int
+
+        data = TestSchema(user_name="test", user_id=1)
+        json_dict = data.model_dump(by_alias=True)
+        assert "userName" in json_dict
+        assert "userId" in json_dict
+
+    def test_response_schema_converts_ids(self):
+        """Test ResponseSchema converts *Id fields to strings."""
+        from typing import Optional
+
+        from app.core.serialization import ResponseSchema
+
+        class TestResponse(ResponseSchema):
+            id: Optional[int] = None
+            user_id: Optional[int] = None
+            name: str
+
+        data = TestResponse(id=123, user_id=456, name="test")
+        assert data.id == "123"
+        assert data.user_id == "456"
+
+
+class TestTransactionModule:
+    """Tests for transaction module coverage."""
+
+    def test_transactional_decorator_exists(self):
+        """Test transactional decorator can be imported."""
+        from app.db.transaction import transactional
+
+        assert callable(transactional)
+
+    def test_transactional_decorator_wraps_function(self, db_session, test_context):
+        """Test transactional decorator wraps async functions."""
+        import asyncio
+
+        from app.db.transaction import transactional
+
+        @transactional
+        async def test_function():
+            return "result"
+
+        result = asyncio.get_event_loop().run_until_complete(test_function())
+        assert result == "result"
+
+
+class TestErrorModule:
+    """Tests for error module coverage."""
+
+    def test_biz_error_creation(self):
+        """Test BizError creation."""
+        from app.core.errors import BizError
+
+        error = BizError(1001)
+        assert error.code == 1001
+
+    def test_biz_error_with_message(self):
+        """Test BizError with custom message."""
+        from app.core.errors import BizError
+
+        error = BizError(1001, msg="Custom message")
+        assert error.msg == "Custom message"
+
+    def test_biz_error_no_permission(self):
+        """Test BizError.no_permission."""
+        from app.core.errors import BizError
+
+        error = BizError.no_permission()
+        assert error.code == 1008
+
+    def test_biz_error_not_found(self):
+        """Test BizError.not_found returns 1504."""
+        from app.core.errors import BizError
+
+        error = BizError.not_found()
+        assert error.code == 1504
+
+    def test_biz_error_ref_not_exist(self):
+        """Test BizError.ref_not_exist."""
+        from app.core.errors import BizError
+
+        error = BizError.ref_not_exist("user_id")
+        assert error.code == 1500
+
+
+class TestPaginationModule:
+    """Tests for pagination module coverage."""
+
+    def test_page_param_creation(self):
+        """Test PageParam creation."""
+        from app.core.pagination import PageParam
+
+        params = PageParam(page_no=1, page_size=10)
+        assert params.page_no == 1
+        assert params.page_size == 10
+
+    def test_page_param_offset(self):
+        """Test PageParam offset calculation."""
+        from app.core.pagination import PageParam
+
+        params = PageParam(page_no=3, page_size=10)
+        assert params.offset == 20
+        assert params.limit == 10
+
+    def test_page_result_creation(self):
+        """Test PageResult creation."""
+        from app.core.pagination import PageResult
+
+        result = PageResult(
+            list=[],
+            total=0,
+            page_no=1,
+            page_size=10,
+        )
+        assert result.total == 0
+        assert result.list == []
+
+    def test_page_result_has_more(self):
+        """Test PageResult has_more property."""
+        from app.core.pagination import PageParam, PageResult
+
+        result = PageResult.of(
+            items=["a", "b"],
+            total=25,
+            page_param=PageParam(page_no=1, page_size=10),
+        )
+        assert result.has_more is True
+
+    def test_page_result_empty(self):
+        """Test PageResult.empty factory."""
+        from app.core.pagination import PageParam, PageResult
+
+        result = PageResult.empty(PageParam(page_no=1, page_size=10))
+        assert result.total == 0
+        assert result.list == []
+
+
+class TestClockModule:
+    """Tests for clock module coverage."""
+
+    def test_get_now(self):
+        """Test get_now returns datetime."""
+        from datetime import datetime
+
+        from app.core.clock import get_now
+
+        now = get_now()
+        assert isinstance(now, datetime)
+
+    def test_get_today(self):
+        """Test get_today returns date."""
+        from datetime import date
+
+        from app.core.clock import get_today
+
+        today = get_today()
+        assert isinstance(today, date)
+
+    def test_set_and_reset_clock(self, fixed_time):
+        """Test clock injection and reset."""
+        from datetime import datetime
+
+        from app.core.clock import get_now
+
+        fixed = datetime(2026, 1, 1, 12, 0, 0)
+        fixed_time(fixed)
+        assert get_now() == fixed
+
+    def test_format_datetime(self):
+        """Test datetime formatting."""
+        from datetime import datetime
+
+        from app.core.clock import BEIJING_TZ, format_datetime
+
+        dt = datetime(2026, 10, 12, 10, 0, 0, tzinfo=BEIJING_TZ)
+        result = format_datetime(dt)
+        assert result is not None
+        assert "2026-10-12" in result
+
+    def test_parse_datetime(self):
+        """Test datetime parsing."""
+        from app.core.clock import parse_datetime
+
+        result = parse_datetime("2026-10-12T10:00:00+08:00")
+        assert result is not None
+        assert result.year == 2026
+        assert result.month == 10
+
+
+class TestIntegrationBase:
+    """Tests for integration base module."""
+
+    def test_base_adapter_import(self):
+        """Test BaseAdapter can be imported."""
+        from app.integrations.base import BaseAdapter
+
+        assert BaseAdapter is not None
+
+    def test_circuit_breaker_import(self):
+        """Test CircuitBreaker can be imported."""
+        from app.integrations.base import CircuitBreaker
+
+        assert CircuitBreaker is not None
+
+    def test_circuit_breaker_creation(self):
+        """Test CircuitBreaker instance creation."""
+        from app.integrations.base import CircuitBreaker
+
+        cb = CircuitBreaker(failure_threshold=5, failure_window_seconds=60, recovery_seconds=30)
+        assert cb.is_open() is False
+
+    def test_dingtalk_client_import(self):
+        """Test DingTalk client can be imported."""
+        from app.integrations.dingtalk.client import DingTalkClient
+
+        assert DingTalkClient is not None
+
+    def test_football_live_reader_import(self):
+        """Test FootballLive reader can be imported."""
+        from app.integrations.football_live.reader import FootballLiveReader
+
+        assert FootballLiveReader is not None
+
+    def test_train_ai_client_import(self):
+        """Test TrainAI client can be imported."""
+        from app.integrations.train_ai.client import TrainAIClient
+
+        assert TrainAIClient is not None

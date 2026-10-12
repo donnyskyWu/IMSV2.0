@@ -101,7 +101,9 @@ class RoleService:
 
         tenant_id = ctx.tenant_id
 
-        roles = session.query(Role).join(UserRole).filter(
+        roles = session.query(Role).join(
+            UserRole, UserRole.role_id == Role.id
+        ).filter(
             UserRole.user_id == user_id,
             Role.status == "ENABLED",
             Role.tenant_id == tenant_id,
@@ -131,7 +133,9 @@ class RoleService:
         from app.domains.sys.models import Menu, RoleMenu
         session = get_db_session()
 
-        menus = session.query(Menu).join(RoleMenu).filter(
+        menus = session.query(Menu).join(
+            RoleMenu, RoleMenu.menu_id == Menu.id
+        ).filter(
             RoleMenu.role_id == role_id,
             Menu.status == "ENABLED",
             Menu.deleted == 0,

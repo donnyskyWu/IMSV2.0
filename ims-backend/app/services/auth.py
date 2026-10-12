@@ -279,7 +279,9 @@ class AuthService:
         session = get_db_session()
 
         # Get user's enabled roles
-        roles = session.query(Role).join(UserRole).filter(
+        roles = session.query(Role).join(
+            UserRole, UserRole.role_id == Role.id
+        ).filter(
             UserRole.user_id == user_id,
             Role.status == "ENABLED",
             Role.deleted == 0,
@@ -290,7 +292,9 @@ class AuthService:
 
         for role in roles:
             # Get role's permission codes
-            menus = session.query(Menu).join(RoleMenu).filter(
+            menus = session.query(Menu).join(
+                RoleMenu, RoleMenu.menu_id == Menu.id
+            ).filter(
                 RoleMenu.role_id == role.id,
                 Menu.status == "ENABLED",
                 Menu.deleted == 0,

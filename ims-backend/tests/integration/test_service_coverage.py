@@ -458,7 +458,6 @@ class TestAuthServiceBuildDataScopeText:
 class TestAuthServiceGetUserPermissions:
     """Tests for AuthService._get_user_permissions."""
 
-    @pytest.mark.skip(reason="SQLAlchemy join issue with UserRole - implementation needs fix")
     def test_get_user_permissions_with_roles(self, auth_service, sample_users, sample_roles, db_session, test_context):
         """Test get user permissions with roles."""
         from app.domains.sys.models import UserRole
@@ -480,7 +479,6 @@ class TestAuthServiceGetUserPermissions:
         assert "data_scopes" in result
         assert "dept_ids" in result
 
-    @pytest.mark.skip(reason="SQLAlchemy join issue with UserRole - implementation needs fix")
     def test_get_user_permissions_no_roles(self, auth_service, sample_users, db_session, test_context):
         """Test get user permissions without roles."""
         result = run_async(auth_service._get_user_permissions(1))
@@ -541,3 +539,99 @@ class TestUserServiceHelpers:
         result = user_service._hash_mobile("13800138000")
         assert result is not None
         assert len(result) > 0
+
+
+# ============================================================================
+# OrgSyncService Tests (FP-D07 - DingTalk Organization Sync Stub)
+# ============================================================================
+# Note: org_sync.py implements stub functionality for DingTalk organization
+# synchronization. The actual DingTalk API integration requires external
+# credentials which are not available in CI. The stub:
+# - Creates sync batch records with PENDING status
+# - Returns batch info immediately (async execution placeholder)
+# - The TODO comments indicate where DingTalk adapter calls would be added
+# ============================================================================
+
+
+@pytest.fixture
+def org_sync_service():
+    """Create OrgSyncService instance."""
+    from app.services.org_sync import OrgSyncService
+    return OrgSyncService()
+
+
+class TestOrgSyncServiceTriggerReconcile:
+    """Tests for OrgSyncService.trigger_reconcile - UT-D07-18."""
+
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
+    def test_trigger_reconcile_creates_batch(self, org_sync_service, db_session, test_context):
+        """UT-D07-18: Test trigger reconcile creates a pending batch."""
+        result = run_async(org_sync_service.trigger_reconcile())
+
+        assert result is not None
+        assert "batch_id" in result
+        assert result["status"] == "PENDING"
+        assert result["started_at"] is not None
+        assert result["added_depts"] == 0
+        assert result["added_users"] == 0
+
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
+    def test_trigger_reconcile_returns_batch_info(self, org_sync_service, db_session, test_context):
+        """Test trigger reconcile returns proper batch info structure."""
+        result = run_async(org_sync_service.trigger_reconcile())
+
+        expected_keys = [
+            "batch_id", "status", "started_at", "completed_at",
+            "added_depts", "updated_depts", "removed_depts",
+            "added_users", "updated_users", "removed_users", "error_msg"
+        ]
+        for key in expected_keys:
+            assert key in result
+
+
+class TestOrgSyncServiceGetLatestBatch:
+    """Tests for OrgSyncService.get_latest_batch - UT-D07-04."""
+
+    def test_get_latest_batch_no_batches(self, org_sync_service, db_session, test_context):
+        """Test get latest batch returns None when no batches exist."""
+        result = run_async(org_sync_service.get_latest_batch())
+
+        assert result is None
+
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
+    def test_get_latest_batch_returns_most_recent(self, org_sync_service, db_session, test_context):
+        """Test get latest batch returns the most recent batch."""
+        run_async(org_sync_service.trigger_reconcile())
+        run_async(org_sync_service.trigger_reconcile())
+
+        result = run_async(org_sync_service.get_latest_batch())
+
+        assert result is not None
+        assert "batch_id" in result
+        assert result["status"] == "PENDING"
+
+
+class TestOrgSyncServiceBatchToResponse:
+    """Tests for OrgSyncService._batch_to_response helper."""
+
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
+    def test_batch_to_response_formats_correctly(self, org_sync_service, db_session, test_context):
+        """Test batch to response formats all fields correctly."""
+        result = run_async(org_sync_service.trigger_reconcile())
+
+        assert isinstance(result["batch_id"], str)
+        assert result["started_at"].endswith("+08:00")
+        assert result["completed_at"] is None
+        assert result["error_msg"] is None

@@ -307,7 +307,6 @@ class TestRoleServiceGetRoleById:
 class TestRoleServiceGetUserRoles:
     """Tests for RoleService.get_user_roles."""
 
-    @pytest.mark.skip(reason="SQLAlchemy join issue - needs implementation fix")
     def test_get_user_roles_returns_enabled(self, role_service, role_user_data, db_session, test_context):
         """Test getting enabled roles for user."""
         result = run_async(role_service.get_user_roles(role_user_data["user1_id"]))
@@ -315,7 +314,6 @@ class TestRoleServiceGetUserRoles:
         assert isinstance(result, list)
         assert len(result) == 2
 
-    @pytest.mark.skip(reason="SQLAlchemy join issue - needs implementation fix")
     def test_get_user_roles_no_roles(self, role_service, role_user_data, db_session, test_context):
         """Test getting roles for user with no roles."""
         result = run_async(role_service.get_user_roles(role_user_data["user2_id"]))
@@ -327,7 +325,6 @@ class TestRoleServiceGetUserRoles:
 class TestRoleServiceGetRolePermissionCodes:
     """Tests for RoleService.get_role_permission_codes."""
 
-    @pytest.mark.skip(reason="SQLAlchemy join issue - needs implementation fix")
     def test_get_role_permission_codes(self, role_service, role_user_data, db_session, test_context):
         """Test getting permission codes for role."""
         result = run_async(role_service.get_role_permission_codes(role_user_data["admin_role_id"]))
@@ -337,7 +334,6 @@ class TestRoleServiceGetRolePermissionCodes:
         assert "ims:system" in result
         assert "ims:system:user" in result
 
-    @pytest.mark.skip(reason="SQLAlchemy join issue - needs implementation fix")
     def test_get_role_permission_codes_no_perms(self, role_service, role_user_data, db_session, test_context):
         """Test getting permission codes for role with no menus."""
         result = run_async(role_service.get_role_permission_codes(role_user_data["user_role_id"]))
@@ -366,7 +362,10 @@ class TestRoleServiceValidateRoleExists:
 class TestUserServiceCreateUser:
     """Tests for UserService.create_user."""
 
-    @pytest.mark.skip(reason="SQLite autoincrement issue - needs sequence or different test setup")
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
     def test_create_user_success(self, user_service, role_user_data, db_session, test_context):
         """Test creating a new user."""
         class Request:
@@ -448,7 +447,10 @@ class TestUserServiceCreateUser:
 class TestUserServiceUpdateUserDepts:
     """Tests for UserService.update_user_depts."""
 
-    @pytest.mark.skip(reason="SQLite autoincrement issue - needs sequence or different test setup")
+    @pytest.mark.skipif(
+        "sqlite" in os.environ.get("IMS_DB_URL", "sqlite"),
+        reason="SQLite autoincrement issue - run with MySQL"
+    )
     def test_update_user_depts_success(self, user_service, role_user_data, db_session, test_context):
         """Test updating user departments."""
         run_async(
