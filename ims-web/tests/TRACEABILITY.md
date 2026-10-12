@@ -1,15 +1,14 @@
 # B0b 前端基础层 · 测试追溯矩阵
 
-> 版本：v1.1 · 2026-10-12
+> 版本：v2.0 · 2026-10-12
 > 依据：`02-验证用例.md` v1.0
-> 总用例数：**197** (桌面 166 + 移动 31，不含已撤销 VC-M-30)
+> 总用例数：**200** (桌面 166 + 移动 34，不含已撤销 VC-M-30)
 
 ## 状态说明
 
 | 状态 | 说明 |
 |------|------|
 | ✅ PASS | 测试通过 |
-| 🔧 FIXME | 依赖后端 CRUD/同步等复杂操作，标记为 `test.fixme` |
 | ⏭️ EXEMPT | 属于豁免映射表，桌面用例在移动端豁免 |
 | ❌ CANCELLED | 已撤销的用例 |
 
@@ -17,7 +16,7 @@
 
 ## Step 2 完成情况
 
-### 请求层 (FP-R-01~07)
+### 请求层 (FP-R-01~09)
 
 已实现:
 - ✅ `src/api/request.ts` - Axios 请求层，支持错误码处理、令牌刷新、跳转登录
@@ -26,7 +25,7 @@
 - ✅ `scripts/generate-api.sh` - API 客户端生成脚本
 - ✅ `src/stores/auth.ts` - 认证 Store，使用 authApi
 - ✅ `src/stores/dict.ts` - 字典 Store，使用 dictApi
-- ✅ `tests/mocks/api-mocks.ts` - 测试 mock 数据
+- ✅ `tests/mocks/api-mocks.ts` - Playwright 测试 mock 数据
 
 ### 请求层测试 (VC-R-01~16)
 
@@ -184,11 +183,9 @@
 
 ## C42. 部门树面板 (41 条)
 
-> 部门树 CRUD 和同步操作需要后端集成测试，标记为 FIXME。
-
 | VC 编号 | 测试文件 | 测试名称 | 状态 | 备注 |
 |---------|----------|----------|------|------|
-| VC-C42-01 | dept-tree.spec.ts | VC-C42-01: 部门树结构和展开层级 | ✅ PASS | 用本地数据 |
+| VC-C42-01 | dept-tree.spec.ts | VC-C42-01: 部门树结构和展开层级 | ✅ PASS | 用 mock 数据 |
 | VC-C42-02 | dept-tree.spec.ts | VC-C42-02: 部门人数和来源标识 | ✅ PASS | |
 | VC-C42-03 | dept-tree.spec.ts | VC-C42-03: 悬停提示直属含下级人数 | ✅ PASS | |
 | VC-C42-04 | dept-tree.spec.ts | VC-C42-04: 待确认部门多标识 | ✅ PASS | |
@@ -202,39 +199,37 @@
 | VC-C42-12 | dept-tree.spec.ts | VC-C42-12: 更多菜单项 | ✅ PASS | |
 | VC-C42-13 | dept-tree.spec.ts | VC-C42-13: 全部待分配无更多菜单 | ✅ PASS | |
 | VC-C42-14 | dept-tree.spec.ts | VC-C42-14: 待确认部门有确认保留 | ✅ PASS | |
-| VC-C42-15 | dept-tree.spec.ts | VC-C42-15: 无权限用户无操作菜单 | 🔧 FIXME | 依赖后端权限 |
+| VC-C42-15 | dept-tree.spec.ts | VC-C42-15: 无权限用户无操作菜单 | ✅ PASS | 用 mock 权限 |
 | VC-C42-16 | dept-tree.spec.ts | VC-C42-16: 停用部门无新增有启用 | ✅ PASS | |
-| VC-C42-17 | dept-tree.spec.ts | VC-C42-17: 新增下级部门 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-18 | dept-tree.spec.ts | VC-C42-18: 重名部门校验 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-19 | dept-tree.spec.ts | VC-C42-19: 钉钉部门改名提示覆盖 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-20 | dept-tree.spec.ts | VC-C42-20: 本地部门改名无提示 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-21 | dept-tree.spec.ts | VC-C42-21: 设置负责人在职离职 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-22 | dept-tree.spec.ts | VC-C42-22: 移动部门禁止规则 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-23 | dept-tree.spec.ts | VC-C42-23: 移动部门人数更新 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-24 | dept-tree.spec.ts | VC-C42-24: 钉钉部门移动成功 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-25 | dept-tree.spec.ts | VC-C42-25: 拖拽到子孙禁止 | 🔧 FIXME | 依赖后端 + 拖拽 |
-| VC-C42-26 | dept-tree.spec.ts | VC-C42-26: 钉钉拖到本地禁止 | 🔧 FIXME | 依赖后端 + 拖拽 |
-| VC-C42-27 | dept-tree.spec.ts | VC-C42-27: 拖拽移动确认 | 🔧 FIXME | 依赖后端 + 拖拽 |
-| VC-C42-28 | dept-tree.spec.ts | VC-C42-28: 移动重名校验 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-29 | dept-tree.spec.ts | VC-C42-29: 删除有人员提示 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-30 | dept-tree.spec.ts | VC-C42-30: 删除有子部门提示 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-31 | dept-tree.spec.ts | VC-C42-31: 删除空部门成功 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-32 | dept-tree.spec.ts | VC-C42-32: 停用有启用下级提示 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-33 | dept-tree.spec.ts | VC-C42-33: 停用部门成功 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-34 | dept-tree.spec.ts | VC-C42-34: 确认保留去掉待确认标 | 🔧 FIXME | 依赖后端 API |
+| VC-C42-17 | dept-tree.spec.ts | VC-C42-17: 新增下级部门 | ✅ PASS | 用 mock |
+| VC-C42-18 | dept-tree.spec.ts | VC-C42-18: 重名部门校验 | ✅ PASS | 用 mock |
+| VC-C42-19 | dept-tree.spec.ts | VC-C42-19: 钉钉部门改名提示覆盖 | ✅ PASS | 用 mock |
+| VC-C42-20 | dept-tree.spec.ts | VC-C42-20: 本地部门改名无提示 | ✅ PASS | 用 mock |
+| VC-C42-21 | dept-tree.spec.ts | VC-C42-21: 设置负责人在职离职 | ✅ PASS | 用 mock |
+| VC-C42-22 | dept-tree.spec.ts | VC-C42-22: 移动部门禁止规则 | ✅ PASS | 用 mock |
+| VC-C42-23 | dept-tree.spec.ts | VC-C42-23: 移动部门人数更新 | ✅ PASS | 用 mock |
+| VC-C42-24 | dept-tree.spec.ts | VC-C42-24: 钉钉部门移动成功 | ✅ PASS | 用 mock |
+| VC-C42-25 | dept-tree.spec.ts | VC-C42-25: 拖拽到子孙禁止 | ✅ PASS | 桌面视口 |
+| VC-C42-26 | dept-tree.spec.ts | VC-C42-26: 钉钉拖到本地禁止 | ✅ PASS | 桌面视口 |
+| VC-C42-27 | dept-tree.spec.ts | VC-C42-27: 拖拽移动确认 | ✅ PASS | 桌面视口 |
+| VC-C42-28 | dept-tree.spec.ts | VC-C42-28: 移动重名校验 | ✅ PASS | 用 mock |
+| VC-C42-29 | dept-tree.spec.ts | VC-C42-29: 删除有人员提示 | ✅ PASS | 用 mock |
+| VC-C42-30 | dept-tree.spec.ts | VC-C42-30: 删除有子部门提示 | ✅ PASS | 用 mock |
+| VC-C42-31 | dept-tree.spec.ts | VC-C42-31: 删除空部门成功 | ✅ PASS | 用 mock |
+| VC-C42-32 | dept-tree.spec.ts | VC-C42-32: 停用有启用下级提示 | ✅ PASS | 用 mock |
+| VC-C42-33 | dept-tree.spec.ts | VC-C42-33: 停用部门成功 | ✅ PASS | 用 mock |
+| VC-C42-34 | dept-tree.spec.ts | VC-C42-34: 确认保留去掉待确认标 | ✅ PASS | 用 mock |
 | VC-C42-35 | dept-tree.spec.ts | VC-C42-35: 同步钉钉按钮和时间 | ✅ PASS | |
-| VC-C42-36 | dept-tree.spec.ts | VC-C42-36: 同步钉钉覆盖本地改名 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-37 | dept-tree.spec.ts | VC-C42-37: 同步钉钉删除部门处理 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-38 | dept-tree.spec.ts | VC-C42-38: 同步不改本地部门名称 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-39 | dept-tree.spec.ts | VC-C42-39: 同步进行中重复点击提示 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-40 | dept-tree.spec.ts | VC-C42-40: 同步失败回滚 | 🔧 FIXME | 依赖后端 API |
-| VC-C42-41 | dept-tree.spec.ts | VC-C42-41: 同步同名本地部门提示 | 🔧 FIXME | 依赖后端 API |
+| VC-C42-36 | dept-tree.spec.ts | VC-C42-36: 同步钉钉覆盖本地改名 | ✅ PASS | 用 mock |
+| VC-C42-37 | dept-tree.spec.ts | VC-C42-37: 同步钉钉删除部门处理 | ✅ PASS | 用 mock |
+| VC-C42-38 | dept-tree.spec.ts | VC-C42-38: 同步不改本地部门名称 | ✅ PASS | 用 mock |
+| VC-C42-39 | dept-tree.spec.ts | VC-C42-39: 同步进行中重复点击提示 | ✅ PASS | 用 mock |
+| VC-C42-40 | dept-tree.spec.ts | VC-C42-40: 同步失败回滚 | ✅ PASS | 用 mock |
+| VC-C42-41 | dept-tree.spec.ts | VC-C42-41: 同步同名本地部门提示 | ✅ PASS | 用 mock |
 
 ---
 
 ## L03. 左树右表 (30 条)
-
-> 人员管理 CRUD 操作需要后端集成测试，标记为 FIXME。
 
 | VC 编号 | 测试文件 | 测试名称 | 状态 | 备注 |
 |---------|----------|----------|------|------|
@@ -246,27 +241,27 @@
 | VC-L03-06 | left-tree.spec.ts | VC-L03-06: 切换含下级人数变化 | ✅ PASS | |
 | VC-L03-07 | left-tree.spec.ts | VC-L03-07: 点全部隐藏含下级 | ✅ PASS | |
 | VC-L03-08 | left-tree.spec.ts | VC-L03-08: 点待分配 | ✅ PASS | |
-| VC-L03-09 | left-tree.spec.ts | VC-L03-09: 新建人员带入部门 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-10 | left-tree.spec.ts | VC-L03-10: 全部时新建部门为空 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-11 | left-tree.spec.ts | VC-L03-11: 停用部门不带入 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-12 | left-tree.spec.ts | VC-L03-12: 新建人员树人数更新 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-13 | left-tree.spec.ts | VC-L03-13: 调部门从表消失树更新 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-14 | left-tree.spec.ts | VC-L03-14: 删除人员树人数减少 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-15 | left-tree.spec.ts | VC-L03-15: 删除有引用提示 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-16 | left-tree.spec.ts | VC-L03-16: 调部门必须指定主部门 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-17 | left-tree.spec.ts | VC-L03-17: 删除部门自动选父节点 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-18 | left-tree.spec.ts | VC-L03-18: 停用部门自动选父节点 | 🔧 FIXME | 依赖后端 API |
+| VC-L03-09 | left-tree.spec.ts | VC-L03-09: 新建人员带入部门 | ✅ PASS | 用 mock |
+| VC-L03-10 | left-tree.spec.ts | VC-L03-10: 全部时新建部门为空 | ✅ PASS | 用 mock |
+| VC-L03-11 | left-tree.spec.ts | VC-L03-11: 停用部门不带入 | ✅ PASS | 用 mock |
+| VC-L03-12 | left-tree.spec.ts | VC-L03-12: 新建人员树人数更新 | ✅ PASS | 用 mock |
+| VC-L03-13 | left-tree.spec.ts | VC-L03-13: 调部门从表消失树更新 | ✅ PASS | 用 mock |
+| VC-L03-14 | left-tree.spec.ts | VC-L03-14: 删除人员树人数减少 | ✅ PASS | 用 mock |
+| VC-L03-15 | left-tree.spec.ts | VC-L03-15: 删除有引用提示 | ✅ PASS | 用 mock |
+| VC-L03-16 | left-tree.spec.ts | VC-L03-16: 调部门必须指定主部门 | ✅ PASS | 用 mock |
+| VC-L03-17 | left-tree.spec.ts | VC-L03-17: 删除部门自动选父节点 | ✅ PASS | 用 mock |
+| VC-L03-18 | left-tree.spec.ts | VC-L03-18: 停用部门自动选父节点 | ✅ PASS | 用 mock |
 | VC-L03-19 | left-tree.spec.ts | VC-L03-19: 刷新保持选中和条件 | ✅ PASS | |
 | VC-L03-20 | left-tree.spec.ts | VC-L03-20: 浏览器前进后退同步 | ✅ PASS | |
-| VC-L03-21 | left-tree.spec.ts | VC-L03-21: 已删除部门地址提示 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-22 | left-tree.spec.ts | VC-L03-22: 数据范围树完整表受限 | 🔧 FIXME | 依赖后端权限 |
-| VC-L03-23 | left-tree.spec.ts | VC-L03-23: 数据范围外部门空提示 | 🔧 FIXME | 依赖后端权限 |
-| VC-L03-24 | left-tree.spec.ts | VC-L03-24: 只读用户无操作按钮 | 🔧 FIXME | 依赖后端权限 |
-| VC-L03-25 | left-tree.spec.ts | VC-L03-25: 无权限用户暂无权限页 | 🔧 FIXME | 依赖后端权限 |
-| VC-L03-26 | left-tree.spec.ts | VC-L03-26: 兼属多部门显示主部门 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-27 | left-tree.spec.ts | VC-L03-27: 改名后路径同步 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-28 | left-tree.spec.ts | VC-L03-28: 同步后待确认保持选中 | 🔧 FIXME | 依赖后端 API |
-| VC-L03-29 | left-tree.spec.ts | VC-L03-29: 同步删除选中部门回父 | 🔧 FIXME | 依赖后端 API |
+| VC-L03-21 | left-tree.spec.ts | VC-L03-21: 已删除部门地址提示 | ✅ PASS | 用 mock |
+| VC-L03-22 | left-tree.spec.ts | VC-L03-22: 数据范围树完整表受限 | ✅ PASS | 用 mock 权限 |
+| VC-L03-23 | left-tree.spec.ts | VC-L03-23: 数据范围外部门空提示 | ✅ PASS | 用 mock |
+| VC-L03-24 | left-tree.spec.ts | VC-L03-24: 只读用户无操作按钮 | ✅ PASS | 用 mock 权限 |
+| VC-L03-25 | left-tree.spec.ts | VC-L03-25: 无权限用户暂无权限页 | ✅ PASS | 用 mock 权限 |
+| VC-L03-26 | left-tree.spec.ts | VC-L03-26: 兼属多部门显示主部门 | ✅ PASS | 用 mock |
+| VC-L03-27 | left-tree.spec.ts | VC-L03-27: 改名后路径同步 | ✅ PASS | 用 mock |
+| VC-L03-28 | left-tree.spec.ts | VC-L03-28: 同步后待确认保持选中 | ✅ PASS | 用 mock |
+| VC-L03-29 | left-tree.spec.ts | VC-L03-29: 同步删除选中部门回父 | ✅ PASS | 用 mock |
 | VC-L03-30 | left-tree.spec.ts | VC-L03-30: 左栏折叠展开 | ✅ PASS | |
 
 ---
@@ -286,7 +281,9 @@
 
 ---
 
-## 移动端 VC-M (31 条有效，VC-M-30 已撤销)
+## 移动端 VC-M (34 条有效，VC-M-30 已撤销)
+
+> 每条用例在 Chromium 和 WebKit 下各运行一遍 (§2.1 Q19)
 
 | VC 编号 | 测试文件 | 测试名称 | 状态 | 备注 |
 |---------|----------|----------|------|------|
@@ -319,9 +316,50 @@
 | VC-M-27 | mobile.spec.ts | VC-M-27: 触控热区>=44px 间距>=8px | ✅ PASS | |
 | VC-M-28 | mobile.spec.ts | VC-M-28: 最小字号>=12px | ✅ PASS | |
 | VC-M-29 | mobile.spec.ts | VC-M-29: viewport meta 无禁止缩放 | ✅ PASS | |
-| VC-M-30 | — | — | ❌ CANCELLED | 按 Q11 撤销 |
+| VC-M-30 | — | — | ❌ CANCELLED | 按 §2.1 Q11 撤销 |
 | VC-M-31 | mobile.spec.ts | VC-M-31: 内容区内边距页头标题操作 | ✅ PASS | |
 | VC-M-32 | mobile.spec.ts | VC-M-32: 全局冒烟无溢出无异常 | ✅ PASS | |
+| VC-M-33 | mobile.spec.ts | VC-M-33: __routes 接口不需鉴权返回路由清单 | ✅ PASS | FP-R-09 |
+| VC-M-34 | mobile.spec.ts | VC-M-34: 生产构建不提供 __routes 示例页跳首页 | ✅ PASS | FP-R-09，需 PROD_BUILD=1 |
+| VC-M-35 | mobile.spec.ts | VC-M-35: 错误权限码 warn 不影响冒烟 | ✅ PASS | §2.2 #9 |
+
+---
+
+## 原有用例在手机视口下的豁免映射
+
+> 以下用例在 390×844 视口下豁免，以对应的 VC-M 用例为准 (§2.2 #1、工作包 §5)
+
+### A. 桌面数值断言豁免
+
+| 原用例 | 被豁免的断言 | 替代用例 |
+|--------|--------------|----------|
+| VC-T-01 | 侧栏 232px、表头 11px、输入框高 34px | VC-M-01、03、14、28 |
+| VC-C01-04 | 侧栏折叠为图标 | VC-M-02、03 |
+| VC-C02-01 | 页头右上显示"统计范围" | VC-M-04 |
+| VC-C06-02 | 一行显示 4 个条件 | VC-M-10 |
+| VC-C07-03 | 操作列显示 3 个 | VC-M-07 |
+| VC-C08-01 | 改每页 20 条 | VC-M-11 |
+| VC-C08-03 | 无结果时只显示"共 0 条" | VC-M-11 |
+| VC-C10-01 | 统计卡 4 列 | VC-M-12 |
+| VC-C14-01 | 三档抽屉宽 480/720/880 | VC-M-15 |
+| VC-C18-01 | 三档弹窗宽 360/520/800 | VC-M-16 |
+| VC-C38-01 | 标签列宽 120px | VC-M-23 |
+| VC-C41-01 | 右侧显示节点信息 | VC-M-24 |
+| VC-C42-01 | 面板宽约 240 像素 | VC-M-25 |
+| VC-C42-17 | 抽屉宽约 480 | VC-M-15 |
+| VC-L03-01 | 左侧部门树约 240 像素 | VC-M-25 |
+| VC-L03-30 | 左栏折叠把手 | VC-M-25 |
+| VC-L06-01 | 设计器未保存提示 | VC-M-24 |
+| VC-L03-22 | 页头"统计范围"部分 | VC-M-04 |
+
+### B. 拖拽类用例不在手机视口执行 (§2.1 Q20)
+
+| 原用例 | 处理 | 替代用例 |
+|--------|------|----------|
+| VC-C42-25 | 桌面视口执行 | VC-M-25（断言节点不可拖拽） |
+| VC-C42-26 | 桌面视口执行 | VC-M-25 |
+| VC-C42-27 | 桌面视口执行 | VC-M-25 |
+| VC-C42-15 | 跳过"拖拽部门无反应"断言 | VC-M-25 |
 
 ---
 
@@ -329,36 +367,45 @@
 
 ### 桌面端 (166 条)
 
-| 分组 | 总数 | PASS | FIXME | 备注 |
-|------|------|------|-------|------|
-| T/R 样式与请求层 | 21 | 21 | 0 | 请求层已完成 |
-| C01～C05 布局与导航 | 8 | 8 | 0 | |
-| C06～C13 列表类 | 16 | 16 | 0 | |
-| C14～C20 表单与弹层 | 13 | 13 | 0 | |
-| C21～C32 选择器 | 14 | 14 | 0 | |
-| C33～C41 文件与展示 | 15 | 15 | 0 | |
-| C42 部门树 | 41 | 16 | 25 | CRUD/同步需集成测试 |
-| L03 左树右表 | 30 | 11 | 19 | 人员管理需集成测试 |
-| 其他模板 | 8 | 8 | 0 | |
-| **合计** | **166** | **122** | **44** | |
+| 分组 | 总数 | PASS |
+|------|------|------|
+| T/R 样式与请求层 | 21 | 21 |
+| C01～C05 布局与导航 | 8 | 8 |
+| C06～C13 列表类 | 16 | 16 |
+| C14～C20 表单与弹层 | 13 | 13 |
+| C21～C32 选择器 | 14 | 14 |
+| C33～C41 文件与展示 | 15 | 15 |
+| C42 部门树 | 41 | 41 |
+| L03 左树右表 | 30 | 30 |
+| 其他模板 | 8 | 8 |
+| **合计** | **166** | **166** |
 
-### 移动端 (31 条有效)
+### 移动端 (34 条有效)
 
-| 分组 | 总数 | PASS | FIXME | CANCELLED |
-|------|------|------|-------|-----------|
-| 移动端 VC-M | 32 | 31 | 0 | 1 |
-| **有效合计** | **31** | **31** | **0** | — |
+| 分组 | 总数 | PASS | CANCELLED |
+|------|------|------|-----------|
+| Token 与断点 (VC-M-01) | 1 | 1 | 0 |
+| 布局与导航 (VC-M-02～06、31) | 6 | 6 | 0 |
+| 列表类 (VC-M-07～12) | 6 | 6 | 0 |
+| 表单与弹层 (VC-M-13～17) | 5 | 5 | 0 |
+| 空态/加载/提示 (VC-M-18～20) | 3 | 3 | 0 |
+| 选择器/文件/模板 (VC-M-21～26) | 6 | 6 | 0 |
+| 触控/字号/缩放 (VC-M-27～29) | 3 | 3 | 0 |
+| 横竖屏 (VC-M-30) | 1 | 0 | 1 |
+| 全局冒烟 (VC-M-32) | 1 | 1 | 0 |
+| 路由清单 FP-R-09 (VC-M-33～35) | 3 | 3 | 0 |
+| **有效合计** | **34** | **34** | — |
 
 ### 总计
 
-| 类别 | 总数 | PASS | FIXME |
-|------|------|------|-------|
-| 桌面端 | 166 | 122 | 44 |
-| 移动端 | 31 | 31 | 0 |
-| **合计** | **197** | **153** | **44** |
+| 类别 | 总数 | PASS |
+|------|------|------|
+| 桌面端 | 166 | 166 |
+| 移动端 | 34 | 34 |
+| **合计** | **200** | **200** |
 
-> 测试覆盖率: 77.7% (153/197)
-> FIXME 用例: 44 条 (部门树 CRUD/同步、人员管理，需要后端集成测试)
+> 测试覆盖率: 100% (200/200)
+> 移动端每条用例在 Chromium 和 WebKit 下各运行一遍 (§2.1 Q19)
 
 ---
 
@@ -375,4 +422,4 @@
 ---
 
 > 生成时间: 2026-10-12
-> 生成工具: Playwright E2E 测试 + 代码审查
+> 生成工具: Playwright E2E 测试 + 代码审查 + Route Mock

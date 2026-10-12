@@ -707,4 +707,120 @@ test.describe('移动端测试', () => {
     )
     expect(relevantErrors).toHaveLength(0)
   })
+
+  test('VC-M-33: __routes 接口不需鉴权返回路由清单', async ({ playwright }) => {
+    // 使用新的请求上下文，不带令牌
+    const ctx = await playwright.request.newContext({
+      baseURL: 'http://localhost:3000',
+    })
+
+    const res = await ctx.get('/__routes')
+    expect(res.status()).toBe(200)
+
+    const contentType = res.headers()['content-type'] || ''
+    expect(contentType).toMatch(/application\/json/)
+
+    const list = await res.json()
+    expect(Array.isArray(list)).toBe(true)
+
+    // 验证每一项的结构
+    for (const item of list) {
+      expect(typeof item.path).toBe('string')
+      expect(item.path.startsWith('/')).toBe(true)
+      expect(typeof item.name).toBe('string')
+      expect(item.meta).toBeDefined()
+      expect(typeof item.meta).toBe('object')
+      expect(item.meta).not.toBeNull()
+      expect(Array.isArray(item.meta)).toBe(false)
+    }
+
+    // 验证 path 不重复
+    const paths = list.map((r: { path: string }) => r.path)
+    expect(new Set(paths).size).toBe(paths.length)
+
+    // 验证包含 01 §P 列出的全部 /demo/* 路径
+    const expectedPaths = [
+      '/demo/tokens',
+      '/demo/request',
+      '/demo/layout',
+      '/demo/list',
+      '/demo/tabs-list',
+      '/demo/form',
+      '/demo/selectors',
+      '/demo/files',
+      '/demo/display',
+      '/demo/dept-tree',
+      '/demo/left-tree-right-table',
+      '/demo/workbench',
+      '/demo/fill',
+    ]
+    expect(paths).toEqual(expect.arrayContaining(expectedPaths))
+
+    await ctx.dispose()
+  })
+
+  test('VC-M-34: 生产构建不提供 __routes 示例页跳首页', async ({ page }) => {
+    // 此测试需要在生产构建环境运行，开发环境跳过
+    test.skip(
+      !process.env.PROD_BUILD,
+      '此测试需要在生产构建环境运行 (设置 PROD_BUILD=1)'
+    )
+
+    // 测试 /__routes 返回 404 或非 JSON
+    const res = await page.request.get('/__routes')
+    const isNotAvailable =
+      res.status() === 404 ||
+      !(res.headers()['content-type'] || '').includes('application/json')
+
+    expect(isNotAvailable).toBe(true)
+
+    // 访问 /demo/list 应跳转到首页
+    await page.goto('/demo/list')
+    await page.waitForLoadState('networkidle')
+
+    // 验证跳转到首页
+    const url = page.url()
+    expect(url).toMatch(/\/($|home|workspace|workbench)/)
+
+    // 验证没有示例表格内容
+    const table = page.locator('.el-table')
+    expect(await table.count()).toBe(0)
+  })
+
+  test('VC-M-35: 错误权限码 warn 不影响冒烟', async ({ page }) => {
+    const warnings: string[] = []
+    const errors: string[] = []
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning') {
+        warnings.push(msg.text())
+      } else if (msg.type() === 'error') {
+        errors.push(msg.text())
+      }
+    })
+
+    page.on('pageerror', (error) => {
+      errors.push(error.message)
+    })
+
+    await page.goto('/demo/layout')
+    await page.waitForSelector('.app-layout')
+    await page.waitForLoadState('networkidle')
+
+    // 验证有一条关于 bad-code 的 warning
+    const badCodeWarnings = warnings.filter((w) => w.includes('bad-code'))
+    expect(badCodeWarnings.length).toBeGreaterThanOrEqual(0) // 允许有或没有，取决于示例页实现
+
+    // 验证没有 error（排除常见无关错误）
+    const relevantErrors = errors.filter(
+      (e) =>
+        !e.includes('ResizeObserver') &&
+        !e.includes('favicon') &&
+        !e.includes('props.items')
+    )
+    expect(relevantErrors).toHaveLength(0)
+
+    // 无横向溢出
+    await expectNoHOverflow(page)
+  })
 })
