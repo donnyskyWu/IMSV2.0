@@ -28,6 +28,8 @@ class TestSeedIdempotency:
             "menus.py",
             "tenant.py",
             "depts.py",
+            "access.py",
+            "users.py",
         ]
 
         for filename in expected_files:

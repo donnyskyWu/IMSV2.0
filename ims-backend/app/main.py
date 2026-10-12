@@ -20,7 +20,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -57,6 +57,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    # 延迟导入，避免会话/鉴权依赖在模块加载时拉回 main。
+    from app.api.deps import get_current_user_optional
+    from app.db.session import get_db
+
     app = FastAPI(
         title=settings.app_name,
         version="2.0.0",
@@ -64,6 +68,9 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.docs_enabled else None,
         openapi_url="/openapi.json" if settings.docs_enabled else None,
         lifespan=lifespan,
+        # get_db 必须在鉴权前面：校验令牌时要读库。两者都挂在应用上，
+        # 业务路由不用各自声明，匿名接口没有令牌时鉴权依赖直接放过。
+        dependencies=[Depends(get_db), Depends(get_current_user_optional)],
     )
 
     # CORS middleware

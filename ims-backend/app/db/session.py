@@ -11,10 +11,12 @@ Rules per FP-C01-01:
 - Football read-only session is independent (FP-H06-01)
 """
 
+from collections.abc import AsyncGenerator, Generator
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Generator, Optional
+from typing import Optional
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -94,12 +96,19 @@ def get_db_session() -> Session:
     return session
 
 
-def get_db() -> Generator[Session, None, None]:
-    """
-    Dependency for FastAPI routes to get database session.
+@contextmanager
+def use_db_session() -> Generator[Session, None, None]:
+    """Bind one session into the request context.
 
-    Creates a new session for each request and handles cleanup.
+    已有会话（单测夹具、嵌套调用）只借用，不提交也不关闭。
+    否则新建会话：成功提交、异常回滚、无论成败都关闭。
+    未真正开始事务时不提交，避免空提交去连已经宕掉的库。
     """
+    existing = _db_session.get()
+    if existing is not None:
+        yield existing
+        return
+
     if SessionLocal is None:
         raise RuntimeError("Database not initialized")
 
@@ -107,9 +116,32 @@ def get_db() -> Generator[Session, None, None]:
     token = _db_session.set(session)
     try:
         yield session
+        # 只在有事务或待写入对象时提交。空会话 commit() 会 autobegin 去连库，
+        # 库宕掉时会把 /health 的 503 变成 500。
+        pending = bool(session.new or session.dirty or session.deleted)
+        if session.in_transaction() or pending:
+            session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         _db_session.reset(token)
         session.close()
+
+
+async def get_db() -> AsyncGenerator[Optional[Session], None]:
+    """FastAPI 依赖：在请求任务内绑定会话。
+
+    必须是异步生成器。同步依赖跑在线程池里，写进 ContextVar 的会话
+    路由和后续依赖都看不见。
+    库还没初始化时交出 None，让 /health 仍能报告 db DOWN。
+    """
+    if SessionLocal is None and _db_session.get() is None:
+        yield None
+        return
+
+    with use_db_session() as session:
+        yield session
 
 
 def get_football_session() -> Generator[Session, None, None]:
@@ -139,7 +171,8 @@ class DatabaseHealth:
             return False
         try:
             with engine.connect() as conn:
-                conn.execute("SELECT 1")
+                # SQLAlchemy 2 拒绝裸字符串，必须 text()，否则 /health 的 db 永远是 DOWN。
+                conn.execute(text("SELECT 1"))
             return True
         except Exception:
             return False
@@ -158,7 +191,7 @@ class DatabaseHealth:
             return False, "DOWN"
         try:
             with football_engine.connect() as conn:
-                conn.execute("SELECT 1")
+                conn.execute(text("SELECT 1"))
             return True, "UP"
         except Exception:
             return False, "DOWN"
