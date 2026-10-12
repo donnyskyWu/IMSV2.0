@@ -3,7 +3,7 @@
  * 依据: 02-验证用例.md VC-M-01~32 (VC-M-30 已撤销)
  */
 import { test, expect } from '@playwright/test'
-import { expectNoHOverflow, expectInViewport, BP_MOBILE, MIN_TOUCH, MIN_GAP, MIN_GAP_SMALL, VW } from './helpers/mobile'
+import { expectNoHOverflow, expectInViewport, hitBox, BP_MOBILE, MIN_TOUCH, MIN_GAP, MIN_GAP_SMALL, VW } from './helpers/mobile'
 
 test.describe('移动端测试', () => {
   test.beforeEach(async ({ page }) => {
@@ -583,24 +583,20 @@ test.describe('移动端测试', () => {
     await page.goto('/demo/tokens')
     await page.waitForSelector('.tokens-demo, .app-layout')
 
-    // 获取所有可见按钮
-    const buttons = page.locator('button:visible, a:visible, [role=button]:visible')
-    const count = await buttons.count()
-
-    // 验证按钮尺寸
-    for (let i = 0; i < Math.min(count, 10); i++) {
-      const btn = buttons.nth(i)
-      const box = await btn.boundingBox()
-      if (box) {
-        // 视觉尺寸可以是 26px (小号) 或更大
-        expect(Math.max(box.width, box.height)).toBeGreaterThanOrEqual(26)
-      }
-    }
-
-    // 获取小号按钮，验证它们之间的间距 ≥18px (§2.3 U1)
+    // 获取小号按钮，验证触控热区 ≥44×44px (§2.3 U1)
     const smallButtons = page.locator('.el-button--small:visible')
     const smallCount = await smallButtons.count()
 
+    // 验证小号按钮的触控热区使用 hitBox() 函数
+    for (let i = 0; i < Math.min(smallCount, 5); i++) {
+      const btn = smallButtons.nth(i)
+      const hit = await hitBox(btn)
+      // 触控热区必须 ≥44×44px
+      expect(hit.width).toBeGreaterThanOrEqual(MIN_TOUCH)
+      expect(hit.height).toBeGreaterThanOrEqual(MIN_TOUCH)
+    }
+
+    // 检查小号按钮之间的视觉间距 ≥18px (§2.3 U1)
     if (smallCount >= 2) {
       const boxes = await Promise.all(
         Array.from({ length: smallCount }, (_, i) =>
@@ -608,7 +604,6 @@ test.describe('移动端测试', () => {
         )
       )
 
-      // 检查同一行的相邻小号按钮间距
       for (let i = 0; i < boxes.length - 1; i++) {
         const current = boxes[i]
         const next = boxes[i + 1]
@@ -648,6 +643,7 @@ test.describe('移动端测试', () => {
   })
 
   test('VC-M-28: 最小字号>=12px', async ({ page }) => {
+    // 依据: §2.1 Q12 - 手机上最小字号 12px
     await page.goto('/demo/tokens')
     await page.waitForSelector('.tokens-demo, .app-layout')
 
@@ -674,7 +670,8 @@ test.describe('移动端测试', () => {
       return minSize
     })
 
-    expect(minFontSize).toBeGreaterThanOrEqual(11)
+    // §2.1 Q12: 最小字号必须 ≥12px
+    expect(minFontSize).toBeGreaterThanOrEqual(12)
   })
 
   test('VC-M-29: viewport meta 无禁止缩放', async ({ page }) => {
@@ -750,12 +747,11 @@ test.describe('移动端测试', () => {
       })
     }
 
+    // §2.2 #9: v-perm 错误码现在是 warn 不是 error，所以不需要过滤
     const relevantErrors = errors.filter(
       (e) =>
         !e.includes('ResizeObserver') &&
         !e.includes('favicon') &&
-        !e.includes('v-perm') &&
-        !e.includes('bad-code') &&
         !e.includes('props.items')
     )
     expect(relevantErrors).toHaveLength(0)
@@ -812,12 +808,9 @@ test.describe('移动端测试', () => {
     await ctx.dispose()
   })
 
-  test('VC-M-34: 生产构建不提供 __routes 示例页跳首页', async ({ page }) => {
-    // 此测试需要在生产构建环境运行，开发环境跳过
-    test.skip(
-      !process.env.PROD_BUILD,
-      '此测试需要在生产构建环境运行 (设置 PROD_BUILD=1)'
-    )
+  test('VC-M-34: 生产构建不提供 __routes 示例页跳首页', async ({ page, browserName }, testInfo) => {
+    // 此测试仅在 prod-build 项目中运行
+    test.skip(testInfo.project.name !== 'prod-build', '仅在 prod-build 项目中运行')
 
     // 测试 /__routes 返回 404 或非 JSON
     const res = await page.request.get('/__routes')
@@ -841,6 +834,7 @@ test.describe('移动端测试', () => {
   })
 
   test('VC-M-35: 错误权限码 warn 不影响冒烟', async ({ page }) => {
+    // 依据: §2.2 #9 - 权限码格式错误使用 console.warn，不影响冒烟
     const warnings: string[] = []
     const errors: string[] = []
 
@@ -860,19 +854,21 @@ test.describe('移动端测试', () => {
     await page.waitForSelector('.app-layout')
     await page.waitForLoadState('networkidle')
 
-    // 验证有一条关于 bad-code 的 warning
-    const badCodeWarnings = warnings.filter((w) => w.includes('bad-code'))
-    expect(badCodeWarnings.length).toBeGreaterThanOrEqual(0) // 允许有或没有，取决于示例页实现
+    // 验证有至少一条关于 bad-code 或 v-perm 的 warning (§2.2 #9)
+    const badCodeWarnings = warnings.filter((w) => w.includes('bad-code') || w.includes('v-perm'))
+    expect(badCodeWarnings.length).toBeGreaterThanOrEqual(1)
 
-    // 验证没有 error（排除常见无关错误和 v-perm 权限码格式警告）
-    // 按 §2.2 #9，权限码格式错误降级为 console.warn，不算冒烟失败
+    // 验证没有关于 bad-code 或 v-perm 的 error
+    // 按 §2.2 #9，权限码格式错误应该是 warn 不是 error
+    const badCodeErrors = errors.filter((e) => e.includes('bad-code') || e.includes('v-perm'))
+    expect(badCodeErrors).toHaveLength(0)
+
+    // 验证没有其他 error（排除常见无关错误）
     const relevantErrors = errors.filter(
       (e) =>
         !e.includes('ResizeObserver') &&
         !e.includes('favicon') &&
-        !e.includes('props.items') &&
-        !e.includes('v-perm') &&
-        !e.includes('bad-code')
+        !e.includes('props.items')
     )
     expect(relevantErrors).toHaveLength(0)
 

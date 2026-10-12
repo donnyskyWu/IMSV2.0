@@ -52,6 +52,20 @@ export default defineConfig({
         isMobile: true,
       },
     },
+
+    // 生产构建测试 (VC-M-34)
+    {
+      name: 'prod-build',
+      use: {
+        ...devices['iPhone 14'],
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        isMobile: true,
+        baseURL: 'http://localhost:4173',
+      },
+      testMatch: /mobile\.spec\.ts/,
+      grep: /VC-M-34/,
+    },
   ],
 
   // 自动启动开发服务器

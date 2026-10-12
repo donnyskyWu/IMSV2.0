@@ -99,6 +99,19 @@
     padding: 0 11px;
     font-size: 12px;
     border-radius: var(--r-xs);
+
+    // §2.3 U1: 扩大触控热区到 ≥44×44px
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      min-width: var(--min-touch-size);
+      min-height: var(--min-touch-size);
+      transform: translate(-50%, -50%);
+    }
   }
 
   &--primary {

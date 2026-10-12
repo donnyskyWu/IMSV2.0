@@ -24,11 +24,11 @@ function checkPerm(binding: DirectiveBinding): boolean {
 
   const codes = Array.isArray(value) ? value : [value]
 
-  // 开发环境校验权限码格式
+  // 开发环境校验权限码格式 (§2.2 #9: 使用 warn 而非 error)
   if (import.meta.env.DEV) {
     codes.forEach((code) => {
       if (typeof code === 'string' && !PERM_CODE_PATTERN.test(code)) {
-        console.error(`[v-perm] 权限码格式不符合 ims:<域>:<资源>:<动作>: ${code}`)
+        console.warn(`[v-perm] 权限码格式不符合 ims:<域>:<资源>:<动作>: ${code}`)
       }
     })
   }
