@@ -46,9 +46,12 @@ function routesEndpointPlugin(): Plugin {
  * 目标地址用 VITE_API_PROXY_TARGET 覆盖，默认 http://127.0.0.1:8000。
  * 不配代理时这两个前缀会落到 Vite 自己，开发环境前后端对不上。
  */
-function backendProxy(mode: string): Record<string, { target: string; changeOrigin: boolean }> {
+function backendProxy(mode: string): Record<string, { target: string; changeOrigin: boolean }> | undefined {
   const fileEnv = loadEnv(mode, process.cwd(), '')
-  const target = process.env.VITE_API_PROXY_TARGET || fileEnv.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'
+  const raw = process.env.VITE_API_PROXY_TARGET ?? fileEnv.VITE_API_PROXY_TARGET
+  // off：只给「不连后端」的组件用例用。不设或设成地址时才转发。
+  if (raw === 'off') return undefined
+  const target = raw || 'http://127.0.0.1:8000'
   return {
     '/admin-api': { target, changeOrigin: true },
     '/health': { target, changeOrigin: true },
@@ -94,13 +97,13 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       strictPort: true,
       // 与 preview 使用同一份代理，避免预览环境和开发环境行为不一致
-      proxy,
+      ...(proxy ? { proxy } : {}),
     },
     preview: {
       port: 4173,
       host: '127.0.0.1',
       strictPort: true,
-      proxy,
+      ...(proxy ? { proxy } : {}),
     },
   }
 })
