@@ -470,3 +470,76 @@ class TestMemoryCacheDirectly:
         finally:
             cache_module._redis_client = original_client
             cache_module._cache_mode = original_mode
+
+
+def test_claim_refresh_lua_uses_getdel():
+    """领取脚本必须用 GETDEL，不能先 GET 再 DEL。"""
+    from app.core.cache import CLAIM_REFRESH_LUA
+
+    assert "GETDEL" in CLAIM_REFRESH_LUA
+    assert "SET" in CLAIM_REFRESH_LUA
+
+
+def test_claim_refresh_memory_statuses():
+    """内存兜底覆盖 ok / concurrent / reuse / missing。并发正确性看真实 Redis。"""
+    import app.core.cache as cache_module
+
+    original = cache_module._redis_client
+    cache_module._redis_client = None
+    try:
+        missing_sid, missing_status = cache_module.Cache.claim_refresh(
+            "lock-m", "index-m", "used-m", 10,
+        )
+        assert (missing_sid, missing_status) == ("", "missing")
+
+        cache_module.Cache.set("index-ok", "sid-1", ttl=30)
+        sid, status = cache_module.Cache.claim_refresh("lock-ok", "index-ok", "used-ok", 10)
+        assert (sid, status) == ("sid-1", "ok")
+        assert cache_module.Cache.get("index-ok") is None
+
+        again_sid, again_status = cache_module.Cache.claim_refresh(
+            "lock-ok", "index-ok", "used-ok", 10,
+        )
+        assert (again_sid, again_status) == ("", "concurrent")
+        cache_module.Cache.delete("lock-ok")
+
+        cache_module.Cache.set("used-re", "sid-re", ttl=30)
+        reuse_sid, reuse_status = cache_module.Cache.claim_refresh(
+            "lock-re", "index-re", "used-re", 10,
+        )
+        assert (reuse_sid, reuse_status) == ("sid-re", "reuse")
+    finally:
+        cache_module._redis_client = original
+
+
+def test_claim_refresh_redis_error_and_bad_payload():
+    """Redis eval 失败或返回格式不对时，当成没领到，不抛到业务层。"""
+    import app.core.cache as cache_module
+
+    original = cache_module._redis_client
+
+    class Boom:
+        def eval(self, *_args, **_kwargs):
+            raise RuntimeError("redis down")
+
+    class Odd:
+        def __init__(self, result):
+            self.result = result
+
+        def eval(self, *_args, **_kwargs):
+            return self.result
+
+    try:
+        cache_module._redis_client = Boom()
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("", "missing")
+
+        cache_module._redis_client = Odd("nope")
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("", "missing")
+
+        cache_module._redis_client = Odd([b"sid", b""])
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", "missing")
+
+        cache_module._redis_client = Odd([b"sid", b"ok"])
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", "ok")
+    finally:
+        cache_module._redis_client = original

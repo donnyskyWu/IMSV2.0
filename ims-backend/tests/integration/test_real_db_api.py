@@ -217,6 +217,7 @@ def test_real_login_me_and_health(tmp_path):
             menus = me_body["data"]["menus"]
             assert isinstance(menus, list)
             assert len(menus) > 0
+            # 部门管理挂在「系统管理」目录下，不在根上。
             assert any(item["name"] == "部门管理" for item in _walk_menus(menus))
 
         check_engine, check = _connect(db_url)
@@ -448,5 +449,12 @@ def test_r10_me_only_workbench_and_other_api_forbidden(tmp_path):
             )
             assert forbidden.status_code == 200
             assert forbidden.json()["code"] == 1008
+            # B1 组织同步查询（ims:system:org-sync:query）。R10 没有这个码，同样 1008。
+            org_sync = client.get(
+                "/admin-api/ims/system/org-sync/latest-batch",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert org_sync.status_code == 200
+            assert org_sync.json()["code"] == 1008
     finally:
         _release_real_db(original_url, context_token)
