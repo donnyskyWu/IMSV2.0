@@ -130,6 +130,19 @@ async def get_users(
     ...
 ```
 
+## 种子
+
+先迁移再灌种子。连接串只放在环境变量 `IMS_DB_URL`，不要写进仓库。
+
+```bash
+alembic upgrade head
+python -m tools.seed --env dev
+# 02 §0.2 测试账号（密码 Test1234）只在 e2e 环境创建
+python -m tools.seed --env e2e
+```
+
+重复执行只补缺：不改管理员已经改过的角色、菜单名称、字典标签、参数值；管理员删掉的默认授权不会被加回去。
+
 ## 数据库迁移
 
 ```bash
@@ -156,3 +169,4 @@ mypy app/ --ignore-missing-imports
 ## 版本历史
 
 - **2.0.0**: 初始版本，框架核心实现
+- **B1-M01 PR1**: 种子与迁移基础（标准角色 R2=`DEPT`、B1 菜单授权、§0.5 加列）

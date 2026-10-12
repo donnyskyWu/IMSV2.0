@@ -14,7 +14,7 @@ First batch dictionaries:
 - dict_todo_status, dict_msg_type, etc.
 """
 
-from datetime import datetime
+from tools.seed.timeutil import seed_now
 
 DICT_TYPES = [
     {"dict_type": "dict_user_status", "name": "用户状态"},
@@ -33,6 +33,13 @@ DICT_TYPES = [
     {"dict_type": "dict_document_type", "name": "文档类型"},
     {"dict_type": "dict_marketing_plan_type", "name": "营销计划类型"},
     {"dict_type": "dict_content_type", "name": "内容类型"},
+    # B1 BG-07。dict_org_sync_status 已在上面登记，这里只补本批新类型。
+    {"dict_type": "dict_org_event_type", "name": "组织同步事件类型"},
+    {"dict_type": "dict_reconcile_action", "name": "对账动作"},
+    {"dict_type": "dict_reconcile_trigger", "name": "对账触发方式"},
+    {"dict_type": "dict_reconcile_status", "name": "对账状态"},
+    {"dict_type": "dict_position_rule_status", "name": "岗位规则状态"},
+    {"dict_type": "dict_login_channel", "name": "登录渠道"},
 ]
 
 DICT_DATA = [
@@ -74,10 +81,50 @@ DICT_DATA = [
     {"dict_type": "dict_common_status", "dict_value": "DISABLED", "dict_label": "停用", "color_type": "neutral", "sort": 2, "is_builtin": True},
 
     # dict_org_sync_status
+    # B0a 已写入 PENDING/RUNNING/SUCCESS/FAILED 的中文。BG-07 还要「失败重试」「死信」。
+    # 已有值的标签不改（只补缺不覆盖）。新环境仍沿用 B0a 标签，避免同一字典两套文案。
     {"dict_type": "dict_org_sync_status", "dict_value": "PENDING", "dict_label": "待执行", "color_type": "neutral", "sort": 1, "is_builtin": True},
     {"dict_type": "dict_org_sync_status", "dict_value": "RUNNING", "dict_label": "执行中", "color_type": "primary", "sort": 2, "is_builtin": True},
     {"dict_type": "dict_org_sync_status", "dict_value": "SUCCESS", "dict_label": "成功", "color_type": "success", "sort": 3, "is_builtin": True},
     {"dict_type": "dict_org_sync_status", "dict_value": "FAILED", "dict_label": "失败", "color_type": "danger", "sort": 4, "is_builtin": True},
+    {"dict_type": "dict_org_sync_status", "dict_value": "RETRYING", "dict_label": "失败重试", "color_type": "warning", "sort": 5, "is_builtin": True},
+    {"dict_type": "dict_org_sync_status", "dict_value": "DEAD", "dict_label": "死信", "color_type": "danger", "sort": 6, "is_builtin": True},
+
+    # dict_org_event_type（BG-01 的 7 种）
+    {"dict_type": "dict_org_event_type", "dict_value": "HIRE", "dict_label": "入职", "color_type": "success", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_org_event_type", "dict_value": "TRANSFER", "dict_label": "调岗", "color_type": "warning", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_org_event_type", "dict_value": "USER_UPDATE", "dict_label": "信息变更", "color_type": "info", "sort": 3, "is_builtin": True},
+    {"dict_type": "dict_org_event_type", "dict_value": "RESIGN", "dict_label": "离职", "color_type": "neutral", "sort": 4, "is_builtin": True},
+    {"dict_type": "dict_org_event_type", "dict_value": "DEPT_CREATE", "dict_label": "部门新增", "color_type": "primary", "sort": 5, "is_builtin": True},
+    {"dict_type": "dict_org_event_type", "dict_value": "DEPT_UPDATE", "dict_label": "部门变更", "color_type": "info", "sort": 6, "is_builtin": True},
+    {"dict_type": "dict_org_event_type", "dict_value": "DEPT_DELETE", "dict_label": "部门删除", "color_type": "danger", "sort": 7, "is_builtin": True},
+
+    # dict_reconcile_action（ORG-09 的 10 个动作）
+    {"dict_type": "dict_reconcile_action", "dict_value": "DEPT_CREATE", "dict_label": "新增部门", "color_type": "primary", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "DEPT_UPDATE", "dict_label": "更新部门", "color_type": "info", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "DEPT_DISABLE", "dict_label": "停用部门", "color_type": "neutral", "sort": 3, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "USER_CREATE", "dict_label": "新增人员", "color_type": "success", "sort": 4, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "USER_UPDATE", "dict_label": "更新人员", "color_type": "info", "sort": 5, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "USER_RESIGN", "dict_label": "离职", "color_type": "neutral", "sort": 6, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "MOVE_TO_PENDING", "dict_label": "移入待分配", "color_type": "warning", "sort": 7, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "LOCAL_ORPHAN", "dict_label": "本地部门待确认", "color_type": "warning", "sort": 8, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "SAME_NAME", "dict_label": "同名本地部门", "color_type": "yellow", "sort": 9, "is_builtin": True},
+    {"dict_type": "dict_reconcile_action", "dict_value": "POSITION_ARCHIVE", "dict_label": "岗位归档", "color_type": "neutral", "sort": 10, "is_builtin": True},
+
+    {"dict_type": "dict_reconcile_trigger", "dict_value": "SCHEDULE", "dict_label": "定时", "color_type": "info", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_reconcile_trigger", "dict_value": "MANUAL", "dict_label": "手动", "color_type": "primary", "sort": 2, "is_builtin": True},
+
+    {"dict_type": "dict_reconcile_status", "dict_value": "RUNNING", "dict_label": "进行中", "color_type": "primary", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_reconcile_status", "dict_value": "SUCCESS", "dict_label": "成功", "color_type": "success", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_reconcile_status", "dict_value": "FAILED", "dict_label": "失败", "color_type": "danger", "sort": 3, "is_builtin": True},
+
+    {"dict_type": "dict_position_rule_status", "dict_value": "ENABLED", "dict_label": "启用", "color_type": "success", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_position_rule_status", "dict_value": "DISABLED", "dict_label": "停用", "color_type": "neutral", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_position_rule_status", "dict_value": "ARCHIVED", "dict_label": "已归档", "color_type": "neutral", "sort": 3, "is_builtin": True},
+
+    {"dict_type": "dict_login_channel", "dict_value": "PASSWORD", "dict_label": "账号密码", "color_type": "primary", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_login_channel", "dict_value": "DINGTALK_QR", "dict_label": "钉钉扫码", "color_type": "info", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_login_channel", "dict_value": "DINGTALK_H5", "dict_label": "钉钉免登", "color_type": "purple", "sort": 3, "is_builtin": True},
 
     # dict_todo_status (placeholder)
     {"dict_type": "dict_todo_status", "dict_value": "PENDING", "dict_label": "待处理", "color_type": "warning", "sort": 1, "is_builtin": True},
@@ -110,7 +157,7 @@ def seed_dicts(env: str, dry_run: bool = False) -> int:
 
     session = get_db_session()
     count = 0
-    now = datetime.now()
+    now = seed_now()
 
     # Seed dict types
     for dt in DICT_TYPES:

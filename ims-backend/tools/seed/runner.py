@@ -2,6 +2,7 @@
 Seed runner (FP-H05-01).
 
 Orchestrates all seed operations in correct order.
+连接串只从 IMS_DB_URL / DATABASE_URL 读取，由应用配置和 use_db_session 使用。
 """
 
 from typing import Optional
@@ -9,6 +10,7 @@ from typing import Optional
 from tools.seed.access import seed_access
 from tools.seed.depts import seed_depts
 from tools.seed.dicts import seed_dicts
+from tools.seed.grants import seed_grants
 from tools.seed.menus import seed_menus
 from tools.seed.params import seed_params
 from tools.seed.roles import seed_roles
@@ -23,37 +25,29 @@ def run_seeds(
 ) -> bool:
     """
     Run all or selected seed operations.
-    
+
     Order matters:
     1. tenant - Platform tenant must exist first
     2. dicts - Dictionaries for status values
     3. params - System parameters
     4. menus - Menu tree with permission codes
-    5. roles - Standard roles with menu assignments
-    6. depts - Root and system departments
-    7. access - Default package, package menus, R1 role menus
-    8. users - E2E login account (only --env e2e)
-    
-    Args:
-        env: Environment (dev/test/e2e/prod)
-        only: List of seed categories to run, or None for all
-        dry_run: If True, show what would be done without executing
-        
-    Returns:
-        True if all seeds succeeded
-    """
-    # access 依赖菜单和角色；users 只在 e2e 生成测试账号。
-    all_seeds = ["tenant", "dicts", "params", "menus", "roles", "depts", "access"]
-    if env == "e2e":
-        all_seeds.append("users")
+    5. roles - Standard roles with data scope
+    6. grants - B1 default role-menu grants (insert-if-absent)
+    7. depts - Root, system department, and e2e departments
+    8. access - Default package, package menus, R1 role menus
+    9. users - E2E accounts when env=e2e
 
-    # Determine which seeds to run
+    access 放在菜单和 B1 授权之后，这样新菜单会进默认套餐，/me 才能看见。
+    """
+    all_seeds = [
+        "tenant", "dicts", "params", "menus", "roles", "grants", "depts", "access", "users",
+    ]
+
     seeds_to_run = only if only else all_seeds
 
-    # Validate
-    for s in seeds_to_run:
-        if s not in all_seeds:
-            print(f"ERROR: Unknown seed category: {s}")
+    for seed_name in seeds_to_run:
+        if seed_name not in all_seeds:
+            print(f"ERROR: Unknown seed category: {seed_name}")
             print(f"Valid categories: {', '.join(all_seeds)}")
             return False
 
@@ -63,45 +57,42 @@ def run_seeds(
     print(f"Categories: {', '.join(seeds_to_run)}")
     print()
 
-    # Run seeds in order
     seed_functions = {
         "tenant": seed_tenant,
         "dicts": seed_dicts,
         "params": seed_params,
         "menus": seed_menus,
         "roles": seed_roles,
+        "grants": seed_grants,
         "depts": seed_depts,
         "access": seed_access,
         "users": seed_users,
     }
 
-    # 种子函数通过 get_db_session() 取会话，脚本进程里必须先绑上。
-    from app.db.session import init_db, use_db_session
+    from app.db.session import _db_session, init_db, use_db_session
 
-    if not dry_run:
+    if not dry_run and _db_session.get() is None:
         init_db()
 
     def _execute() -> dict[str, int]:
         executed: dict[str, int] = {}
-        for seed_name in all_seeds:
-            if seed_name not in seeds_to_run:
+        for name in all_seeds:
+            if name not in seeds_to_run:
                 continue
-            print(f"--- Seeding {seed_name} ---")
-            func = seed_functions[seed_name]
-            count = func(env=env, dry_run=dry_run)
-            executed[seed_name] = count
-            print(f"  {seed_name}: {count} records")
+            print(f"--- Seeding {name} ---")
+            count = seed_functions[name](env=env, dry_run=dry_run)
+            executed[name] = count
+            print(f"  {name}: {count} records")
         return executed
 
     try:
-        # dry-run 不连库。真实执行包在同一会话里，失败整体回滚未提交的写入。
         if dry_run:
             results = _execute()
         else:
             with use_db_session():
                 results = _execute()
-    except Exception as e:
-        print(f"  ERROR: {e}")
+    except Exception as exc:
+        print(f"  ERROR: {exc}")
         return False
 
     print()
@@ -109,5 +100,4 @@ def run_seeds(
     for name, count in results.items():
         print(f"  {name}: {count}")
     print("=== Done ===")
-
     return True

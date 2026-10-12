@@ -29,6 +29,7 @@ class TestSeedIdempotency:
             "tenant.py",
             "depts.py",
             "access.py",
+            "grants.py",
             "users.py",
         ]
 
@@ -54,6 +55,14 @@ class TestSeedIdempotency:
 
         assert r2 is not None
         assert r2["data_scope"] == "DEPT"
+        assert r2["name"] == "部门管理员"
+
+    def test_r4_has_ip_group_scope(self):
+        """Q10：R4 是 IP_GROUP，不是 ALL。"""
+        from tools.seed.roles import STANDARD_ROLES
+
+        r4 = next(r for r in STANDARD_ROLES if r["role_key"] == "R4")
+        assert r4["data_scope"] == "IP_GROUP"
 
 
 class TestSeedDicts:
