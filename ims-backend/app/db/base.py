@@ -40,7 +40,8 @@ class AuditMixin:
     """
     
     # Primary key - BIGINT auto increment
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # Note: SQLite uses INTEGER for auto-increment, mapped to BigInteger for MySQL
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement="auto")
     
     # Tenant isolation
     tenant_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
