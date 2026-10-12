@@ -1,5 +1,6 @@
 /**
- * 前端纯函数单测。覆盖率只统计登录落地、错误文案、改密规则这三个工具文件。
+ * 前端纯函数单测。coverage.include 写死下面三个 utils，100% 只代表这三份文件。
+ * stores、router、views 不进这份统计，由 Playwright 覆盖。
  * 80%/90% 门槛在 IMS-单元测试Checklist 里是后端新增代码与 P0 Service；
  * 这三个文件单独要求行、分支、函数都 ≥ 90%。
  */
