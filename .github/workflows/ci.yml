@@ -62,10 +62,20 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      # 刷新轮换和登录锁定都写 Redis。与 #18 一样必须是真实 Redis，不能留空回退内存。
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     env:
       IMS_ENV: dev
       IMS_DB_URL: mysql+pymysql://root:testpass@127.0.0.1:3306/ims_test?charset=utf8mb4
-      IMS_REDIS_URL: ""
+      IMS_REDIS_URL: redis://127.0.0.1:6379/0
       IMS_JWT_SECRET: test-jwt-secret-for-ci
       VITE_API_PROXY_TARGET: http://127.0.0.1:8000
     steps:
