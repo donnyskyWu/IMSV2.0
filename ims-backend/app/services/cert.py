@@ -51,6 +51,8 @@ from app.services.corp_support import (
 from app.services.files import FileService
 from app.services.message import notify
 from app.services.realname import RealnameService
+from app.services.todo import cancel as cancel_todo
+from app.services.todo import complete as complete_todo
 
 QUERY = "ims:cert:archive:query"
 QUERY_SELF = "ims:cert:archive:query-self"
@@ -226,9 +228,8 @@ class CertService:
             raise BizError.not_found()
         if row.is_locked:
             raise BizError(1502, msg="证件已锁定，不可删除")
-        from app.services.todo import todo
         soft_delete(row)
-        todo.cancel(source_type="CERT_EXPIRE", source_id=row.id)
+        cancel_todo(get_db_session(), source_type="CERT_EXPIRE", source_id=int(row.id))
         self._close_tasks(row.id)
         get_db_session().flush()
 
@@ -456,7 +457,18 @@ class CertService:
             User.tenant_id == tenant_id(),
         ).all()
         for item in users:
-            notify(int(item[0]), "证件高频查看", f"证件 {cert_id}", scene="CERT_VIEW")
+            notify(
+                session,
+                event_type="CERT_VIEW",
+                biz_key=f"{cert_id}:{int(item[0])}",
+                receivers=[int(item[0])],
+                title="证件高频查看",
+                content=f"证件 {cert_id}",
+                source_module="公司资源",
+                ref_type="CERT",
+                ref_id=cert_id,
+            )
+        session.flush()
 
     def _close_tasks(self, cert_id: int) -> None:
         from app.domains.corp.models import CertExpireTask
@@ -470,10 +482,14 @@ class CertService:
 
     def _resolve_renew_task(self, cert_id: int) -> None:
         from app.domains.corp.models import CertExpireTask
-        from app.services.todo import todo
         rows = get_db_session().execute(
             base_stmt(CertExpireTask).where(CertExpireTask.cert_id == cert_id)
         ).scalars().all()
         for task in rows:
             task.status = "RENEW_RESOLVED"
-        todo.complete(source_type="CERT_EXPIRE", source_id=cert_id)
+        complete_todo(
+            get_db_session(),
+            source_type="CERT_EXPIRE",
+            source_id=int(cert_id),
+            by_user=user_id(),
+        )

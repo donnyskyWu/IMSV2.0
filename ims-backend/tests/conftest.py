@@ -42,53 +42,80 @@ def _is_sqlite(url: str) -> bool:
     return url.startswith("sqlite")
 
 
+# Module-level SQLite engine singleton to avoid StaticPool issues
+_sqlite_engine = None
+
+
 @pytest.fixture(scope="function")
 def db_engine():
     """Create database engine for tests (MySQL or SQLite)."""
+    global _sqlite_engine
+
     db_url = os.environ.get("IMS_DB_URL", "sqlite:///:memory:")
     is_sqlite = _is_sqlite(db_url)
-
-    if is_sqlite:
-        engine = create_engine(
-            db_url,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-            echo=False,
-        )
-
-        # Enable foreign keys for SQLite
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-    else:
-        # MySQL or other DB - use connection pooling
-        engine = create_engine(
-            db_url,
-            echo=False,
-            pool_pre_ping=True,
-        )
 
     # Import all models to ensure they're registered with Base
     import app.domains.corp.models  # noqa: F401
     import app.domains.shared.models  # noqa: F401
     from app.domains.sys import models  # noqa: F401
 
-    # Drop and recreate all tables for clean state
-    if not is_sqlite:
-        # For MySQL, drop tables first to ensure clean state
-        Base.metadata.drop_all(bind=engine)
+    if is_sqlite:
+        # For SQLite with StaticPool, reuse the same engine instance
+        # and just clean up data between tests
+        if _sqlite_engine is None:
+            _sqlite_engine = create_engine(
+                db_url,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+                echo=False,
+            )
 
-    Base.metadata.create_all(bind=engine)
+            # Enable foreign keys for SQLite
+            @event.listens_for(_sqlite_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
+            # Create tables only once for the SQLite engine
+            # Use checkfirst=True and catch any duplicate index errors
+            try:
+                Base.metadata.create_all(bind=_sqlite_engine, checkfirst=True)
+            except Exception as e:
+                if "already exists" not in str(e):
+                    raise
+
+        engine = _sqlite_engine
+
+        # Clean up data between tests by truncating all tables
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            tables = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            ).fetchall()
+            for (table_name,) in tables:
+                conn.execute(text(f"DELETE FROM [{table_name}]"))
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+            conn.commit()
+    else:
+        # MySQL or other DB - create fresh engine each time
+        engine = create_engine(
+            db_url,
+            echo=False,
+            pool_pre_ping=True,
+        )
+
+        # MySQL 每次换新库表。SQLite 在上面只建一次。
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
 
     yield engine
 
     # Cleanup
     if not is_sqlite:
         Base.metadata.drop_all(bind=engine)
-
-    engine.dispose()
+        engine.dispose()
 
 
 @pytest.fixture(scope="function")

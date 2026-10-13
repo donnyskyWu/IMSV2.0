@@ -25,7 +25,7 @@ from app.services.corp_support import (
     tenant_id,
 )
 from app.services.message import notify
-from app.services.todo import todo
+from app.services.todo import create as create_todo
 
 
 def apply_test_clock(raw: Optional[str]) -> None:
@@ -132,7 +132,7 @@ class CertExpireService:
             if delta < timedelta(minutes=10):
                 return {"reminded": False, "remindCount": task.remind_count}
         cert = get_alive(MasterCert, task.cert_id)
-        _deliver(cert, task.level or "YELLOW")
+        _deliver(cert, task.level or "YELLOW", biz_key=f"{cert.id}:remind:{int(task.remind_count or 0)}")
         task.remind_count = int(task.remind_count or 0) + 1
         task.last_remind_time = get_now().replace(tzinfo=None)
         get_db_session().flush()
@@ -168,17 +168,34 @@ def _task_for(cert_id: int, level: str) -> CertExpireTask:
     return add_row(session, created)
 
 
-def _deliver(cert: MasterCert, level: str) -> None:
+def _deliver(cert: MasterCert, level: str, biz_key: Optional[str] = None) -> None:
+    """走 B3 的 notify / create。同一级别共用 biz_key，升级或催办换 key 才会再发。"""
+    receivers = _recipients(cert)
+    if not receivers:
+        return
     title = f"证件到期{level}"
-    for uid in _recipients(cert):
-        notify(uid, title, cert.name or "", scene="CERT_EXPIRE")
-        todo.create(
-            assignee_user_id=uid,
-            title=title,
-            type="预警",
-            source_type="CERT_EXPIRE",
-            source_id=cert.id,
-        )
+    session = get_db_session()
+    notify(
+        session,
+        event_type="CERT_EXPIRE",
+        biz_key=biz_key or f"{cert.id}:{level}",
+        receivers=receivers,
+        title=title,
+        content=cert.name or "",
+        source_module="公司资源",
+        ref_type="CERT",
+        ref_id=cert.id,
+    )
+    create_todo(
+        session,
+        todo_type="WARNING",
+        source_module="公司资源",
+        source_type="CERT_EXPIRE",
+        source_id=int(cert.id),
+        title=title,
+        assignee_user_ids=receivers,
+    )
+    session.flush()
 
 
 def _recipients(cert: MasterCert) -> list[int]:

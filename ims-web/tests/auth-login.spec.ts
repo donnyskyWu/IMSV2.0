@@ -361,7 +361,7 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page.locator('.el-table')).toHaveCount(0)
   })
 
-  test('E2E-B1-LG-23 仅工作台菜单在 B3 前落在未分配权限提示', async ({ page }) => {
+  test('E2E-B1-LG-23 仅工作台菜单落地 /ims/workbench', async ({ page }) => {
     await installAuth(page, async (route) => {
       await fulfillLogin(route, ok({
         accessToken: 'r10-token',
@@ -380,13 +380,18 @@ test.describe('B1 账号登录与改密', () => {
     })
     await page.goto('/login')
     await submitLogin(page, 'test_r10', 'Test1234')
-    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
-    // B3 前工作台路由未登记，侧栏不渲染这份菜单，提示只出现在内容区。
-    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
-    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
-    await expect(page.locator('.app-sidebar').getByText('工作台')).toHaveCount(0)
-    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
+    await expect(page).toHaveURL((url) => new URL(url).pathname === '/ims/workbench')
+    await expect(page.getByTestId('unassigned-panel')).toHaveCount(0)
     await expect(page.getByTestId('denied-panel')).toHaveCount(0)
+    const sidebar = page.locator('.app-sidebar')
+    await expect(sidebar).toHaveCount(1)
+    const width = page.viewportSize()?.width ?? 1440
+    if (width <= 390) {
+      await page.locator('.app-layout').first().locator('> .app-main > .app-topbar .menu-btn').click()
+    }
+    await expect(sidebar.locator('.el-menu-item')).toHaveCount(1)
+    await expect(sidebar.getByText('工作台')).toHaveCount(1)
+    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
 
     // 地址栏直接打开组织页、岗位页，都停在无权限页，不渲染业务表格。
     await page.goto('/ims/auth/org')
@@ -414,6 +419,25 @@ test.describe('B1 账号登录与改密', () => {
     await page.getByPlaceholder('请输入用户名').fill('test_lock')
     await expect(page.getByRole('button', { name: '登录' })).toBeDisabled()
     await expect(page).toHaveURL(/\/login/)
+  })
+
+  test('1216 冻结无法登录，未带令牌访问 /me 返回 1002', async ({ page }) => {
+    await installAuth(page, async (route) => {
+      await fulfillLogin(route, fail(1216, '账号已冻结或已离职，无法登录'))
+    })
+    await page.goto('/login')
+    await submitLogin(page, 'test_frozen', 'Test1234')
+    await expect(page.getByTestId('login-banner')).toHaveText('账号已冻结或已离职，无法登录，请联系管理员')
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
+
+    const me = await page.evaluate(async () => {
+      const response = await fetch('/admin-api/ims/auth/me')
+      const body = await response.json() as { code?: number }
+      return { status: response.status, code: body.code }
+    })
+    expect(me.status).toBe(401)
+    expect(me.code).toBe(1002)
   })
 
   test('1216 与 1008 使用固定提示且不进入系统', async ({ page }) => {

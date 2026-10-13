@@ -5,15 +5,17 @@
  * 结构: 侧栏(232px) + 顶栏(56px) + 内容区
  * 手机: 侧栏改为左侧抽屉 240px, 带遮罩, 点菜单项后自动收起
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { Menu, Bell, ArrowDown, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDownloadStore } from '@/stores/download'
+import { useUnreadStore } from '@/stores/unread'
 import { useResponsive } from '@/utils/responsive'
 import { collectLeafPaths, resolveLanding, visibleMenus } from '@/utils/login-landing'
 import DownloadBar from '@/components/file/DownloadBar.vue'
+import BellDrawer from '@/components/workbench/BellDrawer.vue'
 import type { MenuItem } from '@/types'
 import SidebarMenuTree from '@/components/layout/SidebarMenuTree.vue'
 
@@ -23,14 +25,15 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const downloadStore = useDownloadStore()
+const unreadStore = useUnreadStore()
 const { isMobile } = useResponsive()
 
 // 侧栏状态
 const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
 const mobileSidebarOpen = ref(false)
 
-// 未读消息数 (模拟)
-const unreadCount = ref(3)
+// 铃铛抽屉
+const bellDrawerVisible = ref(false)
 
 // 计算属性
 const currentPath = computed(() => route.path)
@@ -143,9 +146,27 @@ function getActiveMenuPaths(): string[] {
 // 退出登录。记下需要真实登录，避免开发环境在浏览器后退时又自动进入示例页。
 function handleLogout() {
   authStore.clearSession()
+  unreadStore.stopPolling()
+  unreadStore.reset()
   sessionStorage.setItem('ims_require_auth', '1')
   router.push('/login')
 }
+
+// 打开铃铛抽屉
+function openBellDrawer() {
+  bellDrawerVisible.value = true
+}
+
+// 启动未读轮询
+onMounted(() => {
+  if (authStore.isLoggedIn) {
+    unreadStore.startPolling()
+  }
+})
+
+onUnmounted(() => {
+  unreadStore.stopPolling()
+})
 </script>
 
 <template>
@@ -218,8 +239,8 @@ function handleLogout() {
         <!-- 右侧 (Q3: 只保留未读消息和用户菜单) -->
         <div class="topbar-right">
           <!-- 未读消息 -->
-          <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="msg-badge">
-            <el-button class="topbar-btn touch-target" text>
+          <el-badge :value="unreadStore.count" :hidden="unreadStore.count === 0" class="msg-badge">
+            <el-button class="topbar-btn touch-target" text @click="openBellDrawer">
               <el-icon :size="20"><Bell /></el-icon>
             </el-button>
           </el-badge>
@@ -267,6 +288,9 @@ function handleLogout() {
         @close="downloadStore.hide()"
       />
     </Teleport>
+
+    <!-- 铃铛抽屉 (B3) -->
+    <BellDrawer v-model:visible="bellDrawerVisible" />
   </div>
 </template>
 

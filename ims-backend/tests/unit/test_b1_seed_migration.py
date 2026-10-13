@@ -430,7 +430,7 @@ class TestE2EAccounts:
         links = db_session.query(RoleMenu).filter(RoleMenu.role_id == role.id).all()
         assert len(links) == 1
         granted = db_session.query(Menu).filter(Menu.id == links[0].menu_id).one()
-        assert granted.name == "工作台"
+        assert granted.name == "个人工作台"
         assert granted.type == "MENU"
         assert granted.path == "/ims/workbench"
 
@@ -459,7 +459,7 @@ class TestE2EAccounts:
         granted = db_session.query(Menu).filter(Menu.id == links[0].menu_id).one()
         assert granted.path == "/ims/workbench"
         assert granted.type == "MENU"
-        assert granted.name == "工作台"
+        assert granted.name == "个人工作台"
         assert granted.perm_code == "ims:workbench:query"
 
         button = Menu(

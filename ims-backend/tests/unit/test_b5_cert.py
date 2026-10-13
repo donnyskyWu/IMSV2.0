@@ -356,7 +356,10 @@ def test_ut_b5_ct_07_delete(b5):
     _raise(lambda: CertService().delete_cert(created["id"]), 1502)
     assert b5.get(MasterCert, int(created["id"])).deleted == 0
     row.is_locked = False
-    b5.add(TodoItem(id=1, tenant_id=1, assignee_user_id=1, title="预警", event_id=f"CERT_EXPIRE:{row.id}", status="OPEN"))
+    b5.add(TodoItem(
+        id=1, tenant_id=1, assignee_user_id=1, title="预警",
+        source_type="CERT_EXPIRE", source_id=row.id, status="PENDING",
+    ))
     b5.add(CertExpireTask(id=1, tenant_id=1, cert_id=row.id, level="YELLOW", status="WARNING"))
     b5.flush()
     CertService().delete_cert(created["id"])

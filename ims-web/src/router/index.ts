@@ -166,6 +166,31 @@ const b1Routes: RouteRecordRaw[] = [
   },
 ]
 
+/**
+ * B3 个人工作台路由。
+ * /ims/workbench 是菜单，/todos 和 /messages 是无菜单子页面。
+ */
+const b3Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/workbench',
+    name: 'Workbench',
+    component: () => import('@/views/workbench/index.vue'),
+    meta: { title: '个人工作台' },
+  },
+  {
+    path: '/ims/workbench/todos',
+    name: 'WorkbenchTodos',
+    component: () => import('@/views/workbench/todos/index.vue'),
+    meta: { title: '待办中心', menuless: true },
+  },
+  {
+    path: '/ims/workbench/messages',
+    name: 'WorkbenchMessages',
+    component: () => import('@/views/workbench/messages/index.vue'),
+    meta: { title: '消息中心', menuless: true },
+  },
+]
+
 /** 壳路径。无菜单时停在这里，提示由 AppLayout 内容区展示。 */
 const shellRoute: RouteRecordRaw = {
   path: '/',
@@ -192,6 +217,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b3Routes,
       ...b5Routes,
       ...demoRoutes,
       unknownRoute,
@@ -207,6 +233,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b3Routes,
       ...b5Routes,
       {
         path: '/demo/:pathMatch(.*)*',

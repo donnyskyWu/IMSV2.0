@@ -8,9 +8,9 @@
  * 1. GET /health 的 data.db 为 UP
  * 2. 种子账号经登录页真实登录并拿到访问令牌
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
- * 4. 登录后 URL 离开 /login。侧栏画出已登记叶子：顶层能看到「权限管理」，
- *    至少一项可点，点击后地址变为该项在 /me 里的 path。
- * 5. test_r10 只授工作台：侧栏没有可点项，内容区显示未分配权限。
+ * 4. 登录后 URL 离开 /login。侧栏顶层能看到「权限管理」。
+ *    落地工作台时该目录收起，先展开再点叶子，地址变为该项在 /me 里的 path。
+ * 5. test_r10 只授个人工作台：落地 /ims/workbench，侧栏只有这一项。
  * 6. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
  * 7. 登录后把 access token 换成用 IMS_JWT_SECRET 签的过期令牌，刷新令牌仍是登录拿到的。
  *    打开页面后经 Vite 调 /me：刷新接口只出现 1 次，最终 /me 为 200，地址不回登录页。
@@ -126,6 +126,15 @@ test.describe('Vite 代理联通真实后端', () => {
     const label = '岗位-角色供给规则'
     const target = collectLeafPaths(menus).find((item) => item.name === label)
     expect(target?.path, `可点项「${label}」必须对应 /me 里带 path 的叶子`).toBe('/ims/auth/position')
+    // 当前页是工作台，权限管理默认收起，叶子不在可访问树里。先展开父菜单再点。
+    const permissionGroup = sidebar.locator('.el-sub-menu').filter({
+      has: page.locator('.el-sub-menu__title', { hasText: '权限管理' }),
+    })
+    const permissionTitle = permissionGroup.locator('.el-sub-menu__title')
+    await expect(permissionTitle).toBeVisible()
+    if (!(await permissionGroup.evaluate((el) => el.classList.contains('is-opened')))) {
+      await permissionTitle.click()
+    }
     const item = sidebar.getByRole('menuitem', { name: label })
     await expect(item).toBeVisible()
     await item.click()
@@ -133,7 +142,7 @@ test.describe('Vite 代理联通真实后端', () => {
     await expect(page.getByTestId('b1-page-title')).toHaveText(label)
   })
 
-  test('E2E-B1-LG-23 test_r10 只授工作台时侧栏为空并显示未分配权限', async ({ page }) => {
+  test('E2E-B1-LG-23 test_r10 只授个人工作台时落地工作台且侧栏只有这一项', async ({ page }) => {
     await page.goto('/login')
     await page.evaluate(() => {
       localStorage.clear()
@@ -143,10 +152,12 @@ test.describe('Vite 代理联通真实后端', () => {
     await page.getByPlaceholder('用户名').fill('test_r10')
     await page.getByPlaceholder('密码').fill(password)
     await page.getByRole('button', { name: '登录' }).click()
-    await expect(page).toHaveURL((url) => url.pathname === '/')
-    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
-    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
-    await expect(page.locator('.app-sidebar').getByText('工作台')).toHaveCount(0)
+    await expect(page).toHaveURL((url) => url.pathname === '/ims/workbench')
+    await expect(page.getByTestId('unassigned-panel')).toHaveCount(0)
+    await expect(page.getByTestId('app-sidebar')).toHaveCount(1)
+    const sidebar = page.getByTestId('app-sidebar')
+    await expect(sidebar.locator('.el-menu-item')).toHaveCount(1)
+    await expect(sidebar.getByText('个人工作台')).toHaveCount(1)
     await expect(page.locator('.no-menu-tip')).toHaveCount(0)
 
     await page.goto('/ims/auth/org')

@@ -14,6 +14,10 @@ app/services/user.py
 app/db/session.py
 app/services/dict.py
 app/services/role.py
+# B3 新增
+app/services/todo.py
+app/services/message.py
+app/services/workbench.py
 # B5 公司资源：月租、证件删除与分级、字段加密。
 app/services/company.py
 app/services/realname.py

@@ -123,9 +123,20 @@ DICT_DATA = [
     {"dict_type": "dict_login_channel", "dict_value": "DINGTALK_QR", "dict_label": "钉钉扫码", "color_type": "info", "sort": 2, "is_builtin": True},
     {"dict_type": "dict_login_channel", "dict_value": "DINGTALK_H5", "dict_label": "钉钉免登", "color_type": "purple", "sort": 3, "is_builtin": True},
 
-    # dict_todo_status (placeholder)
+    # dict_todo_type（B3 新增 7 项）
+    {"dict_type": "dict_todo_type", "dict_value": "APPROVAL", "dict_label": "审批", "color_type": "primary", "sort": 1, "is_builtin": True},
+    {"dict_type": "dict_todo_type", "dict_value": "RETURN", "dict_label": "归还", "color_type": "warning", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_todo_type", "dict_value": "REVIEW", "dict_label": "审核", "color_type": "info", "sort": 3, "is_builtin": True},
+    {"dict_type": "dict_todo_type", "dict_value": "CONFIRM", "dict_label": "确认", "color_type": "success", "sort": 4, "is_builtin": True},
+    {"dict_type": "dict_todo_type", "dict_value": "WARNING", "dict_label": "预警", "color_type": "warning", "sort": 5, "is_builtin": True},
+    {"dict_type": "dict_todo_type", "dict_value": "ALERT", "dict_label": "告警", "color_type": "danger", "sort": 6, "is_builtin": True},
+    {"dict_type": "dict_todo_type", "dict_value": "STUDY", "dict_label": "学习", "color_type": "neutral", "sort": 7, "is_builtin": True},
+
+    # dict_todo_status
     {"dict_type": "dict_todo_status", "dict_value": "PENDING", "dict_label": "待处理", "color_type": "warning", "sort": 1, "is_builtin": True},
     {"dict_type": "dict_todo_status", "dict_value": "DONE", "dict_label": "已完成", "color_type": "success", "sort": 2, "is_builtin": True},
+    {"dict_type": "dict_todo_status", "dict_value": "CANCELLED", "dict_label": "已作废", "color_type": "neutral", "sort": 3, "is_builtin": True},
+    {"dict_type": "dict_todo_status", "dict_value": "CLOSED", "dict_label": "已关闭", "color_type": "neutral", "sort": 4, "is_builtin": True},
 
     # dict_msg_type (placeholder)
     {"dict_type": "dict_msg_type", "dict_value": "SYSTEM", "dict_label": "系统通知", "color_type": "primary", "sort": 1, "is_builtin": True},

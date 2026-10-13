@@ -518,6 +518,7 @@ class TestAuthServiceGetCurrentUserInfo:
         """UT-D01-13: Test get user info with main department."""
         from app.domains.sys.models import Dept, User
         from app.services.auth import AuthService
+        from tests.support import rows
 
         dept = Dept(
             id=601, tenant_id=1, parent_id=0, path="/601/",
@@ -534,10 +535,20 @@ class TestAuthServiceGetCurrentUserInfo:
 
         service = AuthService()
 
+        role_admin = rows.role(db_session, "ut_admin_601", "系统管理员", sort=1)
+        role_audit = rows.role(db_session, "ut_audit_601", "审计员", sort=2)
+        role_off = rows.role(db_session, "ut_off_601", "停用角色", status="DISABLED", sort=0)
+        rows.bind_role(db_session, 601, role_admin.id)
+        rows.bind_role(db_session, 601, role_audit.id)
+        rows.bind_role(db_session, 601, role_off.id)
+        rows.link(db_session, 601, 601, is_main=True)
+
         result = await service.get_current_user_info(601)
 
         assert result["user"]["id"] == "601"
         assert result["user"]["main_dept_name"] == "Info Dept"
+        assert result["user"]["dept_names"] == ["Info Dept"]
+        assert result["user"]["role_names"] == ["系统管理员", "审计员"]
 
     @pytest.mark.asyncio
     async def test_get_user_info_no_main_dept(self, db_session, test_context):
@@ -558,6 +569,8 @@ class TestAuthServiceGetCurrentUserInfo:
 
         assert result["user"]["id"] == "602"
         assert result["user"]["main_dept_name"] is None
+        assert result["user"]["dept_names"] == []
+        assert result["user"]["role_names"] == []
 
 
 class TestAuthServiceBuildDataScopeText:

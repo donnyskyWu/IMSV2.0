@@ -878,24 +878,115 @@ class OrgSyncBatch(AuditBase):
 
 
 class TodoItem(AuditBase):
-    """In-app todo created by position supply and org sync (FP-D05, FP-D07)."""
+    """
+    In-app todo created by position supply and org sync (FP-D05, FP-D07).
+
+    B3 扩展字段：type, source_module, source_type, source_id, route, content,
+    due_time, done_by, done_time。状态默认值改为 PENDING。
+    """
 
     __tablename__ = "ims_sys_todo"
 
-    assignee_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="OPEN")
+    assignee_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, index=True, comment="处理人（双写，读取用 todo_assignee）"
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False, comment="待办标题")
+    event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, comment="事件 ID（幂等）")
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING",
+        comment="状态：PENDING/DONE/CANCELLED/CLOSED"
+    )
+    type: Mapped[Optional[str]] = mapped_column(
+        String(30), nullable=True, comment="待办类型，取 dict_todo_type"
+    )
+    source_module: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="来源模块中文名"
+    )
+    source_type: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="来源单据类型"
+    )
+    source_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="来源单据 ID"
+    )
+    route: Mapped[Optional[str]] = mapped_column(
+        String(300), nullable=True, comment="跳转路由"
+    )
+    content: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="待办内容描述"
+    )
+    due_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, comment="截止时间"
+    )
+    done_by: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="处理人 user_id"
+    )
+    done_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, comment="处理时间"
+    )
+
+    __table_args__ = (
+        Index("idx_todo_tenant_status_due", "tenant_id", "status", "due_time"),
+    )
+
+
+class TodoAssignee(AuditBase):
+    """
+    待办处理人关联表（B3 新建）。
+
+    一条待办可以有多个处理人，每个处理人可以独立关闭（closed=1）。
+    """
+
+    __tablename__ = "ims_sys_todo_assignee"
+
+    todo_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, comment="关联待办 ID")
+    # 不用 index=True：默认名 ix_ims_sys_todo_assignee_user_id 与待办表 assignee_user_id 在 SQLite 全局撞名。
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="处理人 user_id")
+    closed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0, comment="本人是否已关闭")
+    closed_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, comment="关闭时间")
+
+    __table_args__ = (
+        UniqueConstraint("todo_id", "user_id", "deleted", name="uk_todo_assignee"),
+        Index("idx_todo_assignee_user", "user_id"),
+    )
 
 
 class InboxMessage(AuditBase):
-    """In-app message, including integrity scan notices (FP-B09)."""
+    """
+    In-app message, including integrity scan notices (FP-B09).
+
+    B3 扩展字段：event_type, source_module, route, ref_type, ref_id, read_status, read_time。
+    """
 
     __tablename__ = "ims_sys_inbox"
 
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    title: Mapped[str] = mapped_column(String(200), nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, comment="接收人 user_id")
+    title: Mapped[str] = mapped_column(String(200), nullable=False, comment="消息标题")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="消息内容")
+    event_type: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="消息事件类型"
+    )
+    source_module: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="来源模块中文名"
+    )
+    route: Mapped[Optional[str]] = mapped_column(
+        String(300), nullable=True, comment="跳转路由"
+    )
+    ref_type: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="关联业务类型"
+    )
+    ref_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="关联业务 ID"
+    )
+    read_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="UNREAD", comment="UNREAD/READ"
+    )
+    read_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, comment="已读时间"
+    )
+
+    __table_args__ = (
+        Index("idx_inbox_user_read", "user_id", "read_status", "create_time"),
+    )
 
 
 class IdempotencyRecord(AuditBase):

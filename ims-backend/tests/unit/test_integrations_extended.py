@@ -7,7 +7,7 @@ Covers: UT-H01-*, UT-H02-*, UT-H03-*, UT-H04-*, UT-H05-*, UT-H06-*, UT-H07-*, UT
 import os
 
 os.environ.setdefault("IMS_ENV", "test")
-os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
+os.environ.setdefault("IMS_DB_URL", "sqlite:///:memory:")
 os.environ.setdefault("IMS_REDIS_URL", "")
 os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 
