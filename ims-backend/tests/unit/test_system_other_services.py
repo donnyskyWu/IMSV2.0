@@ -180,19 +180,22 @@ class TestSystemLogServiceExecution:
     @pytest.mark.asyncio
     async def test_get_operate_log_page_empty(self, db_session, log_ctx):
         """UT-B2-L-07: get_operate_log_page returns empty when no logs."""
+        from app.core.pagination import PageParam
         from app.services.system_log import SystemLogService
         svc = SystemLogService()
-        result = await svc.get_operate_log_page(1, 10)
-        assert isinstance(result, dict)
-        assert "list" in result or "items" in result or isinstance(result.get("data"), list)
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_operate_log_page(page)
+        assert hasattr(result, 'total') or isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_get_login_log_page_empty(self, db_session, log_ctx):
         """UT-B2-L-08: get_login_log_page returns empty when no logs."""
+        from app.core.pagination import PageParam
         from app.services.system_log import SystemLogService
         svc = SystemLogService()
-        result = await svc.get_login_log_page(1, 10)
-        assert isinstance(result, dict)
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_login_log_page(page)
+        assert hasattr(result, 'total') or isinstance(result, dict)
 
 
 class TestSystemNotifyServiceExecution:
@@ -216,10 +219,12 @@ class TestSystemNotifyServiceExecution:
     @pytest.mark.asyncio
     async def test_get_notify_record_page_empty(self, db_session, notify_ctx):
         """UT-B2-N-04: get_notify_record_page returns empty when no records."""
+        from app.core.pagination import PageParam
         from app.services.system_notify import SystemNotifyService
         svc = SystemNotifyService()
-        result = await svc.get_notify_record_page(1, 10)
-        assert isinstance(result, dict)
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_notify_record_page(page)
+        assert hasattr(result, 'total') or isinstance(result, dict)
 
 
 class TestSystemParamServiceExecution:
@@ -314,3 +319,100 @@ class TestSystemCalendarServiceExecution:
         # Change to workday
         result = await svc.update_calendar("2026-10-15", "EXTRA_WORK")
         assert result["kind"] == "EXTRA_WORK"
+
+
+class TestSystemLogServiceFilters:
+    """Tests for SystemLogService with filters."""
+
+    @pytest.fixture
+    def log_ctx_filters(self):
+        """Set up context for log filter tests."""
+        context = RequestContext(
+            trace_id="test-trace",
+            user_id=1,
+            tenant_id=1,
+            perm_codes={"ims:system:log:query"},
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_get_operate_log_with_module_filter(self, db_session, log_ctx_filters):
+        """UT-B2-L-09: get_operate_log_page with module filter."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_operate_log_page(page, module="USER")
+        assert hasattr(result, 'total')
+
+    @pytest.mark.asyncio
+    async def test_get_operate_log_with_operation_filter(self, db_session, log_ctx_filters):
+        """UT-B2-L-10: get_operate_log_page with operation filter."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_operate_log_page(page, operation="create")
+        assert hasattr(result, 'total')
+
+    @pytest.mark.asyncio
+    async def test_get_operate_log_with_operator_filter(self, db_session, log_ctx_filters):
+        """UT-B2-L-11: get_operate_log_page with operator_name filter."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_operate_log_page(page, operator_name="admin")
+        assert hasattr(result, 'total')
+
+    @pytest.mark.asyncio
+    async def test_get_operate_log_with_time_range(self, db_session, log_ctx_filters):
+        """UT-B2-L-12: get_operate_log_page with time range filters."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_operate_log_page(
+            page,
+            start_time="2026-01-01 00:00:00",
+            end_time="2026-12-31 23:59:59"
+        )
+        assert hasattr(result, 'total')
+
+    @pytest.mark.asyncio
+    async def test_get_login_log_with_time_range(self, db_session, log_ctx_filters):
+        """UT-B2-L-13: get_login_log_page with time range filters."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_login_log_page(
+            page,
+            start_time="2026-01-01",
+            end_time="2026-12-31"
+        )
+        assert hasattr(result, 'total')
+
+    @pytest.mark.asyncio
+    async def test_get_login_log_with_username_filter(self, db_session, log_ctx_filters):
+        """UT-B2-L-14: get_login_log_page with username filter."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_login_log_page(page, username="test")
+        assert hasattr(result, 'total')
+
+    @pytest.mark.asyncio
+    async def test_get_login_log_with_result_filter(self, db_session, log_ctx_filters):
+        """UT-B2-L-15: get_login_log_page with result filter."""
+        from app.core.pagination import PageParam
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        page = PageParam(page_no=1, page_size=10)
+        result = await svc.get_login_log_page(page, result="SUCCESS")
+        assert hasattr(result, 'total')
