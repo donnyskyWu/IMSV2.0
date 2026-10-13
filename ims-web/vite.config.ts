@@ -129,6 +129,7 @@ export default defineConfig(({ mode }) => {
           'table',
           'tabs',
           'table-column',
+          'tooltip',
         ].map((name) => `element-plus/es/components/${name}/style/css`),
       ],
     },

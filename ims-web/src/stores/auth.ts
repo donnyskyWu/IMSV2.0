@@ -150,6 +150,7 @@ export const useAuthStore = defineStore('auth', () => {
       // 部门 id 等 B2 用户接口再补，这里不能把部门名称写进 id。
       deptId: '',
       deptName: profile.mainDeptName || profile.deptNames?.[0] || '',
+      deptNames: profile.deptNames || [],
       permCodes: data.permCodes || [],
       dataScopeText: data.dataScopeText || '',
       pwdResetRequired: Boolean(profile.pwdResetRequired),

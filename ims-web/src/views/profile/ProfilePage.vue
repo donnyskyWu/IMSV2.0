@@ -1,18 +1,42 @@
 <script setup lang="ts">
 /**
  * 个人中心（FP-B2-PC-01～04）
- * 留在 AppLayout 内。基本信息只读。
+ * 线框：AppLayout 内，PageHeader + Tabs。
+ * 基本信息用 DescriptionList，手机用 MaskedText，会话用 DataTable。
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Tabs from '@/components/layout/Tabs.vue'
+import DescriptionList from '@/components/display/DescriptionList.vue'
 import PasswordForm from './PasswordForm.vue'
 import SetPasswordForm from './SetPasswordForm.vue'
 import SessionList from './SessionList.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
+const active = ref('info')
 
 const profile = computed(() => authStore.user)
 const hasPassword = computed(() => profile.value?.hasPassword !== false)
+const tabs = computed(() => [
+  { key: 'info', label: '基本信息' },
+  { key: 'password', label: hasPassword.value ? '修改密码' : '设置密码' },
+  { key: 'sessions', label: '我的会话' },
+])
+const infoItems = computed(() => {
+  const user = profile.value
+  const depts = user?.deptNames?.filter(Boolean) || []
+  return [
+    { label: '姓名', value: user?.nickname || '' },
+    { label: '用户名', value: user?.username || '' },
+    { label: '手机', value: user?.mobileMasked || '', type: 'masked' as const },
+    { label: '主部门', value: user?.deptName || '' },
+    { label: '所属部门', value: depts.join('、') },
+    { label: '岗位', value: user?.positionLabel || '' },
+    { label: '角色', value: (user?.roleNames || []).join('、') },
+    { label: '数据范围', value: user?.dataScopeText || '' },
+  ]
+})
 
 onMounted(() => {
   authStore.fetchUserInfo().catch(() => {
@@ -23,57 +47,19 @@ onMounted(() => {
 
 <template>
   <section class="profile-page" data-testid="profile-page">
-    <h1>个人中心</h1>
-    <el-tabs>
-      <el-tab-pane label="基本信息">
-        <dl class="profile-info" data-testid="profile-info">
-          <div><dt>用户名</dt><dd>{{ profile?.username }}</dd></div>
-          <div><dt>姓名</dt><dd>{{ profile?.nickname }}</dd></div>
-          <div><dt>部门</dt><dd>{{ profile?.deptName }}</dd></div>
-          <div><dt>岗位</dt><dd>{{ profile?.positionLabel || '' }}</dd></div>
-          <div><dt>角色</dt><dd>{{ (profile?.roleNames || []).join('、') }}</dd></div>
-          <div><dt>手机</dt><dd data-testid="mobile-masked">{{ profile?.mobileMasked || '' }}</dd></div>
-          <div><dt>数据范围</dt><dd>{{ profile?.dataScopeText }}</dd></div>
-        </dl>
-      </el-tab-pane>
-      <el-tab-pane :label="hasPassword ? '修改密码' : '设置密码'">
-        <PasswordForm v-if="hasPassword" />
-        <SetPasswordForm v-else />
-      </el-tab-pane>
-      <el-tab-pane label="我的会话">
-        <SessionList />
-      </el-tab-pane>
-    </el-tabs>
+    <PageHeader title="个人中心" :show-scope="false" />
+    <Tabs v-model:active="active" :items="tabs" />
+    <div v-if="active === 'info'" data-testid="profile-info">
+      <DescriptionList :items="infoItems" :columns="2" />
+    </div>
+    <PasswordForm v-else-if="active === 'password' && hasPassword" />
+    <SetPasswordForm v-else-if="active === 'password'" />
+    <SessionList v-else />
   </section>
 </template>
 
 <style lang="scss" scoped>
 .profile-page {
   padding: 16px 20px 32px;
-}
-
-h1 {
-  margin: 0 0 12px;
-  font-size: 20px;
-}
-
-.profile-info {
-  margin: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.profile-info div {
-  display: grid;
-  grid-template-columns: 96px 1fr;
-  gap: 8px;
-}
-
-dt {
-  color: var(--text2);
-}
-
-dd {
-  margin: 0;
 }
 </style>

@@ -1,6 +1,8 @@
 /**
  * 真后端联通配置（fix B0b）。
- * 跑 live-proxy.spec.ts 和 b2-profile.spec.ts：浏览器打 Vite，由代理转到真实 FastAPI。
+ * live-proxy.spec.ts 走项目 live-proxy。
+ * b2-profile.spec.ts 走项目 desktop-chromium。
+ * 两边都由浏览器打 Vite，代理转到真实 FastAPI。
  * 不复用已有 dev server，避免沿用一份没带代理的旧进程。
  *
  * 登录账号只读 ims-backend/tools/seed/users.py 的 E2E_USERNAME / E2E_PASSWORD。
@@ -67,6 +69,15 @@ export default defineConfig({
   projects: [
     {
       name: 'live-proxy',
+      testMatch: /live-proxy\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: 'desktop-chromium',
+      testMatch: /b2-profile\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1440, height: 900 },
