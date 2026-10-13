@@ -172,6 +172,63 @@ class TestTrainMaterialRepo:
 
         assert result is None
 
+    def test_list_materials_empty(self, db_session, test_context):
+        """List materials returns empty when none exist."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainMaterialRepo
+
+        repo = TrainMaterialRepo(db_session)
+        items, total = repo.list_materials(ctx.tenant_id)
+
+        assert items == []
+        assert total == 0
+
+    def test_list_materials_with_filters(self, db_session, test_context):
+        """List materials with various filters."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterial
+        from app.domains.train.repo import TrainMaterialRepo
+
+        mat = TrainMaterial(
+            tenant_id=ctx.tenant_id,
+            cate_id=1,
+            title="Test Material",
+            material_type="DOC",
+            status="PUBLISHED",
+            material_no="MT202610130001",
+            position_codes='["POS001"]',
+            creator=ctx.user_id,
+        )
+        db_session.add(mat)
+        db_session.flush()
+
+        repo = TrainMaterialRepo(db_session)
+
+        items, total = repo.list_materials(ctx.tenant_id, cate_id=1)
+        assert total >= 1
+
+        items, total = repo.list_materials(ctx.tenant_id, status="PUBLISHED")
+        assert total >= 1
+
+        items, total = repo.list_materials(ctx.tenant_id, material_type="DOC")
+        assert total >= 1
+
+        items, total = repo.list_materials(ctx.tenant_id, keyword="Test")
+        assert total >= 1
+
+        items, total = repo.list_materials(ctx.tenant_id, position_codes=["POS001"])
+        assert total >= 1
+
+    def test_get_by_ids_empty(self, db_session, test_context):
+        """Get by IDs returns empty for empty input."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainMaterialRepo
+
+        repo = TrainMaterialRepo(db_session)
+        result = repo.get_by_ids([], ctx.tenant_id)
+
+        assert result == []
+
 
 class TestTrainTaskRepo:
     """Tests for TrainTaskRepo."""
