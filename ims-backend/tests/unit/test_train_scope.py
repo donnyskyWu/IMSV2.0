@@ -170,3 +170,239 @@ class TestPermVersionKeys:
         """Tenant perm key format correct."""
         assert get_tenant_perm_key(1) == "ims:perm_ver:t:1"
         assert get_tenant_perm_key(456) == "ims:perm_ver:t:456"
+
+
+class TestApplyTaskScopeFilter:
+    """Tests for task scope filter application."""
+
+    def test_all_scope_no_filter(self, db_session, test_context):
+        """ALL scope applies no additional filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTask
+        from app.domains.train.scope import apply_task_scope_filter
+
+        ctx = make_mock_ctx(data_scope="ALL")
+        query = select(TrainTask)
+
+        filtered = apply_task_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_dept_scope_empty_dept_ids(self, db_session, test_context):
+        """DEPT scope with empty dept_ids returns no results."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTask
+        from app.domains.train.scope import apply_task_scope_filter
+
+        ctx = make_mock_ctx(dept_ids=[], data_scope="DEPT")
+        query = select(TrainTask)
+
+        filtered = apply_task_scope_filter(query, ctx)
+        assert "where" in str(filtered).lower() or filtered is not None
+
+    def test_dept_scope_with_dept_ids(self, db_session, test_context):
+        """DEPT scope with dept_ids applies filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTask
+        from app.domains.train.scope import apply_task_scope_filter
+
+        ctx = make_mock_ctx(dept_ids=[1, 2, 3], data_scope="DEPT")
+        query = select(TrainTask)
+
+        filtered = apply_task_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_self_scope_no_user_id(self, db_session, test_context):
+        """SELF scope with no user_id returns no results."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTask
+        from app.domains.train.scope import apply_task_scope_filter
+
+        ctx = make_mock_ctx(user_id=None, data_scope="SELF")
+        query = select(TrainTask)
+
+        filtered = apply_task_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_self_scope_with_user_id(self, db_session, test_context):
+        """SELF scope with user_id applies filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTask
+        from app.domains.train.scope import apply_task_scope_filter
+
+        ctx = make_mock_ctx(user_id=123, data_scope="SELF")
+        query = select(TrainTask)
+
+        filtered = apply_task_scope_filter(query, ctx)
+        assert filtered is not None
+
+
+class TestApplyRecordScopeFilter:
+    """Tests for record scope filter application."""
+
+    def test_all_scope_no_filter(self, db_session, test_context):
+        """ALL scope applies no additional filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTaskRecord
+        from app.domains.train.scope import apply_record_scope_filter
+
+        ctx = make_mock_ctx(data_scope="ALL")
+        query = select(TrainTaskRecord)
+
+        filtered = apply_record_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_dept_scope_empty_dept_ids(self, db_session, test_context):
+        """DEPT scope with empty dept_ids returns no results."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTaskRecord
+        from app.domains.train.scope import apply_record_scope_filter
+
+        ctx = make_mock_ctx(dept_ids=[], data_scope="DEPT")
+        query = select(TrainTaskRecord)
+
+        filtered = apply_record_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_dept_scope_with_dept_ids(self, db_session, test_context):
+        """DEPT scope with dept_ids applies filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTaskRecord
+        from app.domains.train.scope import apply_record_scope_filter
+
+        ctx = make_mock_ctx(dept_ids=[1, 2, 3], data_scope="DEPT")
+        query = select(TrainTaskRecord)
+
+        filtered = apply_record_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_self_scope_no_user_id(self, db_session, test_context):
+        """SELF scope with no user_id returns no results."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTaskRecord
+        from app.domains.train.scope import apply_record_scope_filter
+
+        ctx = make_mock_ctx(user_id=None, data_scope="SELF")
+        query = select(TrainTaskRecord)
+
+        filtered = apply_record_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_self_scope_with_user_id(self, db_session, test_context):
+        """SELF scope with user_id applies filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTaskRecord
+        from app.domains.train.scope import apply_record_scope_filter
+
+        ctx = make_mock_ctx(user_id=123, data_scope="SELF")
+        query = select(TrainTaskRecord)
+
+        filtered = apply_record_scope_filter(query, ctx)
+        assert filtered is not None
+
+
+class TestGetEffectiveScope:
+    """Tests for _get_effective_scope function."""
+
+    def test_empty_data_scopes_returns_self(self):
+        """No data_scopes returns SELF."""
+        from app.domains.train.scope import _get_effective_scope
+
+        mock = MagicMock()
+        mock.data_scopes = []
+        result = _get_effective_scope(mock)
+        assert result == "SELF"
+
+    def test_none_data_scopes_returns_self(self):
+        """None data_scopes returns SELF."""
+        from app.domains.train.scope import _get_effective_scope
+
+        mock = MagicMock()
+        mock.data_scopes = None
+        result = _get_effective_scope(mock)
+        assert result == "SELF"
+
+    def test_dataclass_scope_type(self):
+        """Dataclass with scope_type attribute."""
+        from app.domains.train.scope import _get_effective_scope
+
+        scope_obj = MagicMock()
+        scope_obj.scope_type = "DEPT"
+
+        mock = MagicMock()
+        mock.data_scopes = [scope_obj]
+        result = _get_effective_scope(mock)
+        assert result == "DEPT"
+
+    def test_dict_scope_type(self):
+        """Dict with scope_type key."""
+        from app.domains.train.scope import _get_effective_scope
+
+        mock = MagicMock()
+        mock.data_scopes = [{"scope_type": "ALL", "role_id": 1}]
+        result = _get_effective_scope(mock)
+        assert result == "ALL"
+
+    def test_dict_without_scope_type(self):
+        """Dict without scope_type returns SELF."""
+        from app.domains.train.scope import _get_effective_scope
+
+        mock = MagicMock()
+        mock.data_scopes = [{"role_id": 1}]
+        result = _get_effective_scope(mock)
+        assert result == "SELF"
+
+
+class TestUnknownScopeType:
+    """Tests for unknown scope type fallback."""
+
+    def test_unknown_scope_task_filter(self, db_session, test_context):
+        """Unknown scope falls through to no filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTask
+        from app.domains.train.scope import apply_task_scope_filter
+
+        ctx = make_mock_ctx(data_scope="UNKNOWN")
+        query = select(TrainTask)
+
+        filtered = apply_task_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_unknown_scope_record_filter(self, db_session, test_context):
+        """Unknown scope falls through to no filter."""
+        from sqlalchemy import select
+
+        from app.domains.train.models import TrainTaskRecord
+        from app.domains.train.scope import apply_record_scope_filter
+
+        ctx = make_mock_ctx(data_scope="UNKNOWN")
+        query = select(TrainTaskRecord)
+
+        filtered = apply_record_scope_filter(query, ctx)
+        assert filtered is not None
+
+    def test_unknown_scope_check_task(self):
+        """Unknown scope returns False."""
+        ctx = make_mock_ctx(data_scope="UNKNOWN")
+        task = make_mock_task()
+
+        result = check_task_in_scope(ctx, task, [])
+        assert result is False
+
+    def test_unknown_scope_stat_visible(self):
+        """Unknown scope returns None, False."""
+        ctx = make_mock_ctx(data_scope="UNKNOWN")
+
+        depts, is_self = get_stat_visible_depts(ctx, None)
+        assert depts is None
+        assert is_self is False

@@ -72,6 +72,7 @@ def db_engine():
 
     # Import all models to ensure they're registered with Base
     from app.domains.sys import models  # noqa: F401
+    from app.domains.train import models as train_models  # noqa: F401
 
     # Drop and recreate all tables for clean state
     if not is_sqlite:

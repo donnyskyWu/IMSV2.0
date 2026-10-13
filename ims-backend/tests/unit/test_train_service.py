@@ -306,3 +306,386 @@ class TestTrainStudyServiceCalculateProgress:
 
         progress = {"1": 100}
         assert service._calculate_overall_progress(task, progress) == 50
+
+
+class TestTrainMaterialServiceCateTree:
+    """Tests for category tree operations."""
+
+    @pytest.mark.asyncio
+    async def test_get_cate_tree_empty(self, db_session, test_context):
+        """Get empty category tree."""
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        result = await service.get_cate_tree()
+
+        assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_get_cate_tree_with_position(self, db_session, test_context):
+        """Get category tree filtered by position."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Position Cate",
+            position_code="POS001",
+            creator=ctx.user_id,
+        )
+        db_session.add(cate)
+        db_session.flush()
+
+        service = TrainMaterialService()
+        result = await service.get_cate_tree(position_code="POS001")
+
+        assert len(result) >= 1
+
+    @pytest.mark.asyncio
+    async def test_create_cate_parent_not_exists(self, db_session, test_context):
+        """Create category with non-existent parent fails."""
+        from app.domains.train.schemas import CateCreateRequest
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        req = CateCreateRequest(
+            parent_id="99999",
+            cate_name="Test Cate",
+            sort=1,
+        )
+
+        with pytest.raises(BizError) as exc:
+            await service.create_cate(req)
+        assert exc.value.code == 1500
+
+    @pytest.mark.asyncio
+    async def test_create_cate_root(self, db_session, test_context):
+        """Create root category (parent_id=0)."""
+        from app.domains.train.schemas import CateCreateRequest
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        req = CateCreateRequest(
+            parent_id="0",
+            cate_name="Root Category",
+            sort=1,
+        )
+
+        result = await service.create_cate(req)
+        assert result.cate_name == "Root Category"
+        assert result.parent_id is None or result.parent_id == "0"
+
+    @pytest.mark.asyncio
+    async def test_update_cate_not_exists(self, db_session, test_context):
+        """Update non-existent category fails."""
+        from app.domains.train.schemas import CateUpdateRequest
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        req = CateUpdateRequest(cate_name="New Name")
+
+        with pytest.raises(BizError) as exc:
+            await service.update_cate("99999", req)
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_update_cate_name(self, db_session, test_context):
+        """Update category name."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.schemas import CateUpdateRequest
+        from app.domains.train.service import TrainMaterialService
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Original Name",
+            creator=ctx.user_id,
+        )
+        db_session.add(cate)
+        db_session.flush()
+
+        service = TrainMaterialService()
+        req = CateUpdateRequest(cate_name="Updated Name", sort=5)
+
+        result = await service.update_cate(str(cate.id), req)
+        assert result.cate_name == "Updated Name"
+        assert result.sort == 5
+
+    @pytest.mark.asyncio
+    async def test_delete_cate_not_exists(self, db_session, test_context):
+        """Delete non-existent category fails."""
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_cate("99999")
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_delete_cate_has_children(self, db_session, test_context):
+        """Delete category with children fails."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
+
+        parent = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Parent",
+            creator=ctx.user_id,
+        )
+        db_session.add(parent)
+        db_session.flush()
+
+        child = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=parent.id,
+            cate_name="Child",
+            creator=ctx.user_id,
+        )
+        db_session.add(child)
+        db_session.flush()
+
+        service = TrainMaterialService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_cate(str(parent.id))
+        assert exc.value.code == 1001
+
+    @pytest.mark.asyncio
+    async def test_delete_cate_success(self, db_session, test_context):
+        """Delete empty category succeeds."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="To Delete",
+            creator=ctx.user_id,
+        )
+        db_session.add(cate)
+        db_session.flush()
+        cate_id = str(cate.id)
+
+        service = TrainMaterialService()
+        await service.delete_cate(cate_id)
+
+
+class TestTrainMaterialServiceListMaterials:
+    """Tests for listing materials."""
+
+    @pytest.mark.asyncio
+    async def test_list_materials_empty(self, db_session, test_context):
+        """List materials returns empty when none exist."""
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        items, total = await service.list_materials()
+
+        assert total >= 0
+
+    @pytest.mark.asyncio
+    async def test_list_materials_with_cate_filter(self, db_session, test_context):
+        """List materials with category filter."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterial, TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Test Cate",
+            creator=ctx.user_id,
+        )
+        db_session.add(cate)
+        db_session.flush()
+
+        material = TrainMaterial(
+            tenant_id=ctx.tenant_id,
+            cate_id=cate.id,
+            title="Test Material",
+            material_type="LINK",
+            link_url="https://example.com",
+            status="PUBLISHED",
+            material_no="MT202610130001",
+            creator=ctx.user_id,
+        )
+        db_session.add(material)
+        db_session.flush()
+
+        service = TrainMaterialService()
+        items, total = await service.list_materials(cate_id=str(cate.id))
+
+        assert total >= 1
+
+    @pytest.mark.asyncio
+    async def test_list_materials_pagination(self, db_session, test_context):
+        """List materials respects pagination."""
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        items, total = await service.list_materials(page=1, page_size=10)
+
+        assert isinstance(items, list)
+        assert len(items) <= 10
+
+
+class TestTrainMaterialServiceGetDetail:
+    """Tests for getting material detail."""
+
+    @pytest.mark.asyncio
+    async def test_get_material_not_exists(self, db_session, test_context):
+        """Get non-existent material fails."""
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+
+        with pytest.raises(BizError) as exc:
+            await service.get_material_detail("99999")
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_get_material_with_versions(self, db_session, test_context):
+        """Get material detail includes versions."""
+        from app.core.context import ctx
+        from app.domains.train.models import (
+            TrainMaterial,
+            TrainMaterialCate,
+            TrainMaterialVersion,
+        )
+        from app.domains.train.service import TrainMaterialService
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Test Cate",
+            creator=ctx.user_id,
+        )
+        db_session.add(cate)
+        db_session.flush()
+
+        material = TrainMaterial(
+            tenant_id=ctx.tenant_id,
+            cate_id=cate.id,
+            title="Versioned Material",
+            material_type="LINK",
+            link_url="https://example.com",
+            status="DRAFT",
+            material_no="MT202610130002",
+            version=1,
+            creator=ctx.user_id,
+        )
+        db_session.add(material)
+        db_session.flush()
+
+        from app.core.clock import get_now
+
+        version = TrainMaterialVersion(
+            tenant_id=ctx.tenant_id,
+            material_id=material.id,
+            version=1,
+            title="Versioned Material",
+            link_url="https://example.com",
+            editor_user_id=ctx.user_id,
+            created_at=get_now(),
+        )
+        db_session.add(version)
+        db_session.flush()
+
+        service = TrainMaterialService()
+        result = await service.get_material_detail(str(material.id))
+
+        assert result.title == "Versioned Material"
+        assert len(result.versions) >= 1
+
+
+class TestTrainMaterialServiceUpdate:
+    """Tests for updating materials."""
+
+    @pytest.mark.asyncio
+    async def test_update_material_not_exists(self, db_session, test_context):
+        """Update non-existent material fails."""
+        from app.domains.train.schemas import MaterialUpdateRequest
+        from app.domains.train.service import TrainMaterialService
+
+        service = TrainMaterialService()
+        req = MaterialUpdateRequest(title="New Title")
+
+        with pytest.raises(BizError) as exc:
+            await service.update_material("99999", req)
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_update_offline_material_fails(self, db_session, test_context):
+        """Update offline material fails."""
+        from app.core.context import ctx
+        from app.domains.train.models import TrainMaterial, TrainMaterialCate
+        from app.domains.train.schemas import MaterialUpdateRequest
+        from app.domains.train.service import TrainMaterialService
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Test",
+            creator=ctx.user_id,
+        )
+        db_session.add(cate)
+        db_session.flush()
+
+        material = TrainMaterial(
+            tenant_id=ctx.tenant_id,
+            cate_id=cate.id,
+            title="Offline Material",
+            material_type="LINK",
+            link_url="https://example.com",
+            status="OFFLINE",
+            material_no="MT202610130003",
+            version=1,
+            creator=ctx.user_id,
+        )
+        db_session.add(material)
+        db_session.flush()
+
+        service = TrainMaterialService()
+        req = MaterialUpdateRequest(title="New Title")
+
+        with pytest.raises(BizError) as exc:
+            await service.update_material(str(material.id), req)
+        assert exc.value.code == 1501
+
+
+class TestTrainTaskServiceValidationExtended:
+    """Extended tests for task validation."""
+
+    def test_validate_quiz_with_mixed_types(self, db_session):
+        """Mixed SINGLE and TRUE_FALSE quiz types pass."""
+        from app.domains.train.service import TrainTaskService
+
+        service = TrainTaskService()
+        quiz = [
+            QuizQuestion(
+                type="SINGLE",
+                question="Q1",
+                options=["A", "B", "C"],
+                answer_index=0,
+            ),
+            QuizQuestion(
+                type="TRUE_FALSE",
+                question="Q2",
+                answer_boolean=False,
+            ),
+            QuizQuestion(
+                type="SINGLE",
+                question="Q3",
+                options=["X", "Y"],
+                answer_index=1,
+            ),
+        ]
+
+        service._validate_quiz(quiz)
