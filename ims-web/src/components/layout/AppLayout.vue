@@ -12,6 +12,7 @@ import { Menu, Bell, ArrowDown, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDownloadStore } from '@/stores/download'
 import { useResponsive } from '@/utils/responsive'
+import { collectLeafPaths, resolveLanding, visibleMenus } from '@/utils/login-landing'
 import DownloadBar from '@/components/file/DownloadBar.vue'
 import type { MenuItem } from '@/types'
 
@@ -23,10 +24,6 @@ const authStore = useAuthStore()
 const downloadStore = useDownloadStore()
 const { isMobile } = useResponsive()
 
-const showNoPerm = computed(
-  () => authStore.isLoggedIn && authStore.permCodes.length === 0,
-)
-
 // 侧栏状态
 const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
 const mobileSidebarOpen = ref(false)
@@ -36,7 +33,40 @@ const unreadCount = ref(3)
 
 // 计算属性
 const currentPath = computed(() => route.path)
-const hasMenus = computed(() => authStore.menus.length > 0)
+/** 未登记路由的菜单不进侧栏，避免 B3 前把工作台画成可点菜单。 */
+const sidebarMenus = computed(() => visibleMenus(authStore.menus, registeredPaths()))
+const hasMenus = computed(() => sidebarMenus.value.length > 0)
+
+function registeredPaths(): string[] {
+  return router.getRoutes().map((item) => item.path)
+}
+
+/** 菜单为空，或叶子都还没登记（B3 前的工作台）时，内容区提示，不跳业务页。 */
+const showUnassigned = computed(() => {
+  if (!authStore.isLoggedIn || route.meta.shell !== true) return false
+  return resolveLanding({
+    menus: authStore.menus,
+    registeredPaths: registeredPaths(),
+  }) === null
+})
+
+/**
+ * 无权限页：
+ * - 未登记的业务地址，以及已登记但菜单里没有的地址，直接遮住，不展示数据；
+ * - 已登记的 /demo 示例页只在权限码为空时遮住（VC-R-16），避免挡住 B0b 演示。
+ */
+const showDenied = computed(() => {
+  if (!authStore.isLoggedIn) return false
+  if (route.meta.public || route.meta.menuless || route.meta.shell) return false
+  const registered = router.getRoutes().some((item) => item.path === route.path)
+  if (!registered) return true
+  if (route.path.startsWith('/demo/')) return authStore.permCodes.length === 0
+  const leaves = collectLeafPaths(authStore.menus)
+  return !leaves.includes(route.path)
+})
+
+// 侧栏空菜单提示只在内容区不是同一句时出现，避免两处重复（B0b VC-R-16 仍要求侧栏有这句）
+const showSidebarEmptyTip = computed(() => !hasMenus.value && !showUnassigned.value)
 
 // 保存折叠状态
 watch(sidebarCollapsed, (val) => {
@@ -75,6 +105,8 @@ async function handleMenuSelect(path: string) {
       return
     }
   }
+  // 目录用 id 作 index，没有 path，不能当成路由跳转。
+  if (!path.startsWith('/')) return
   router.push(path)
 }
 
@@ -103,13 +135,14 @@ function getActiveMenuPaths(): string[] {
     }
     return false
   }
-  traverse(authStore.menus)
+  traverse(sidebarMenus.value)
   return paths
 }
 
-// 退出登录
+// 退出登录。记下需要真实登录，避免开发环境在浏览器后退时又自动进入示例页。
 function handleLogout() {
   authStore.clearSession()
+  sessionStorage.setItem('ims_require_auth', '1')
   router.push('/login')
 }
 </script>
@@ -117,6 +150,7 @@ function handleLogout() {
 <template>
   <div
     class="app-layout"
+    :data-user-id="authStore.user?.id || ''"
     :class="{
       'sidebar-collapsed': sidebarCollapsed && !isMobile,
       'has-download': downloadStore.visible && downloadStore.tasks.length > 0,
@@ -154,7 +188,7 @@ function handleLogout() {
           :collapse-transition="false"
           @select="handleMenuSelect"
         >
-          <template v-for="item in authStore.menus" :key="item.id">
+          <template v-for="item in sidebarMenus" :key="item.id">
             <!-- 有子菜单 -->
             <el-sub-menu v-if="item.children?.length" :index="item.id">
               <template #title>
@@ -182,8 +216,8 @@ function handleLogout() {
           </template>
         </el-menu>
 
-        <!-- 无权限提示 -->
-        <div v-if="!hasMenus" class="no-menu-tip">
+        <!-- 无菜单时的侧栏提示。壳页面的同一句改由内容区展示，避免重复。 -->
+        <div v-if="showSidebarEmptyTip" class="no-menu-tip">
           您的账号尚未分配权限，请联系管理员
         </div>
       </el-scrollbar>
@@ -239,7 +273,12 @@ function handleLogout() {
 
       <!-- 内容区 -->
       <main class="app-content">
-        <div v-if="showNoPerm" class="no-perm-panel">暂无权限查看此内容</div>
+        <div v-if="showUnassigned" class="no-perm-panel" data-testid="unassigned-panel">
+          <p>您的账号尚未分配权限，请联系管理员</p>
+        </div>
+        <div v-else-if="showDenied" class="no-perm-panel" data-testid="denied-panel">
+          <p>暂无权限查看此内容</p>
+        </div>
         <slot v-else />
       </main>
     </div>

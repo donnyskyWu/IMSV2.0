@@ -5,6 +5,14 @@
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { beginAuthNavigation, endAuthNavigation } from '@/utils/auth-navigation'
+import {
+  isPasswordPath,
+  landingPath,
+  PASSWORD_RESET_PATH,
+  resolveLanding,
+  sanitizeRedirect,
+} from '@/utils/login-landing'
 
 // 示例页路由 (仅 dev/test 构建注册)
 const demoRoutes: RouteRecordRaw[] = [
@@ -97,10 +105,53 @@ const loginRoute: RouteRecordRaw = {
 }
 
 const changePasswordRoute: RouteRecordRaw = {
-  path: '/user/change-password',
+  path: PASSWORD_RESET_PATH,
   name: 'ChangePassword',
   component: () => import('@/views/ChangePassword.vue'),
-  meta: { title: '修改密码' },
+  meta: { title: '请先修改密码', menuless: true },
+}
+
+/** B0b 已登记路径，与 /password-reset 同一页面。 */
+const changePasswordAliasRoute: RouteRecordRaw = {
+  path: '/user/change-password',
+  name: 'ChangePasswordAlias',
+  component: () => import('@/views/ChangePassword.vue'),
+  meta: { title: '请先修改密码', menuless: true },
+}
+
+/**
+ * B1 已登记业务页。标题以 01 功能点清单为准。
+ * 不登记工作台，也不登记 /system/dept 等后续菜单。
+ */
+const b1Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/auth/org',
+    name: 'AuthOrg',
+    component: () => import('@/views/auth/OrgSync.vue'),
+    meta: { title: '组织架构同步' },
+  },
+  {
+    path: '/ims/auth/position',
+    name: 'AuthPosition',
+    component: () => import('@/views/auth/PositionRules.vue'),
+    meta: { title: '岗位-角色供给规则' },
+  },
+]
+
+/** 壳路径。无菜单时停在这里，提示由 AppLayout 内容区展示。 */
+const shellRoute: RouteRecordRaw = {
+  path: '/',
+  name: 'AppShell',
+  component: () => import('@/views/AppShell.vue'),
+  meta: { title: 'IMS', shell: true },
+}
+
+/** 未登记的地址走无权限页，不展示业务数据。 */
+const unknownRoute: RouteRecordRaw = {
+  path: '/:pathMatch(.*)*',
+  name: 'UnknownRoute',
+  component: () => import('@/views/AppShell.vue'),
+  meta: { title: '无权限' },
 }
 
 // dev/test 注册示例页；生产构建不注册，/demo/* 回首页（§2.2 #9、§2.3 U4）
@@ -108,30 +159,53 @@ const demoEnabled = import.meta.env.DEV || import.meta.env.MODE === 'test'
 
 const routes: RouteRecordRaw[] = demoEnabled
   ? [
-      { path: '/', redirect: '/demo/tokens' },
+      shellRoute,
       loginRoute,
       changePasswordRoute,
+      changePasswordAliasRoute,
+      ...b1Routes,
       ...demoRoutes,
+      unknownRoute,
     ]
   : [
       {
         path: '/',
         name: 'Home',
         component: () => import('@/views/Home.vue'),
-        meta: { title: '首页', public: true },
+        meta: { title: '首页', public: true, shell: true },
       },
       loginRoute,
       changePasswordRoute,
+      changePasswordAliasRoute,
+      ...b1Routes,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
       },
+      unknownRoute,
     ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+function registeredRoutePaths(): string[] {
+  return router.getRoutes().map((route) => route.path).filter((path) => path && !path.includes(':'))
+}
+
+function mustResetPassword(): boolean {
+  const authStore = useAuthStore()
+  return authStore.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1'
+}
+
+function failureCode(err: unknown): number | undefined {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code: unknown }).code
+    return typeof code === 'number' ? code : undefined
+  }
+  return undefined
+}
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
@@ -143,23 +217,46 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  // 公开页面
-  if (to.meta.public) {
+  const loggedIn = !!localStorage.getItem('ims_access_token')
+
+  // 已登录再打开登录页：直接进入系统或改密页（FP-B1-LG-01）
+  if (to.path === '/login' && loggedIn) {
+    beginAuthNavigation()
+    try {
+      if (!authStore.user) await authStore.fetchUserInfo()
+    } catch {
+      authStore.clearSession()
+      next()
+      return
+    } finally {
+      endAuthNavigation()
+    }
+    if (mustResetPassword()) {
+      const redirect = sanitizeRedirect(to.query.redirect)
+      next({ path: PASSWORD_RESET_PATH, query: redirect ? { redirect } : {} })
+      return
+    }
+    next(landingPath({
+      redirect: to.query.redirect,
+      menus: authStore.menus,
+      registeredPaths: registeredRoutePaths(),
+    }))
+    return
+  }
+
+  // 生产首页对未登录仍公开。已登录停在壳路径时继续往下走，以便套布局。
+  if (to.meta.public && !(loggedIn && to.meta.shell)) {
     next()
     return
   }
 
-  // 密码被重置后只能停留在改密页（登录响应可能先于用户信息）
-  const mustReset = authStore.pwdResetRequired || sessionStorage.getItem('ims_pwd_reset') === '1'
-  if (mustReset && to.path !== '/user/change-password') {
-    next('/user/change-password')
-    return
-  }
-
-  // 未登录 → 跳登录页 (FP-R-07)。令牌在 localStorage，不能用无依赖的 computed。
-  const loggedIn = !!localStorage.getItem('ims_access_token')
   if (!loggedIn) {
     const requireAuth = sessionStorage.getItem('ims_require_auth') === '1'
+    // 开发环境打开 / 仍进示例页，避免壳路径挡住 B0b 演示。
+    if (demoEnabled && to.path === '/' && !requireAuth) {
+      next('/demo/tokens')
+      return
+    }
     // 示例页自动登录 (模拟)。VC-R-15 写入 ims_require_auth 后走真实跳转。
     if (demoEnabled && to.path.startsWith('/demo') && !requireAuth) {
       authStore.mockLogin()
@@ -170,21 +267,51 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
+  if (mustResetPassword() && !isPasswordPath(to.path)) {
+    const redirect = sanitizeRedirect(to.query.redirect) || sanitizeRedirect(to.fullPath)
+    next({
+      path: PASSWORD_RESET_PATH,
+      query: redirect ? { redirect } : {},
+    })
+    return
+  }
+
   // 刷新后 Pinia 清空，用 /me 恢复权限（只读用户因此看不到写操作）
-  if (!to.meta.public && authStore.permCodes.length === 0) {
+  if (authStore.permCodes.length === 0 && !isPasswordPath(to.path)) {
+    beginAuthNavigation()
     try {
       await authStore.fetchUserInfo()
-    } catch {
+    } catch (err) {
+      const code = failureCode(err)
+      // 刷新在请求层里完成。失败后再回登录页，这里不提前清 refresh token。
+      if (code === 1002 || code === 1003) {
+        sessionStorage.setItem('ims_require_auth', '1')
+        next({ path: '/login', query: { redirect: to.fullPath } })
+        return
+      }
       if (demoEnabled && to.path.startsWith('/demo')) {
         authStore.mockLogin()
       }
+    } finally {
+      endAuthNavigation()
     }
   }
 
-  // 需要修改密码 (FP-R-04)
-  if (authStore.pwdResetRequired && to.path !== '/user/change-password') {
-    next('/user/change-password')
+  if (mustResetPassword() && !isPasswordPath(to.path)) {
+    next(PASSWORD_RESET_PATH)
     return
+  }
+
+  // 已登录打开壳路径，且菜单里有可落地页面时，按 LG-08 进入该页。
+  if (to.meta.shell) {
+    const landing = resolveLanding({
+      menus: authStore.menus,
+      registeredPaths: registeredRoutePaths(),
+    })
+    if (landing && landing !== to.path) {
+      next(landing)
+      return
+    }
   }
 
   next()
