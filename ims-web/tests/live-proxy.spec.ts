@@ -8,10 +8,11 @@
  * 1. GET /health 的 data.db 为 UP
  * 2. 种子账号经登录页真实登录并拿到访问令牌
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
- * 4. 登录后 URL 离开 /login（不指定落地页）。侧栏至少有一项可点叶子，
- *    点击后地址变为该项在 /me 里的 path。
- * 5. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
- * 6. 登录后把 access token 换成用 IMS_JWT_SECRET 签的过期令牌，刷新令牌仍是登录拿到的。
+ * 4. 登录后 URL 离开 /login。侧栏画出已登记叶子：顶层能看到「权限管理」，
+ *    至少一项可点，点击后地址变为该项在 /me 里的 path。
+ * 5. test_r10 只授工作台：侧栏没有可点项，内容区显示未分配权限。
+ * 6. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
+ * 7. 登录后把 access token 换成用 IMS_JWT_SECRET 签的过期令牌，刷新令牌仍是登录拿到的。
  *    打开页面后经 Vite 调 /me：刷新接口只出现 1 次，最终 /me 为 200，地址不回登录页。
  */
 import { createHmac } from 'node:crypto'
@@ -102,21 +103,53 @@ test.describe('Vite 代理联通真实后端', () => {
     expect(me.url).toContain('/admin-api/ims/auth/me')
     expect(me.status).toBe(200)
     expect(me.body.code).toBe(0)
-    const menuNames = collectMenuNames(me.body.data?.menus)
+    const menus = me.body.data?.menus as MenuNode[] | undefined
+    const menuNames = collectMenuNames(menus)
     expect(menuNames.length).toBeGreaterThan(0)
+    expect((menus || []).map((item) => item.name)).toContain('权限管理')
 
-    // 不带 redirect。现在会进 /demo/tokens；#12 只落到已登记的菜单叶子，否则停在壳路径。
     await page.waitForURL((url) => url.pathname !== '/login')
     const sidebar = page.locator('[data-testid="app-sidebar"]')
     await expect(sidebar).toBeVisible()
+    await expect(sidebar.getByText('权限管理')).toBeVisible()
+    await expect(sidebar.getByText('系统管理')).toHaveCount(0)
     const clickable = sidebar.locator('.el-menu-item')
     expect(await clickable.count(), '侧栏至少要有一项已登记且带 path 的可点叶子').toBeGreaterThan(0)
-    const first = clickable.first()
-    const label = (await first.innerText()).trim()
-    const target = collectLeafPaths(me.body.data?.menus).find((item) => label.includes(item.name))
-    expect(target?.path, `可点项「${label}」必须对应 /me 里带 path 的叶子`).toBeTruthy()
-    await first.click()
+    const label = '岗位-角色供给规则'
+    const target = collectLeafPaths(menus).find((item) => item.name === label)
+    expect(target?.path, `可点项「${label}」必须对应 /me 里带 path 的叶子`).toBe('/ims/auth/position')
+    const item = sidebar.getByRole('menuitem', { name: label })
+    await expect(item).toBeVisible()
+    await item.click()
     await expect(page).toHaveURL((url) => url.pathname === target?.path)
+    await expect(page.getByTestId('b1-page-title')).toHaveText(label)
+  })
+
+  test('E2E-B1-LG-23 test_r10 只授工作台时侧栏为空并显示未分配权限', async ({ page }) => {
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.clear()
+      sessionStorage.clear()
+    })
+    await page.goto('/login')
+    await page.getByPlaceholder('用户名').fill('test_r10')
+    await page.getByPlaceholder('密码').fill(password)
+    await page.getByRole('button', { name: '登录' }).click()
+    await expect(page).toHaveURL((url) => url.pathname === '/')
+    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
+    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
+    await expect(page.locator('.app-sidebar').getByText('工作台')).toHaveCount(0)
+    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
+
+    await page.goto('/ims/auth/org')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/ims\/auth\/org/)
+
+    await page.goto('/ims/auth/position')
+    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
+    await expect(page.locator('.el-table')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/ims\/auth\/position/)
   })
 
   test('不带令牌经 Vite 调用 /me 返回 401 与 1002', async ({ page }) => {

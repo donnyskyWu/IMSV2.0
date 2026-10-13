@@ -2,7 +2,7 @@
  * B1 账号登录与强制改密（前端）
  * 可跑用例对接 B0a 登录 /me /logout 契约，用 mock 固定响应。
  * 依赖后端锁定计数或改密落库的用例用 test.skip 标出，等后端第 2 个 PR 合入后再联调。
- * LG-23 页面断言的种子账号依赖 #11；组织事件 1008 另依赖组织同步后端 PR，分开 skip。
+ * LG-23 的真实种子账号在 live-proxy 里跑。组织事件 1008 仍 skip，等组织同步接口。
  */
 import { test, expect, type Page, type Route } from '@playwright/test'
 import { expectNoHOverflow } from './helpers/mobile'
@@ -625,28 +625,9 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page).not.toHaveURL(/\/login/)
   })
 
-  test.skip('E2E-B1-LG-23 种子账号 test_r10 页面与侧栏（依赖后端 PR #11，未合入）', async ({ page }) => {
-    // #11 未合入，仓库里还没有仅 R10 的 test_r10。本条只验页面和侧栏，合入后去掉 skip。
-    await page.goto('/login')
-    await submitLogin(page, 'test_r10', 'Test1234')
-    await expect(page).toHaveURL((url) => new URL(url).pathname === '/')
-    await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
-    await expect(page.locator('.app-sidebar .el-menu-item')).toHaveCount(0)
-    await expect(page.locator('.app-sidebar').getByText('工作台')).toHaveCount(0)
-    await expect(page.locator('.no-menu-tip')).toHaveCount(0)
-    await page.goto('/ims/auth/org')
-    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
-    await expect(page.locator('.el-table')).toHaveCount(0)
-    await expect(page).toHaveURL(/\/ims\/auth\/org/)
-    await page.goto('/ims/auth/position')
-    await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
-    await expect(page.locator('.el-table')).toHaveCount(0)
-    await expect(page).toHaveURL(/\/ims\/auth\/position/)
-  })
-
   test.skip('E2E-B1-LG-23 外协会话请求组织事件返回 1008（依赖组织同步后端 PR）', async ({ page }) => {
-    // GET /admin-api/ims/auth/org/events 属于 B1 后端第 4 个 PR（组织同步），main 和 #11 都还没有。
-    // 会话账号 test_r10 另依赖 #11。两处都合入后再去掉 skip。用 page.request 带令牌，不依赖 Vite 源码模块。
+    // GET /admin-api/ims/auth/org/events 属于组织同步后端，main 上还没有这个接口。
+    // test_r10 已在种子里。接口合入后再去掉 skip。用 page.request 带令牌，不依赖 Vite 源码模块。
     await page.goto('/login')
     await submitLogin(page, 'test_r10', 'Test1234')
     const token = await page.evaluate(() => localStorage.getItem('ims_access_token'))
