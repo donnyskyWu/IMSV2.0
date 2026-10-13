@@ -129,6 +129,7 @@ class TestAuthPersonalCenterService:
             perm_codes=set(),
             dept_ids=[1],
             client_ip="127.0.0.1",
+            session_id="test-current-session",
         )
         ctx.set(context)
         yield context
@@ -157,6 +158,542 @@ class TestAuthPersonalCenterService:
         from app.services.auth import AuthService
         svc = AuthService()
         assert hasattr(svc, 'get_current_user_info_extended')
+
+    @pytest.mark.asyncio
+    async def test_get_my_sessions_empty(self, user_ctx):
+        """UT-B2-PC-05: get_my_sessions returns empty list when no sessions."""
+        from app.services.auth import AuthService
+        svc = AuthService()
+        result = await svc.get_my_sessions(user_id=999999)
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_my_sessions_with_valid_sessions(self, user_ctx):
+        """UT-B2-PC-05a: get_my_sessions returns valid sessions."""
+        from datetime import datetime, timedelta, timezone
+
+        from app.core.cache import Cache
+        from app.services.auth import AuthService
+        svc = AuthService()
+        user_id = 12345
+        sessions_key = f"{svc.USER_SESSIONS_PREFIX}{user_id}"
+        session_id = "test-valid-session"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        Cache.sadd(sessions_key, session_id)
+        Cache.set_json(session_key, {
+            "user_id": user_id,
+            "refresh_token": "rt",
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }, ttl=3600)
+        try:
+            result = await svc.get_my_sessions(user_id=user_id)
+            assert isinstance(result, list)
+            assert len(result) == 1
+            assert result[0]["sid"] == session_id
+            assert result[0]["current"] is False
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(sessions_key)
+
+    @pytest.mark.asyncio
+    async def test_get_my_sessions_current_session_marked(self, user_ctx):
+        """UT-B2-PC-05b: get_my_sessions marks current session."""
+        from datetime import datetime, timedelta, timezone
+
+        from app.core.cache import Cache
+        from app.services.auth import AuthService
+        svc = AuthService()
+        user_id = 12346
+        sessions_key = f"{svc.USER_SESSIONS_PREFIX}{user_id}"
+        session_id = "test-current-session"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        Cache.sadd(sessions_key, session_id)
+        Cache.set_json(session_key, {
+            "user_id": user_id,
+            "refresh_token": "rt",
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }, ttl=3600)
+        try:
+            result = await svc.get_my_sessions(user_id=user_id)
+            assert len(result) == 1
+            assert result[0]["current"] is True
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(sessions_key)
+
+    @pytest.mark.asyncio
+    async def test_get_my_sessions_skips_missing_session_data(self, user_ctx):
+        """UT-B2-PC-05c: get_my_sessions skips sessions without data."""
+        from app.core.cache import Cache
+        from app.services.auth import AuthService
+        svc = AuthService()
+        user_id = 12347
+        sessions_key = f"{svc.USER_SESSIONS_PREFIX}{user_id}"
+        Cache.sadd(sessions_key, "nonexistent-session-id")
+        try:
+            result = await svc.get_my_sessions(user_id=user_id)
+            assert isinstance(result, list)
+            assert len(result) == 0
+        finally:
+            Cache.delete(sessions_key)
+
+    @pytest.mark.asyncio
+    async def test_get_my_sessions_skips_expired_sessions(self, user_ctx):
+        """UT-B2-PC-05d: get_my_sessions skips expired sessions."""
+        from datetime import datetime, timedelta, timezone
+
+        from app.core.cache import Cache
+        from app.services.auth import AuthService
+        svc = AuthService()
+        user_id = 12348
+        sessions_key = f"{svc.USER_SESSIONS_PREFIX}{user_id}"
+        session_id = "test-expired-session"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        expires_at = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        Cache.sadd(sessions_key, session_id)
+        Cache.set_json(session_key, {
+            "user_id": user_id,
+            "refresh_token": "rt",
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }, ttl=3600)
+        try:
+            result = await svc.get_my_sessions(user_id=user_id)
+            assert isinstance(result, list)
+            assert len(result) == 0
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(sessions_key)
+
+    @pytest.mark.asyncio
+    async def test_delete_my_session_empty_id(self, user_ctx):
+        """UT-B2-PC-06: delete_my_session rejects empty session_id."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        with pytest.raises(BizError) as exc_info:
+            await svc.delete_my_session(user_id=1, session_id="")
+        assert exc_info.value.code == 1001
+
+    @pytest.mark.asyncio
+    async def test_delete_my_session_not_found(self, user_ctx):
+        """UT-B2-PC-07: delete_my_session rejects non-existent session."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        with pytest.raises(BizError) as exc_info:
+            await svc.delete_my_session(user_id=1, session_id="nonexistent-sid")
+        assert exc_info.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_delete_my_session_wrong_user(self, user_ctx):
+        """UT-B2-PC-08: delete_my_session rejects session belonging to another user."""
+        from app.core.cache import Cache
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        Cache.set_json(f"{svc.SESSION_PREFIX}test-sid-other-user", {"user_id": 2}, ttl=60)
+        try:
+            with pytest.raises(BizError) as exc_info:
+                await svc.delete_my_session(user_id=1, session_id="test-sid-other-user")
+            assert exc_info.value.code == 1504
+        finally:
+            Cache.delete(f"{svc.SESSION_PREFIX}test-sid-other-user")
+
+    @pytest.mark.asyncio
+    async def test_delete_my_session_success(self, user_ctx):
+        """UT-B2-PC-08a: delete_my_session removes a valid session."""
+        from app.core.cache import Cache
+        from app.services.auth import AuthService
+        svc = AuthService()
+        user_id = 1
+        session_id = "test-delete-session"
+        sessions_key = f"{svc.USER_SESSIONS_PREFIX}{user_id}"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        refresh_token = "test-refresh"
+        Cache.sadd(sessions_key, session_id)
+        Cache.set_json(session_key, {
+            "user_id": user_id,
+            "refresh_token": refresh_token,
+        }, ttl=60)
+        Cache.set(f"{svc.REFRESH_INDEX_PREFIX}{refresh_token}", f"{session_id}:{user_id}", ttl=60)
+        try:
+            await svc.delete_my_session(user_id=user_id, session_id=session_id)
+            assert Cache.get_json(session_key) is None
+            assert Cache.get(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}") is not None
+        finally:
+            Cache.delete(sessions_key)
+            Cache.delete(session_key)
+            Cache.delete(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}")
+            Cache.delete(f"{svc.REFRESH_INDEX_PREFIX}{refresh_token}")
+
+    @pytest.mark.asyncio
+    async def test_set_password_missing_user(self, db_session, user_ctx):
+        """UT-B2-PC-09: set_password rejects non-existent user."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        with pytest.raises(BizError) as exc_info:
+            await svc.set_password(user_id=999999, new_password="Test1234", keep_session_id="sid")
+        assert exc_info.value.code == 1002
+
+    @pytest.mark.asyncio
+    async def test_set_password_already_has_password(self, db_session, user_ctx):
+        """UT-B2-PC-10: set_password rejects user with existing password."""
+        import bcrypt
+
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        # Create user with password
+        password_hash = bcrypt.hashpw(b"existing", bcrypt.gensalt(rounds=4)).decode()
+        test_user = user(db_session, "test_has_pw", password_hash=password_hash)
+        with pytest.raises(BizError) as exc_info:
+            await svc.set_password(
+                user_id=test_user.id,
+                new_password="NewPass123",
+                keep_session_id="sid"
+            )
+        assert exc_info.value.code == 1001
+        assert "已设置密码" in exc_info.value.msg
+
+    @pytest.mark.asyncio
+    async def test_set_password_whitespace_rejected(self, db_session, user_ctx):
+        """UT-B2-PC-11: set_password rejects password with whitespace."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        # Create user without password
+        test_user = user(db_session, "test_no_pw", password_hash=None)
+        with pytest.raises(BizError) as exc_info:
+            await svc.set_password(
+                user_id=test_user.id,
+                new_password="Test 1234",
+                keep_session_id="sid"
+            )
+        assert exc_info.value.code == 1001
+        assert "空格" in exc_info.value.msg
+
+    @pytest.mark.asyncio
+    async def test_set_password_weak_rejected(self, db_session, user_ctx):
+        """UT-B2-PC-12: set_password rejects weak password."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "test_no_pw2", password_hash=None)
+        with pytest.raises(BizError) as exc_info:
+            await svc.set_password(
+                user_id=test_user.id,
+                new_password="weakpwd",
+                keep_session_id="sid"
+            )
+        assert exc_info.value.code == 1001
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_info_extended_with_mobile(self, db_session, user_ctx):
+        """UT-B2-PC-13: get_current_user_info_extended returns mobile masked."""
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "test_mobile_user")
+        test_user.mobile_enc = "13812345678"
+        db_session.flush()
+        result = await svc.get_current_user_info_extended(test_user.id)
+        assert result["user"]["mobileMasked"] == "138****5678"
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_info_extended_short_mobile(self, db_session, user_ctx):
+        """UT-B2-PC-14: get_current_user_info_extended handles short mobile."""
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "test_short_mobile")
+        test_user.mobile_enc = "123"  # Too short
+        db_session.flush()
+        result = await svc.get_current_user_info_extended(test_user.id)
+        assert result["user"]["mobileMasked"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_info_extended_no_mobile(self, db_session, user_ctx):
+        """UT-B2-PC-15: get_current_user_info_extended handles missing mobile."""
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "test_no_mobile")
+        result = await svc.get_current_user_info_extended(test_user.id)
+        assert result["user"]["mobileMasked"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_info_extended_with_roles(self, db_session, user_ctx):
+        """UT-B2-PC-16: get_current_user_info_extended returns role names."""
+        from app.domains.sys.models import Role, UserRole
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "test_user_with_roles")
+        role = Role(
+            name="测试角色",
+            role_key="TEST_ROLE",
+            status="ENABLED",
+            tenant_id=1,
+            deleted=0,
+        )
+        db_session.add(role)
+        db_session.flush()
+        user_role = UserRole(
+            user_id=test_user.id,
+            role_id=role.id,
+        )
+        db_session.add(user_role)
+        db_session.flush()
+        result = await svc.get_current_user_info_extended(test_user.id)
+        assert "roleNames" in result["user"]
+        assert "测试角色" in result["user"]["roleNames"]
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_info_extended_nonexistent_user(
+        self, db_session, user_ctx
+    ):
+        """UT-B2-PC-17: get_current_user_info_extended handles nonexistent user."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        with pytest.raises(BizError):
+            await svc.get_current_user_info_extended(user_id=999999)
+
+
+class TestAuthRefreshTokenBranches:
+    """Tests for _issue_rotated_tokens frozen/resigned branches."""
+
+    @pytest.fixture
+    def refresh_ctx(self):
+        """Set up context for refresh tests."""
+        context = RequestContext(
+            trace_id="test-trace",
+            user_id=1,
+            tenant_id=1,
+            perm_codes=set(),
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+            session_id="test-session",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_session_missing_frozen_user(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-01: _issue_rotated_tokens session_missing with frozen user returns 1216."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "rt_frozen_user")
+        test_user.status = "FROZEN"
+        db_session.flush()
+        with pytest.raises(BizError) as exc_info:
+            await svc._issue_rotated_tokens(
+                session_id="nonexistent-session",
+                refresh_token="nonexistent-rt",
+                used_key="used:key",
+                user_id=test_user.id,
+            )
+        assert exc_info.value.code == 1216
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_session_missing_resigned_user(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-02: _issue_rotated_tokens session_missing with resigned user returns 1216."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "rt_resigned_user")
+        test_user.status = "RESIGNED"
+        db_session.flush()
+        with pytest.raises(BizError) as exc_info:
+            await svc._issue_rotated_tokens(
+                session_id="nonexistent-session",
+                refresh_token="nonexistent-rt",
+                used_key="used:key",
+                user_id=test_user.id,
+            )
+        assert exc_info.value.code == 1216
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_session_missing_active_user(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-03: _issue_rotated_tokens session_missing with active user returns 1002."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "rt_active_user")
+        test_user.status = "ACTIVE"
+        db_session.flush()
+        with pytest.raises(BizError) as exc_info:
+            await svc._issue_rotated_tokens(
+                session_id="nonexistent-session",
+                refresh_token="nonexistent-rt",
+                used_key="used:key",
+                user_id=test_user.id,
+            )
+        assert exc_info.value.code == 1002
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_session_missing_no_user_id(self, refresh_ctx):
+        """UT-B2-RT-04: _issue_rotated_tokens session_missing without user_id returns 1002."""
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        with pytest.raises(BizError) as exc_info:
+            await svc._issue_rotated_tokens(
+                session_id="nonexistent-session",
+                refresh_token="nonexistent-rt",
+                used_key="used:key",
+                user_id=None,
+            )
+        assert exc_info.value.code == 1002
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_blacklisted_frozen_user(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-05: _issue_rotated_tokens blacklisted with frozen user returns 1216."""
+        from app.core.cache import Cache
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "rt_bl_frozen")
+        test_user.status = "FROZEN"
+        db_session.flush()
+        session_id = "test-bl-session"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        Cache.set_json(session_key, {
+            "user_id": test_user.id,
+            "refresh_token": "correct-rt",
+        }, ttl=60)
+        Cache.set(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}", "1", ttl=60)
+        try:
+            with pytest.raises(BizError) as exc_info:
+                await svc._issue_rotated_tokens(
+                    session_id=session_id,
+                    refresh_token="correct-rt",
+                    used_key="used:key",
+                    user_id=test_user.id,
+                )
+            assert exc_info.value.code == 1216
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}")
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_blacklisted_resigned_user(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-06: _issue_rotated_tokens blacklisted with resigned user returns 1216."""
+        from app.core.cache import Cache
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "rt_bl_resigned")
+        test_user.status = "RESIGNED"
+        db_session.flush()
+        session_id = "test-bl-session2"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        Cache.set_json(session_key, {
+            "user_id": test_user.id,
+            "refresh_token": "correct-rt2",
+        }, ttl=60)
+        Cache.set(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}", "1", ttl=60)
+        try:
+            with pytest.raises(BizError) as exc_info:
+                await svc._issue_rotated_tokens(
+                    session_id=session_id,
+                    refresh_token="correct-rt2",
+                    used_key="used:key",
+                    user_id=test_user.id,
+                )
+            assert exc_info.value.code == 1216
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}")
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_blacklisted_active_user(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-07: _issue_rotated_tokens blacklisted with active user returns 1002."""
+        from app.core.cache import Cache
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        from tests.support.rows import user
+        svc = AuthService()
+        test_user = user(db_session, "rt_bl_active")
+        test_user.status = "ACTIVE"
+        db_session.flush()
+        session_id = "test-bl-session3"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        Cache.set_json(session_key, {
+            "user_id": test_user.id,
+            "refresh_token": "correct-rt3",
+        }, ttl=60)
+        Cache.set(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}", "1", ttl=60)
+        try:
+            with pytest.raises(BizError) as exc_info:
+                await svc._issue_rotated_tokens(
+                    session_id=session_id,
+                    refresh_token="correct-rt3",
+                    used_key="used:key",
+                    user_id=test_user.id,
+                )
+            assert exc_info.value.code == 1002
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}")
+
+    @pytest.mark.asyncio
+    async def test_issue_rotated_tokens_blacklisted_no_user_id(
+        self, db_session, refresh_ctx
+    ):
+        """UT-B2-RT-08: _issue_rotated_tokens blacklisted without user_id returns 1002."""
+        from app.core.cache import Cache
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+        svc = AuthService()
+        session_id = "test-bl-session4"
+        session_key = f"{svc.SESSION_PREFIX}{session_id}"
+        Cache.set_json(session_key, {
+            "user_id": 1,
+            "refresh_token": "correct-rt4",
+        }, ttl=60)
+        Cache.set(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}", "1", ttl=60)
+        try:
+            with pytest.raises(BizError) as exc_info:
+                await svc._issue_rotated_tokens(
+                    session_id=session_id,
+                    refresh_token="correct-rt4",
+                    used_key="used:key",
+                    user_id=None,
+                )
+            assert exc_info.value.code == 1002
+        finally:
+            Cache.delete(session_key)
+            Cache.delete(f"{svc.TOKEN_BLACKLIST_PREFIX}{session_id}")
 
 
 class TestSystemLogServiceExecution:
