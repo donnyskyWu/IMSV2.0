@@ -56,7 +56,7 @@ export default defineConfig({
       },
     },
 
-    // 生产构建测试 (VC-M-34)：vite build --mode production + vite preview
+    // 生产构建：VC-M-34 与 B1 无菜单登录冒烟。vite build --mode production + vite preview
     {
       name: 'prod-build',
       use: {
@@ -67,8 +67,8 @@ export default defineConfig({
         isMobile: true,
         baseURL: 'http://127.0.0.1:4173',
       },
-      testMatch: /mobile\.spec\.ts/,
-      grep: /VC-M-34/,
+      testMatch: /mobile\.spec\.ts|b1-prod-smoke\.spec\.ts/,
+      grep: /VC-M-34|B1-PROD-01/,
     },
   ],
 

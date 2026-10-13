@@ -1,0 +1,39 @@
+/**
+ * 登录 / 强制改密共用卡片与表单。
+ * B0b 尚无 UI-L07 模板组件，两页先共用这里，供 B2 个人中心复用。
+ * 标签在输入框上方，避免 390 宽下和输入框叠在一起。
+ */
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--card);
+  border-radius: var(--r);
+  box-shadow: var(--sh);
+}
+
+.auth-form {
+  .el-form-item {
+    display: block;
+  }
+
+  .el-form-item__label {
+    display: flex;
+    width: 100% !important;
+    height: auto;
+    justify-content: flex-start;
+    margin-bottom: 6px;
+    padding: 0;
+    line-height: 1.4;
+    text-align: left;
+  }
+
+  .el-form-item__content {
+    display: block;
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .el-input {
+    width: 100%;
+  }
+}

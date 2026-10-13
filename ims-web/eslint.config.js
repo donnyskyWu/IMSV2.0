@@ -10,7 +10,7 @@ import tseslint from 'typescript-eslint'
 import pluginVue from 'eslint-plugin-vue'
 
 export default [
-  { ignores: ['dist/', 'node_modules/', '*.d.ts', 'auto-imports.d.ts', 'components.d.ts'] },
+  { ignores: ['dist/', 'node_modules/', 'coverage/', '*.d.ts', 'auto-imports.d.ts', 'components.d.ts'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/essential'],
