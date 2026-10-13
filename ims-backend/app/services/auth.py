@@ -932,46 +932,21 @@ class AuthService:
         get_db_session().commit()
 
     async def get_dingtalk_redirect_url(self, redirect: str) -> str:
-        """Get DingTalk SSO redirect URL."""
-        # Validate redirect is site-relative
-        if not redirect.startswith("/") or redirect.startswith("//"):
-            redirect = "/"
+        """钉钉授权页地址。规则在 DingTalkLoginService。"""
+        from app.services.dingtalk_login import DingTalkLoginService
 
-        # Check if DingTalk is configured
-        if not settings.dingtalk.app_key:
-            raise BizError(1008, msg="钉钉登录未开启")
+        return await DingTalkLoginService().build_redirect_url(redirect)
 
-        # Generate state
-        state = secrets.token_urlsafe(24)
+    async def handle_dingtalk_callback(
+        self,
+        auth_code: str,
+        state: str,
+        error: str = "",
+    ) -> str:
+        """钉钉回调。失败仍抛 BizError，接口层再改成登录页重定向。"""
+        from app.services.dingtalk_login import DingTalkLoginService
 
-        # Store state with redirect
-        Cache.set_json(
-            f"{self.SSO_STATE_PREFIX}{state}",
-            {"redirect": redirect},
-            ttl=300,  # 5 minutes
-        )
-
-        # Build DingTalk auth URL
-        # TODO: Implement actual DingTalk URL
-        auth_url = f"https://login.dingtalk.com/oauth2/auth?state={state}"
-
-        return auth_url
-
-    async def handle_dingtalk_callback(self, auth_code: str, state: str) -> str:
-        """Handle DingTalk SSO callback."""
-        # Verify and consume state (atomic GETDEL)
-        state_data = Cache.getdel(f"{self.SSO_STATE_PREFIX}{state}")
-        if not state_data:
-            raise BizError(1002)
-
-        import json
-        state_info = json.loads(state_data) if isinstance(state_data, str) else state_data
-        state_info.get("redirect", "/")
-
-        # Exchange auth_code for DingTalk user info
-        # TODO: Call DingTalk adapter
-
-        raise BizError(1217)  # Placeholder - no match found
+        return await DingTalkLoginService().handle_callback(auth_code, state, error)
 
 
 def _password_matches(password_hash: Optional[str], password: str) -> bool:
