@@ -3,7 +3,6 @@
 
 from typing import Any
 
-from app.core.cache import Cache
 from app.core.context import ctx
 from app.core.errors import BizError
 from app.db.ids import assign_pk
@@ -92,7 +91,7 @@ def revoke_menu(role_id: int, menu_id: int) -> None:
 
 def _drop_cache(session: Any, role_id: int) -> None:
     """Bump perm version for all users with this role (FP-D03-04).
-    
+
     Uses version-based invalidation instead of Cache.delete.
     When permissions are read, the version is compared and cache is
     reloaded if mismatched.

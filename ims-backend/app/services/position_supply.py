@@ -70,7 +70,7 @@ class PositionSupplyService:
             session.delete(link)
             roles_removed = True
         session.flush()
-        
+
         if roles_removed:
             from app.services.auth import AuthService
             AuthService.bump_user_perm_version(user_id)
@@ -94,7 +94,7 @@ class PositionSupplyService:
         elif existing.manual_removed:
             pass
         session.flush()
-        
+
         if role_changed:
             from app.services.auth import AuthService
             AuthService.bump_user_perm_version(user_id)

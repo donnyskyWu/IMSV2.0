@@ -434,7 +434,7 @@ class AuthService:
 
     async def _get_user_permissions(self, user_id: int) -> dict[str, Any]:
         """Get user's permission codes and data scopes.
-        
+
         Uses version-based cache invalidation (FP-D03-04):
         - Cache stores perm_ver at write time
         - On read, compare cached version vs current Redis version
@@ -442,7 +442,7 @@ class AuthService:
         """
         cache_key = f"{self.PERM_CACHE_PREFIX}{user_id}"
         cached = Cache.get_json(cache_key)
-        
+
         if cached:
             cached_ver = cached.get("_perm_ver", 0)
             current_ver = self.get_user_perm_version(user_id)
