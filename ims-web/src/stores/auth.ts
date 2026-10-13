@@ -135,6 +135,12 @@ export const useAuthStore = defineStore('auth', () => {
   /** 按 B0a MeResponse 读取：id 保持字符串，不转成 number。 */
   function applyMe(data: MeData): void {
     const profile = data.user
+    const extra = profile as typeof profile & {
+      mobileMasked?: string | null
+      roleNames?: string[]
+      hasPassword?: boolean
+      positionLabel?: string | null
+    }
     user.value = {
       id: String(profile.id),
       username: profile.username,
@@ -147,6 +153,10 @@ export const useAuthStore = defineStore('auth', () => {
       permCodes: data.permCodes || [],
       dataScopeText: data.dataScopeText || '',
       pwdResetRequired: Boolean(profile.pwdResetRequired),
+      mobileMasked: extra.mobileMasked ?? null,
+      roleNames: extra.roleNames || [],
+      hasPassword: extra.hasPassword !== false,
+      positionLabel: extra.positionLabel ?? null,
     }
     menus.value = (data.menus || []).map(mapMenuItem)
     permCodes.value = data.permCodes || []
@@ -162,6 +172,12 @@ export const useAuthStore = defineStore('auth', () => {
       type: item.type || undefined,
       children: item.children?.map(mapMenuItem) || [],
     }
+  }
+
+  /** 钉钉落地页写入令牌后，让登录态和跨标签页监听生效。 */
+  function adoptSession(): void {
+    tokenVersion.value += 1
+    localStorage.setItem(LOGIN_METHOD_KEY, 'dingtalk')
   }
 
   function clearSession(): void {
@@ -272,6 +288,7 @@ export const useAuthStore = defineStore('auth', () => {
     pwdResetRequired,
     login,
     submitPasswordChange,
+    adoptSession,
     logout,
     fetchUserInfo,
     clearSession,

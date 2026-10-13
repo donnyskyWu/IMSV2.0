@@ -16,6 +16,8 @@ ANONYMOUS_WHITELIST = {
 DECLARED_LOGIN_ONLY = {
     "/admin-api/ims/auth/me",
     "/admin-api/ims/auth/password/change",
+    "/admin-api/ims/auth/password/set",
+    "/admin-api/ims/auth/session/my",
     "/admin-api/ims/system/dict-type/list",
     "/admin-api/ims/system/user/simple-page",
     "/admin-api/ims/system/role/simple-list",

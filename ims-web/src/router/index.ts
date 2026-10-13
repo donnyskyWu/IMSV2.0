@@ -112,6 +112,20 @@ const changePasswordRoute: RouteRecordRaw = {
 }
 
 /** B0b 已登记路径，与 /password-reset 同一页面。 */
+const profileRoute: RouteRecordRaw = {
+  path: '/profile',
+  name: 'Profile',
+  component: () => import('@/views/profile/ProfilePage.vue'),
+  meta: { title: '个人中心', profile: true },
+}
+
+const ssoCallbackRoute: RouteRecordRaw = {
+  path: '/sso-callback',
+  name: 'SsoCallback',
+  component: () => import('@/views/SsoCallback.vue'),
+  meta: { title: '登录', public: true },
+}
+
 const changePasswordAliasRoute: RouteRecordRaw = {
   path: '/user/change-password',
   name: 'ChangePasswordAlias',
@@ -161,8 +175,10 @@ const routes: RouteRecordRaw[] = demoEnabled
   ? [
       shellRoute,
       loginRoute,
+      ssoCallbackRoute,
       changePasswordRoute,
       changePasswordAliasRoute,
+      profileRoute,
       ...b1Routes,
       ...demoRoutes,
       unknownRoute,
@@ -175,8 +191,10 @@ const routes: RouteRecordRaw[] = demoEnabled
         meta: { title: '首页', public: true, shell: true },
       },
       loginRoute,
+      ssoCallbackRoute,
       changePasswordRoute,
       changePasswordAliasRoute,
+      profileRoute,
       ...b1Routes,
       {
         path: '/demo/:pathMatch(.*)*',

@@ -130,7 +130,7 @@ export default defineConfig(({ mode }) => {
       ],
     },
     server: {
-      port: 3000,
+      port: Number(process.env.E2E_WEB_PORT || 3000),
       host: '127.0.0.1',
       strictPort: true,
       // Playwright 报告写在前端目录下。排除后，Vite 日志不再出现 page reload playwright-report。
@@ -141,7 +141,7 @@ export default defineConfig(({ mode }) => {
       ...(proxy ? { proxy } : {}),
     },
     preview: {
-      port: 4173,
+      port: Number(process.env.E2E_PREVIEW_PORT || 4173),
       host: '127.0.0.1',
       strictPort: true,
       ...(proxy ? { proxy } : {}),

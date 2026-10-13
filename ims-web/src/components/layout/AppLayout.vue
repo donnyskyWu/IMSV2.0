@@ -57,7 +57,7 @@ const showUnassigned = computed(() => {
  */
 const showDenied = computed(() => {
   if (!authStore.isLoggedIn) return false
-  if (route.meta.public || route.meta.menuless || route.meta.shell) return false
+  if (route.meta.public || route.meta.menuless || route.meta.shell || route.meta.profile) return false
   const registered = router.getRoutes().some((item) => item.path === route.path)
   if (!registered) return true
   if (route.path.startsWith('/demo/')) return authStore.permCodes.length === 0
@@ -144,6 +144,14 @@ function handleLogout() {
   authStore.clearSession()
   sessionStorage.setItem('ims_require_auth', '1')
   router.push('/login')
+}
+
+function handleUserCommand(command: string) {
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
+  if (command === 'logout') handleLogout()
 }
 </script>
 
@@ -248,7 +256,7 @@ function handleLogout() {
           </el-badge>
 
           <!-- 用户菜单 -->
-          <el-dropdown trigger="click" @command="handleLogout">
+          <el-dropdown trigger="click" @command="handleUserCommand">
             <div class="user-dropdown touch-target">
               <el-avatar :size="32">
                 {{ authStore.user?.nickname?.charAt(0) || 'U' }}
@@ -263,7 +271,7 @@ function handleLogout() {
                   统计范围：{{ authStore.dataScopeText }}
                 </el-dropdown-item>
                 <el-dropdown-item v-if="isMobile && authStore.dataScopeText" divided />
-                <el-dropdown-item>个人中心</el-dropdown-item>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>

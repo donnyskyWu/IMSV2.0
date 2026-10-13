@@ -1,6 +1,6 @@
 /**
  * 真后端联通配置（fix B0b）。
- * 只跑 live-proxy.spec.ts：浏览器打 Vite，由代理转到真实 FastAPI。
+ * 跑 live-proxy.spec.ts 和 b2-profile.spec.ts：浏览器打 Vite，由代理转到真实 FastAPI。
  * 不复用已有 dev server，避免沿用一份没带代理的旧进程。
  *
  * 登录账号只读 ims-backend/tools/seed/users.py 的 E2E_USERNAME / E2E_PASSWORD。
@@ -52,7 +52,7 @@ webServerEnv.VITE_API_PROXY_TARGET = proxyTarget
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: /live-proxy\.spec\.ts/,
+  testMatch: /live-proxy\.spec\.ts|b2-profile\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
@@ -60,7 +60,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   timeout: 60_000,
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: `http://127.0.0.1:${process.env.E2E_WEB_PORT || '3000'}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -75,7 +75,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://127.0.0.1:3000',
+    url: `http://127.0.0.1:${process.env.E2E_WEB_PORT || '3000'}`,
     // CI 先单独起 Vite 并请求 / 与 /login。这里复用那次进程，避免再冷启动一次。
     reuseExistingServer: !!process.env.CI,
     timeout: 60_000,

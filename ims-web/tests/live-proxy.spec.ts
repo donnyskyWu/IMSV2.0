@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+const webOrigin = `http://127.0.0.1:${env?.E2E_WEB_PORT || '3000'}`
 const username = env?.E2E_SEED_USERNAME
 const password = env?.E2E_SEED_PASSWORD
 if (!username || !password) {
@@ -75,7 +76,7 @@ test.describe('Vite 代理联通真实后端', () => {
       const body = await response.json()
       return { status: response.status, url: response.url, body }
     })
-    expect(new URL(health.url).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(health.url).origin).toBe(webOrigin)
     expect(health.status).toBe(200)
     expect(health.body.code).toBe(0)
     expect(health.body.data.db).toBe('UP')
@@ -89,7 +90,7 @@ test.describe('Vite 代理联通真实后端', () => {
     )
     await page.getByRole('button', { name: '登录' }).click()
     const loginResponse = await loginResponsePromise
-    expect(new URL(loginResponse.url()).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(loginResponse.url()).origin).toBe(webOrigin)
     const loginBody = await loginResponse.json()
     expect(loginBody.code).toBe(0)
     const accessToken = loginBody.data?.accessToken as string | undefined
@@ -107,7 +108,7 @@ test.describe('Vite 代理联通真实后端', () => {
       const body = await response.json()
       return { status: response.status, url: response.url, body }
     }, accessToken)
-    expect(new URL(me.url).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(me.url).origin).toBe(webOrigin)
     expect(me.url).toContain('/admin-api/ims/auth/me')
     expect(me.status).toBe(200)
     expect(me.body.code).toBe(0)
@@ -172,7 +173,7 @@ test.describe('Vite 代理联通真实后端', () => {
       const body = await response.json()
       return { status: response.status, url: response.url, body }
     })
-    expect(new URL(me.url).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(me.url).origin).toBe(webOrigin)
     expect(me.url).toContain('/admin-api/ims/auth/me')
     expect(me.status).toBe(401)
     expect(me.body.code).toBe(1002)
@@ -224,13 +225,13 @@ test.describe('Vite 代理联通真实后端', () => {
     await page.reload()
 
     const refreshed = await refreshResponse
-    expect(new URL(refreshed.url()).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(refreshed.url()).origin).toBe(webOrigin)
     const refreshBody = await refreshed.json()
     expect(refreshBody.code).toBe(0)
     expect(refreshBody.data?.accessToken).toBeTruthy()
 
     const me = await meOk
-    expect(new URL(me.url()).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(me.url()).origin).toBe(webOrigin)
     const meBody = await me.json()
     expect(me.status()).toBe(200)
     expect(meBody.code).toBe(0)
@@ -284,7 +285,7 @@ async function submitLogin(page: Page, name: string, secret: string): Promise<Ap
   )
   await page.getByRole('button', { name: '登录' }).click()
   const response = await pending
-  expect(new URL(response.url()).origin).toBe('http://127.0.0.1:3000')
+  expect(new URL(response.url()).origin).toBe(webOrigin)
   return response.json() as Promise<ApiBody>
 }
 
@@ -346,7 +347,7 @@ test.describe('E2E-B1 锁定、冻结与强制改密', () => {
       username: 'test_lock',
       password,
     })
-    expect(new URL(still.url).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(still.url).origin).toBe(webOrigin)
     expect(still.body.code).toBe(1215)
     expect(still.body.data?.remainMinutes).toBe(15)
   })
@@ -439,7 +440,7 @@ test.describe('E2E-B1 锁定、冻结与强制改密', () => {
     )
     await page.getByRole('button', { name: '确认修改' }).click()
     const badOld = await badOldPending
-    expect(new URL(badOld.url()).origin).toBe('http://127.0.0.1:3000')
+    expect(new URL(badOld.url()).origin).toBe(webOrigin)
     expect((await badOld.json() as ApiBody).code).toBe(1214)
     await expect(page.getByText('当前密码不正确')).toBeVisible()
     await expect(page).toHaveURL(/\/password-reset/)
