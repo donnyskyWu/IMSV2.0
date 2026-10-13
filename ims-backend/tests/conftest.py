@@ -71,6 +71,7 @@ def db_engine():
         )
 
     # Import all models to ensure they're registered with Base
+    from app.domains.meet import models as meet_models  # noqa: F401
     from app.domains.sys import models  # noqa: F401
 
     # Drop and recreate all tables for clean state
@@ -110,6 +111,22 @@ def db_session(db_engine) -> Generator[Session, None, None]:
         _db_session.reset(token)
         session.rollback()
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _restore_event_loop():
+    """async 用例结束后把默认循环补回来，避免后续 get_event_loop() 失败。"""
+    import asyncio
+
+    yield
+    try:
+        loop = asyncio.get_event_loop()
+        closed = loop.is_closed()
+    except RuntimeError:
+        loop = None
+        closed = True
+    if loop is None or closed:
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
 
 @pytest.fixture(autouse=True)

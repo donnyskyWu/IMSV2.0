@@ -20,11 +20,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
+    get_current_user,
     require_any_permission,
     require_login,
     require_permission,
 )
 from app.core.context import ctx
+from app.core.errors import BizError
 from app.core.pagination import PageParam
 from app.core.response import CommonResult
 from app.domains.meet.schemas import (
@@ -38,6 +40,7 @@ from app.domains.meet.schemas import (
     MeetingMinutesVO,
 )
 from app.domains.meet.service import MeetingService
+from app.services.access import authorize
 
 router = APIRouter()
 
@@ -67,6 +70,29 @@ async def _is_recorder(minutes_id: int) -> bool:
         return False
 
     return minutes.recorder_user_id == ctx.user_id
+
+
+def _authorize_any(perm_codes: list[str]) -> None:
+    """任一权限码满足即可，否则 1008。直接调用路由函数时 Depends 不会执行。"""
+    context = ctx.current_or_none
+    if context is None or not context.is_authenticated or not context.has_any_permission(perm_codes):
+        raise BizError(1008)
+
+
+def require_recorder_or_permission(perm_code: str):
+    """记录人免业务权限；其他人走 authorize。内部函数名必须是 dependency，避免被当成 LOGIN_ONLY。"""
+
+    async def dependency(minutes_id: int, user_id: int = Depends(get_current_user)) -> int:
+        if not await _is_recorder(minutes_id):
+            authorize(perm_code)
+        return user_id
+
+    return dependency
+
+
+async def _recorder_or_authorize(minutes_id: int, perm_code: str) -> None:
+    if not await _is_recorder(minutes_id):
+        authorize(perm_code)
 
 
 @router.post(
@@ -112,6 +138,7 @@ async def list_minutes(
 
     按数据范围过滤。
     """
+    _authorize_any([PERM_QUERY, PERM_QUERY_SELF])
 
     service = MeetingService()
     result = await service.list_minutes(
@@ -140,6 +167,8 @@ async def get_archive_rate(
 
     按数据范围过滤。
     """
+    authorize(PERM_SUPERVISE)
+
     service = MeetingService()
     result = await service.get_archive_rate(
         date_range_start=date_range_start,
@@ -161,6 +190,8 @@ async def get_minutes(minutes_id: int) -> CommonResult[MeetingMinutesVO]:
 
     按数据范围过滤。
     """
+    _authorize_any([PERM_QUERY, PERM_QUERY_SELF])
+
     service = MeetingService()
     result = await service.get_minutes(minutes_id)
 
@@ -171,7 +202,7 @@ async def get_minutes(minutes_id: int) -> CommonResult[MeetingMinutesVO]:
     "/minutes/{minutes_id}",
     response_model=CommonResult[MeetingCreateResp],
     summary="编辑纪要",
-    dependencies=[Depends(require_login)],
+    dependencies=[Depends(require_recorder_or_permission(PERM_EDIT))],
 )
 async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> CommonResult[MeetingCreateResp]:
     """
@@ -181,13 +212,7 @@ async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> C
     - 非记录人需要 edit 权限
     - 已归档不可编辑 → 1117
     """
-    is_recorder = await _is_recorder(minutes_id)
-    if not is_recorder:
-        from app.core.errors import BizError
-
-        context = ctx.current_or_none
-        if context is None or PERM_EDIT not in (context.perm_codes or set()):
-            raise BizError.no_permission()
+    await _recorder_or_authorize(minutes_id, PERM_EDIT)
 
     service = MeetingService()
     result = await service.update_minutes(minutes_id, request)
@@ -202,7 +227,7 @@ async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> C
     "/minutes/{minutes_id}/archive",
     response_model=CommonResult[MeetingCreateResp],
     summary="归档",
-    dependencies=[Depends(require_login)],
+    dependencies=[Depends(require_recorder_or_permission(PERM_ARCHIVE))],
 )
 async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     """
@@ -213,13 +238,7 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     - REGISTERED 不可归档 → 1001
     - 已归档不可重复归档 → 1117
     """
-    is_recorder = await _is_recorder(minutes_id)
-    if not is_recorder:
-        from app.core.errors import BizError
-
-        context = ctx.current_or_none
-        if context is None or PERM_ARCHIVE not in (context.perm_codes or set()):
-            raise BizError.no_permission()
+    await _recorder_or_authorize(minutes_id, PERM_ARCHIVE)
 
     service = MeetingService()
     result = await service.archive_minutes(minutes_id)
@@ -234,7 +253,7 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     "/minutes/{minutes_id}/appendix",
     response_model=CommonResult[MeetingMinutesVO],
     summary="附录说明",
-    dependencies=[Depends(require_login)],
+    dependencies=[Depends(require_recorder_or_permission(PERM_APPENDIX))],
 )
 async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonResult[MeetingMinutesVO]:
     """
@@ -244,13 +263,7 @@ async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonRes
     - 非记录人需要 appendix 权限
     - 仅已归档可追加
     """
-    is_recorder = await _is_recorder(minutes_id)
-    if not is_recorder:
-        from app.core.errors import BizError
-
-        context = ctx.current_or_none
-        if context is None or PERM_APPENDIX not in (context.perm_codes or set()):
-            raise BizError.no_permission()
+    await _recorder_or_authorize(minutes_id, PERM_APPENDIX)
 
     service = MeetingService()
     result = await service.add_appendix(minutes_id, request)
@@ -271,6 +284,8 @@ async def delete_minutes(minutes_id: int) -> CommonResult:
     - 需要 delete 权限
     - 已归档不可删除 → 1117
     """
+    authorize(PERM_DELETE)
+
     service = MeetingService()
     await service.delete_minutes(minutes_id)
 
@@ -291,6 +306,10 @@ async def close_action_item(item_id: int, request: ActionItemCloseReq) -> Common
     - 非责任人 → 1118
     - 已闭环 → 1001
     """
+    context = ctx.current_or_none
+    if context is None or not context.is_authenticated:
+        raise BizError(1002)
+
     service = MeetingService()
     result = await service.close_action_item(item_id, request)
 

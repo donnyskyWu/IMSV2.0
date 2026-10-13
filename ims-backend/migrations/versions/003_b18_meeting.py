@@ -11,7 +11,6 @@ Revises: 002_b1_m01_foundation
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Session
 
 revision = "003_b18_meeting"
@@ -150,6 +149,24 @@ def _create_client_token_table() -> None:
     op.create_index("idx_client_token_expires", "ims_meeting_client_token", ["expires_at"])
 
 
+def _upsert(session: Session, table: str, row: dict, conflict: str, update_col: str) -> None:
+    """MySQL 用 ON DUPLICATE KEY，SQLite 用 ON CONFLICT。"""
+    cols = list(row.keys())
+    col_sql = ", ".join(cols)
+    val_sql = ", ".join(f":{col}" for col in cols)
+    if session.get_bind().dialect.name == "sqlite":
+        sql = (
+            f"INSERT INTO {table} ({col_sql}) VALUES ({val_sql}) "
+            f"ON CONFLICT({conflict}) DO UPDATE SET {update_col} = excluded.{update_col}"
+        )
+    else:
+        sql = (
+            f"INSERT INTO {table} ({col_sql}) VALUES ({val_sql}) "
+            f"ON DUPLICATE KEY UPDATE {update_col} = VALUES({update_col})"
+        )
+    session.execute(sa.text(sql), row)
+
+
 def _seed_dict() -> None:
     """会议模块字典种子。"""
     bind = op.get_bind()
@@ -159,52 +176,38 @@ def _seed_dict() -> None:
     now = datetime.now()
 
     dict_type_rows = [
-        {"id": 200, "tenant_id": 1, "name": "会议纪要状态", "type": "meet_minutes_status",
-         "status": 0, "remark": "会议纪要状态", "creator": 0, "create_time": now, "deleted": 0},
-        {"id": 201, "tenant_id": 1, "name": "行动项状态", "type": "meet_action_status",
-         "status": 0, "remark": "行动项状态", "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 200, "tenant_id": 1, "name": "会议纪要状态", "dict_type": "meet_minutes_status",
+         "status": "ENABLED", "remark": "会议纪要状态", "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 201, "tenant_id": 1, "name": "行动项状态", "dict_type": "meet_action_status",
+         "status": "ENABLED", "remark": "行动项状态", "creator": 0, "create_time": now, "deleted": 0},
     ]
 
     dict_data_rows = [
-        {"id": 2000, "tenant_id": 1, "dict_type": "meet_minutes_status", "label": "已登记",
-         "value": "REGISTERED", "sort": 1, "status": 0, "color_type": "info",
-         "creator": 0, "create_time": now, "deleted": 0},
-        {"id": 2001, "tenant_id": 1, "dict_type": "meet_minutes_status", "label": "纪要已录入",
-         "value": "MINUTES_RECORDED", "sort": 2, "status": 0, "color_type": "warning",
-         "creator": 0, "create_time": now, "deleted": 0},
-        {"id": 2002, "tenant_id": 1, "dict_type": "meet_minutes_status", "label": "已归档",
-         "value": "ARCHIVED", "sort": 3, "status": 0, "color_type": "success",
-         "creator": 0, "create_time": now, "deleted": 0},
-        {"id": 2003, "tenant_id": 1, "dict_type": "meet_action_status", "label": "进行中",
-         "value": "OPEN", "sort": 1, "status": 0, "color_type": "info",
-         "creator": 0, "create_time": now, "deleted": 0},
-        {"id": 2004, "tenant_id": 1, "dict_type": "meet_action_status", "label": "已逾期",
-         "value": "OVERDUE", "sort": 2, "status": 0, "color_type": "danger",
-         "creator": 0, "create_time": now, "deleted": 0},
-        {"id": 2005, "tenant_id": 1, "dict_type": "meet_action_status", "label": "已闭环",
-         "value": "CLOSED", "sort": 3, "status": 0, "color_type": "success",
-         "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 2000, "tenant_id": 1, "dict_type": "meet_minutes_status", "dict_label": "已登记",
+         "dict_value": "REGISTERED", "sort": 1, "status": "ENABLED", "color_type": "info",
+         "is_builtin": 0, "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 2001, "tenant_id": 1, "dict_type": "meet_minutes_status", "dict_label": "纪要已录入",
+         "dict_value": "MINUTES_RECORDED", "sort": 2, "status": "ENABLED", "color_type": "warning",
+         "is_builtin": 0, "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 2002, "tenant_id": 1, "dict_type": "meet_minutes_status", "dict_label": "已归档",
+         "dict_value": "ARCHIVED", "sort": 3, "status": "ENABLED", "color_type": "success",
+         "is_builtin": 0, "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 2003, "tenant_id": 1, "dict_type": "meet_action_status", "dict_label": "进行中",
+         "dict_value": "OPEN", "sort": 1, "status": "ENABLED", "color_type": "info",
+         "is_builtin": 0, "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 2004, "tenant_id": 1, "dict_type": "meet_action_status", "dict_label": "已逾期",
+         "dict_value": "OVERDUE", "sort": 2, "status": "ENABLED", "color_type": "danger",
+         "is_builtin": 0, "creator": 0, "create_time": now, "deleted": 0},
+        {"id": 2005, "tenant_id": 1, "dict_type": "meet_action_status", "dict_label": "已闭环",
+         "dict_value": "CLOSED", "sort": 3, "status": "ENABLED", "color_type": "success",
+         "is_builtin": 0, "creator": 0, "create_time": now, "deleted": 0},
     ]
 
     for row in dict_type_rows:
-        session.execute(
-            sa.text("""
-                INSERT INTO ims_sys_dict_type (id, tenant_id, name, type, status, remark, creator, create_time, deleted)
-                VALUES (:id, :tenant_id, :name, :type, :status, :remark, :creator, :create_time, :deleted)
-                ON DUPLICATE KEY UPDATE name = VALUES(name)
-            """),
-            row,
-        )
+        _upsert(session, "ims_sys_dict_type", row, "id", "name")
 
     for row in dict_data_rows:
-        session.execute(
-            sa.text("""
-                INSERT INTO ims_sys_dict_data (id, tenant_id, dict_type, label, value, sort, status, color_type, creator, create_time, deleted)
-                VALUES (:id, :tenant_id, :dict_type, :label, :value, :sort, :status, :color_type, :creator, :create_time, :deleted)
-                ON DUPLICATE KEY UPDATE label = VALUES(label)
-            """),
-            row,
-        )
+        _upsert(session, "ims_sys_dict_data", row, "id", "dict_label")
 
     session.commit()
 
@@ -218,7 +221,7 @@ def _remove_dict() -> None:
         sa.text("DELETE FROM ims_sys_dict_data WHERE dict_type IN ('meet_minutes_status', 'meet_action_status')")
     )
     session.execute(
-        sa.text("DELETE FROM ims_sys_dict_type WHERE type IN ('meet_minutes_status', 'meet_action_status')")
+        sa.text("DELETE FROM ims_sys_dict_type WHERE dict_type IN ('meet_minutes_status', 'meet_action_status')")
     )
     session.commit()
 
@@ -234,46 +237,40 @@ def _seed_menu_perm() -> None:
     menu_rows = [
         {"id": 1800, "tenant_id": 1, "parent_id": 0, "name": "会议", "type": "DIR",
          "path": "", "component": None, "perm_code": None, "icon": "meet", "sort": 18,
-         "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1801, "tenant_id": 1, "parent_id": 1800, "name": "会议纪要", "type": "MENU",
          "path": "/ims/meet/minutes", "component": "meet/minutes/index", "perm_code": "ims:meet:minutes:query",
-         "icon": None, "sort": 1, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 1, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1802, "tenant_id": 1, "parent_id": 1801, "name": "仅查看本人会议", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:query-self",
-         "icon": None, "sort": 2, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 2, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1803, "tenant_id": 1, "parent_id": 1801, "name": "登记会议", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:add",
-         "icon": None, "sort": 3, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 3, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1804, "tenant_id": 1, "parent_id": 1801, "name": "编辑纪要", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:edit",
-         "icon": None, "sort": 4, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 4, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1805, "tenant_id": 1, "parent_id": 1801, "name": "归档纪要", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:archive",
-         "icon": None, "sort": 5, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 5, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1806, "tenant_id": 1, "parent_id": 1801, "name": "删除纪要", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:delete",
-         "icon": None, "sort": 6, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 6, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1807, "tenant_id": 1, "parent_id": 1801, "name": "附录说明", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:appendix",
-         "icon": None, "sort": 7, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 7, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
         {"id": 1808, "tenant_id": 1, "parent_id": 1801, "name": "留痕率监督", "type": "BUTTON",
          "path": "", "component": None, "perm_code": "ims:meet:minutes:supervise",
-         "icon": None, "sort": 8, "visible": 1, "creator": 0, "create_time": now, "deleted": 0},
+         "icon": None, "sort": 8, "visible": 1, "status": "ENABLED", "creator": 0, "create_time": now, "deleted": 0},
     ]
 
     for row in menu_rows:
-        session.execute(
-            sa.text("""
-                INSERT INTO ims_sys_menu (id, tenant_id, parent_id, name, type, path, component, perm_code, icon, sort, visible, creator, create_time, deleted)
-                VALUES (:id, :tenant_id, :parent_id, :name, :type, :path, :component, :perm_code, :icon, :sort, :visible, :creator, :create_time, :deleted)
-                ON DUPLICATE KEY UPDATE name = VALUES(name)
-            """),
-            row,
-        )
+        _upsert(session, "ims_sys_menu", row, "id", "name")
 
     role_menu_rows = []
     for menu in menu_rows:
         role_menu_rows.append({
+            "id": 18000 + menu["id"],
             "tenant_id": 1,
             "role_id": 1,
             "menu_id": menu["id"],
@@ -282,14 +279,7 @@ def _seed_menu_perm() -> None:
         })
 
     for row in role_menu_rows:
-        session.execute(
-            sa.text("""
-                INSERT INTO ims_sys_role_menu (tenant_id, role_id, menu_id, creator, create_time)
-                VALUES (:tenant_id, :role_id, :menu_id, :creator, :create_time)
-                ON DUPLICATE KEY UPDATE role_id = VALUES(role_id)
-            """),
-            row,
-        )
+        _upsert(session, "ims_sys_role_menu", row, "role_id, menu_id", "role_id")
 
     session.commit()
 

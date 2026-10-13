@@ -50,7 +50,7 @@ def _get_supervise_users_for_minutes(session: Any, minutes: Any) -> List[int]:
     roles = session.query(Role).filter(
         Role.id.in_(role_ids_with_perm),
         Role.tenant_id == minutes.tenant_id,
-        Role.status == 0,
+        Role.status == "ENABLED",
         Role.deleted == 0,
     ).all()
 
@@ -86,28 +86,31 @@ def _get_supervise_users_for_minutes(session: Any, minutes: Any) -> List[int]:
         can_see = False
 
         for role in user_roles_obj:
-            if role.data_scope == 1:
+            if role.data_scope == "ALL":
                 can_see = True
                 break
-            elif role.data_scope == 2:
+            if role.data_scope == "DEPT" and user.main_dept_id:
                 if user.main_dept_id == minutes.dept_id:
                     can_see = True
                     break
-            elif role.data_scope == 3:
-                if user.main_dept_id:
-                    user_dept = session.query(Dept).filter(
-                        Dept.id == user.main_dept_id,
-                        Dept.deleted == 0,
-                    ).first()
-                    if user_dept and user_dept.path:
-                        minutes_dept = session.query(Dept).filter(
-                            Dept.id == minutes.dept_id,
-                            Dept.deleted == 0,
-                        ).first()
-                        if minutes_dept and minutes_dept.path and minutes_dept.path.startswith(user_dept.path):
-                            can_see = True
-                            break
-            elif role.data_scope == 5:
+                user_dept = session.query(Dept).filter(
+                    Dept.id == user.main_dept_id,
+                    Dept.deleted == 0,
+                ).first()
+                minutes_dept = session.query(Dept).filter(
+                    Dept.id == minutes.dept_id,
+                    Dept.deleted == 0,
+                ).first()
+                if (
+                    user_dept
+                    and user_dept.path
+                    and minutes_dept
+                    and minutes_dept.path
+                    and minutes_dept.path.startswith(user_dept.path)
+                ):
+                    can_see = True
+                    break
+            if role.data_scope == "SELF":
                 if user.id == minutes.recorder_user_id:
                     can_see = True
                     break

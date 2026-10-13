@@ -14,12 +14,13 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from sqlalchemy import and_, func, literal, or_, select
+from sqlalchemy import and_, or_, select
 
-from app.core.clock import get_now
+from app.core.clock import BEIJING_TZ, get_now
 from app.core.context import ctx
 from app.core.errors import BizError
 from app.core.pagination import PageParam, PageResult
+from app.db.json_query import json_array_contains
 from app.db.session import get_db_session
 from app.db.transaction import transactional
 from app.domains.meet.models import (
@@ -81,6 +82,17 @@ def _validate_url(url: Optional[str]) -> None:
 
     if len(url) > 512:
         raise BizError(1001, msg="证据链接不能超过 512 字符")
+
+
+def _as_beijing(dt: datetime) -> datetime:
+    """库内 DateTime 读回是无时区的，和 get_now() 相减前对齐到北京时间。"""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=BEIJING_TZ)
+    return dt.astimezone(BEIJING_TZ)
+
+
+def _elapsed_hours(start: datetime, end: datetime) -> float:
+    return (_as_beijing(end) - _as_beijing(start)).total_seconds() / 3600
 
 
 class MeetingService:
@@ -147,10 +159,11 @@ class MeetingService:
 
         self_condition = or_(
             MeetingMinutes.recorder_user_id == user_id,
-            func.json_contains(
+            json_array_contains(
                 MeetingMinutes.attendees,
-                literal(str(user_id)),
-                literal("$.internal"),
+                "$.internal",
+                user_id,
+                session.get_bind().dialect.name,
             ),
             MeetingMinutes.id.in_(
                 select(MeetingActionItem.minutes_id).where(
@@ -412,7 +425,7 @@ class MeetingService:
         dept_id = self._get_user_main_dept_id(recorder_user_id)
 
         now = get_now()
-        hours_since = (now - request.meeting_date).total_seconds() / 3600
+        hours_since = _elapsed_hours(request.meeting_date, now)
         if hours_since > 24:
             warnings.append(1116)
 
@@ -626,7 +639,7 @@ class MeetingService:
                 raise BizError(1001, msg="行动项截止日期不能早于今天")
 
         now = get_now()
-        hours_since = (now - request.meeting_date).total_seconds() / 3600
+        hours_since = _elapsed_hours(request.meeting_date, now)
         if hours_since > 24:
             warnings.append(1116)
 
@@ -712,7 +725,7 @@ class MeetingService:
             raise BizError(1117, msg="已归档纪要不可重复归档")
 
         now = get_now()
-        hours_since = (now - minutes.meeting_date).total_seconds() / 3600
+        hours_since = _elapsed_hours(minutes.meeting_date, now)
         if hours_since > 48:
             warnings.append(1116)
 
@@ -905,11 +918,11 @@ class MeetingService:
         archive_rate = 100.0 if total == 0 else (archived_count / total) * 100
 
         unarchived = [m for m in all_minutes if m.status != "ARCHIVED"]
-        unarchived.sort(key=lambda x: x.meeting_date)
+        unarchived.sort(key=lambda x: _as_beijing(x.meeting_date))
 
         unarchived_list = []
         for m in unarchived[:100]:
-            hours_since = (now - m.meeting_date).total_seconds() / 3600
+            hours_since = _elapsed_hours(m.meeting_date, now)
             unarchived_list.append(UnarchivedMinutesVO(
                 minutes_no=m.code,
                 meeting_title=m.title,

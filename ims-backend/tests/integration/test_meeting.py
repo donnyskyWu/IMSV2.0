@@ -614,6 +614,7 @@ class TestMeetingMinutesList:
         """UT-B18-MN-01-04: 无 query/query-self → 1008。"""
         from app.domains.meet.router import list_minutes
 
+        ctx.set(meet_no_perm_context)
         with pytest.raises(BizError) as exc:
             await list_minutes()
 
@@ -937,6 +938,7 @@ class TestArchiveRate:
         """UT-B18-ST-01-02: 无 supervise 权限 → 1008。"""
         from app.domains.meet.router import get_archive_rate
 
+        ctx.set(meet_no_perm_context)
         with pytest.raises(BizError) as exc:
             await get_archive_rate()
 
