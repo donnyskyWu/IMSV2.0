@@ -94,14 +94,14 @@ def engine(tmp_path_factory):
 @pytest.fixture
 def db_session(engine):
     """Create a test database session."""
+    import contextlib
+
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
     # Clean up any leftover data from previous tests
     for table in reversed(Base.metadata.sorted_tables):
-        try:
+        with contextlib.suppress(Exception):
             session.execute(table.delete())
-        except Exception:
-            pass
     session.commit()
     yield session
     session.close()
