@@ -103,7 +103,7 @@ function startHeartbeat() {
     const intervalSeconds = Math.floor((now - lastHeartbeatTime.value) / 1000)
     lastHeartbeatTime.value = now
     
-    let newPosition = lastPosition.value
+    let newPosition: number
     if (currentMaterial.value.materialType === 'VIDEO') {
       newPosition = lastPosition.value + Math.min(intervalSeconds, 15)
     } else if (currentMaterial.value.materialType === 'DOC') {
@@ -630,7 +630,7 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .study-content {
     flex-direction: column;
   }

@@ -419,7 +419,7 @@ watch(deptFilter, loadData)
   color: var(--red);
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .stat-cards {
     grid-template-columns: repeat(2, 1fr);
   }

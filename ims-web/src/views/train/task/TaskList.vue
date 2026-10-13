@@ -210,7 +210,7 @@ async function handleSubmitTask() {
     requiredMinutes: taskForm.value.confirmType === 'DURATION' ? taskForm.value.requiredMinutes : undefined,
     quiz: taskForm.value.confirmType === 'QUIZ' ? taskForm.value.quiz : undefined,
     passScore: taskForm.value.confirmType === 'QUIZ' ? taskForm.value.passScore : undefined,
-    clientToken: crypto.randomUUID(),
+    clientToken: window.crypto.randomUUID(),
   }
 
   if (isEdit.value) {

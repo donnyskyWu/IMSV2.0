@@ -190,7 +190,7 @@ watch([pageNo, pageSize, statusFilter], loadTasks)
 
   &:hover {
     border-color: var(--primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 8%);
   }
 }
 
@@ -302,7 +302,7 @@ watch([pageNo, pageSize, statusFilter], loadTasks)
   justify-content: flex-end;
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .task-grid {
     grid-template-columns: 1fr;
   }
