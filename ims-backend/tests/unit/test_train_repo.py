@@ -250,4 +250,4 @@ class TestTrainRecordRepo:
         result = repo.count_by_task(99999, ctx.tenant_id)
 
         assert result["total"] == 0
-        assert result["confirmed"] == 0
+        assert result["finished"] == 0
