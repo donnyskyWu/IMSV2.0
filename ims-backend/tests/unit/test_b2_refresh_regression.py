@@ -96,12 +96,12 @@ class TestB2RefreshRegression:
             _run(service.refresh(tokens["refresh_token"]))
         assert exc_info.value.code == 1216
 
-    def test_ut_b2_bg_07_08_replay_old_refresh_revokes_session(
+    def test_ut_b2_bg_07_08_replay_old_refresh_returns_1002_and_revokes_session(
         self, db_session, test_context
     ):
-        """UT-B2-BG-07-08: Replay old refresh_token → entire session revoked
+        """UT-B2-BG-07-08: Replaying an old refresh token returns 1002 AND the session's newly issued access and refresh tokens are both invalid.
 
-        旧刷新令牌被重放时，整段会话被吊销，包括刚换发的 access 和 refresh。
+        重放旧刷新令牌返回 1002，且该会话刚换发的 access 和 refresh 令牌都失效。
         """
         from app.core.errors import BizError
         from app.services.auth import AuthService

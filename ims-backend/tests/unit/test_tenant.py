@@ -172,3 +172,97 @@ class TestTenantExpiration:
         )
 
         assert tenant.expire_time is not None
+
+
+class TestTenantPackageSync:
+    """Tests for tenant package R1 sync behavior (UT-B2-T-03-*)."""
+
+    def test_ut_b2_t_03_09_r1_keeps_menu_after_package_drops_it(self, db_session, test_context):
+        """UT-B2-T-03-09: R1 keeps a menu after the package drops it.
+
+        换套餐时同步 R1 只补不删：旧套餐有、新套餐没有的菜单保留在 R1 中。
+        这保证了租户管理员不会因为换套餐而丢失已有权限。
+        """
+        from app.domains.sys.models import Menu, Role, RoleMenu, Tenant, TenantPackage, TenantPackageMenu
+        from tests.support.rows import add
+
+        tenant = add(db_session, Tenant(
+            tenant_id=1,
+            name="测试租户",
+            status="ENABLED",
+        ))
+
+        menu_a = add(db_session, Menu(
+            tenant_id=1, parent_id=0, type="MENU", name="菜单A",
+            perm_code="test:menu:a", status="ENABLED",
+        ))
+        menu_b = add(db_session, Menu(
+            tenant_id=1, parent_id=0, type="MENU", name="菜单B",
+            perm_code="test:menu:b", status="ENABLED",
+        ))
+
+        old_package = add(db_session, TenantPackage(
+            tenant_id=1, name="旧套餐", status="ENABLED",
+        ))
+        add(db_session, TenantPackageMenu(package_id=old_package.id, menu_id=menu_a.id))
+        add(db_session, TenantPackageMenu(package_id=old_package.id, menu_id=menu_b.id))
+
+        new_package = add(db_session, TenantPackage(
+            tenant_id=1, name="新套餐", status="ENABLED",
+        ))
+        add(db_session, TenantPackageMenu(package_id=new_package.id, menu_id=menu_a.id))
+
+        r1 = add(db_session, Role(
+            tenant_id=tenant.id, role_key="R1", name="租户管理员",
+            status="ENABLED", source="MANUAL", data_scope="ALL",
+        ))
+        add(db_session, RoleMenu(tenant_id=tenant.id, role_id=r1.id, menu_id=menu_a.id))
+        add(db_session, RoleMenu(tenant_id=tenant.id, role_id=r1.id, menu_id=menu_b.id))
+
+        tenant.package_id = old_package.id
+        db_session.flush()
+
+        r1_menus_before = {rm.menu_id for rm in db_session.query(RoleMenu).filter(
+            RoleMenu.role_id == r1.id
+        ).all()}
+        assert menu_a.id in r1_menus_before
+        assert menu_b.id in r1_menus_before
+
+        tenant.package_id = new_package.id
+        db_session.flush()
+
+        r1_menus_after = {rm.menu_id for rm in db_session.query(RoleMenu).filter(
+            RoleMenu.role_id == r1.id
+        ).all()}
+        assert menu_a.id in r1_menus_after, "新套餐有的菜单应保留"
+        assert menu_b.id in r1_menus_after, "只补不删：新套餐没有的菜单也应保留"
+
+    def test_ut_b2_t_03_10_version_not_bumped_when_package_unchanged(self, db_session, test_context):
+        """UT-B2-T-03-10: The version is not bumped when the package didn't change.
+
+        更新租户时，如果套餐没变，不递增 perm_version，避免无谓的权限缓存失效。
+        """
+        from app.core.cache import Cache
+        from app.domains.sys.models import Tenant, TenantPackage
+        from tests.support.rows import add
+
+        tenant = add(db_session, Tenant(
+            tenant_id=1,
+            name="测试租户",
+            status="ENABLED",
+        ))
+        package = add(db_session, TenantPackage(
+            tenant_id=1, name="测试套餐", status="ENABLED",
+        ))
+        tenant.package_id = package.id
+        db_session.flush()
+
+        perm_ver_key = f"ims:perm_ver:t:{tenant.id}"
+        Cache.set(perm_ver_key, "1")
+        initial_version = Cache.get(perm_ver_key)
+
+        tenant.name = "更新后的租户名"
+        db_session.flush()
+
+        after_version = Cache.get(perm_ver_key)
+        assert after_version == initial_version, "套餐没变时 perm_version 不应递增"
