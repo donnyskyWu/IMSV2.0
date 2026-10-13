@@ -74,9 +74,29 @@ def db_engine():
     from app.domains.sys import models  # noqa: F401
 
     # Drop and recreate all tables for clean state
-    # Note: We drop tables for both MySQL and SQLite to ensure clean state,
-    # especially when SQLite uses StaticPool which reuses connections
-    Base.metadata.drop_all(bind=engine)
+    # For SQLite with StaticPool, we need to explicitly drop all objects
+    if is_sqlite:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            # Disable foreign keys for clean drop
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            # Get all table names
+            tables = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            ).fetchall()
+            for (table_name,) in tables:
+                conn.execute(text(f"DROP TABLE IF EXISTS [{table_name}]"))
+            # Get all index names (not auto-created ones)
+            indices = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
+            ).fetchall()
+            for (index_name,) in indices:
+                conn.execute(text(f"DROP INDEX IF EXISTS [{index_name}]"))
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+            conn.commit()
+    else:
+        Base.metadata.drop_all(bind=engine)
+    
     Base.metadata.create_all(bind=engine)
 
     yield engine
