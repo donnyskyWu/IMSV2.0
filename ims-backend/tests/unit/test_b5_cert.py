@@ -293,15 +293,17 @@ def test_ut_b5_ct_06_ocr(b5, monkeypatch):
     b5.flush()
     settings = get_settings()
     settings.train_ai.mode = "mock"
-    settings.train_ai.base_url = "http://127.0.0.1"
+    settings.train_ai.base_url = "https://example.com"
     settings.train_ai.enabled = True
     found = CertService().recognize_cert("mine.png")
     assert found["recognized"] is True
     assert found["certNo"] == ID_OK
+    settings.train_ai.base_url = "http://127.0.0.1"
+    assert CertService().recognize_cert("mine.png")["recognized"] is False
     settings.train_ai.base_url = "http://10.1.2.3"
-    assert CertService().recognize_cert("mine.png")["recognized"] is True
+    assert CertService().recognize_cert("mine.png")["recognized"] is False
     settings.train_ai.base_url = "https://169.254.169.254"
-    assert CertService().recognize_cert("mine.png")["recognized"] is True
+    assert CertService().recognize_cert("mine.png")["recognized"] is False
     settings.train_ai.base_url = "ftp://10.0.0.1"
     assert CertService().recognize_cert("mine.png")["recognized"] is False
     settings.train_ai.base_url = "file:///tmp/a"
@@ -393,7 +395,7 @@ def test_ut_b5_ex_02_up(b5):
 
 
 def test_ut_b5_ex_01_recv(b5):
-    """UT-B5-EX-01-RECV 部门范围收不到证件通知，公司列表仍看得到。"""
+    """UT-B5-EX-01-RECV 部门范围收不到证件通知。公司 DEPT 列表由显式谓词为空。"""
     created, _person = _upload()
     use_scope("ALL", uid=2)
     CertService().review_cert(created["id"], True, "")
@@ -405,7 +407,7 @@ def test_ut_b5_ex_01_recv(b5):
     scan_cert_expire()
     assert b5.query(InboxMessage).filter(InboxMessage.user_id == 2).count() == 0
     use_scope("DEPT", uid=2)
-    assert CompanyService().page_companies()["total"] == 1
+    assert CompanyService().page_companies()["total"] == 0
 
 
 def test_ut_b5_ex_02_list(b5):
@@ -509,13 +511,22 @@ def test_ut_b5_sc_03(b5):
 
 def test_ut_b5_scope(b5):
     """UT-B5-BG-04-SCOPE-ALL UT-B5-BG-04-SCOPE-DEPT UT-B5-BG-04-SCOPE-SELF"""
+    from app.domains.shared.models import OrgCompany
+    from app.services.corp_support import base_stmt, company_rows_hidden
+
     company = CompanyService().create_company({"name": "范围公司", "credit_code": CREDIT_OK, "industry": "IT"})
     person = _realname()
     sim = _sim(person["id"])
     cert, _ = _upload(person=person)
     use_scope("DEPT", uid=2)
-    assert CompanyService().page_companies()["total"] == 1
-    assert CompanyService().get_company(company["id"])["name"] == "范围公司"
+    assert company_rows_hidden() is True
+    assert OrgCompany.__scope_fields__ == {}
+    assert b5.execute(base_stmt(OrgCompany)).scalars().all()
+    assert CompanyService().page_companies()["total"] == 0
+    err = _raise(lambda: CompanyService().get_company(company["id"]), 1504)
+    assert "范围公司" not in (err.msg or "")
+    task = CompanyService().export_companies()
+    assert Cache.get_json(f"ims:export:{task['taskId']}")["total"] == 0
     assert RealnameService().page_realnames()["total"] == 0
     assert SimCardService().page_sim_cards()["total"] == 0
     assert CertService().list_certs()["total"] == 0
@@ -524,12 +535,16 @@ def test_ut_b5_scope(b5):
     _raise(lambda: CertService().get_cert(cert["id"]), 1504)
     assert CompanyService().list_company_options()
     use_scope("SELF", uid=1)
-    assert CompanyService().page_companies()["total"] == 1
+    assert company_rows_hidden() is True
+    assert CompanyService().page_companies()["total"] == 0
+    _raise(lambda: CompanyService().get_company(company["id"]), 1504)
     assert RealnameService().page_realnames()["total"] == 1
     assert SimCardService().page_sim_cards()["total"] == 1
     assert CertService().list_certs()["total"] == 1
     use_scope("ALL", uid=2)
+    assert company_rows_hidden() is False
     assert CompanyService().page_companies()["total"] == 1
+    assert CompanyService().get_company(company["id"])["name"] == "范围公司"
     assert CertService().list_certs()["total"] == 1
 
 
@@ -548,6 +563,8 @@ def test_ut_b5_scope_startup():
             scoped.append(route)
     assert company
     assert all(getattr(route, "scope_model", None) is None for route in company)
+    from app.domains.shared.models import OrgCompany
+    assert OrgCompany.__scope_fields__ == {}
     assert scoped
     assert all(getattr(route.scope_model, "__scope_fields__", None) for route in scoped)
     validate_scope_models(bound)

@@ -1,5 +1,5 @@
 # 公司服务（B5 FP-B5-CO）。版本 v1.0 · 2026-10-13
-"""公司只校验登录和权限码，不挂数据范围。"""
+"""公司路由不挂 scope_model。DEPT/SELF 由 company_rows_hidden 显式返回空或 1504。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from app.services.corp_support import (
     add_row,
     as_text_id,
     base_stmt,
+    company_rows_hidden,
     fetch_page,
     get_alive,
     masked_id,
@@ -33,14 +34,21 @@ MP_PLATFORMS = ("WECHAT_OFFICIAL", "WECHAT_SERVICE")
 
 
 class CompanyService:
-    """公司档案。同租户 ALL / DEPT / SELF 看到同一批公司。"""
+    """公司档案。读列表和按 id 读只放行 ALL。选择器不走这道判断。"""
 
     def page_companies(self, name: str = "", status: str = "", page_no: int = 1, page_size: int = 20) -> dict:
+        if company_rows_hidden():
+            return {"list": [], "total": 0}
         stmt = self._filtered(name, status)
         total, rows = fetch_page(stmt, OrgCompany, page_no, page_size)
         return {"list": [self._brief(row) for row in rows], "total": total}
 
     def get_company(self, company_id: Any) -> dict:
+        if company_rows_hidden():
+            raise BizError.not_found()
+        return self._detail(company_id)
+
+    def _detail(self, company_id: Any) -> dict:
         row = get_alive(OrgCompany, company_id)
         data = self._brief(row)
         data["address"] = row.address or ""
@@ -72,7 +80,7 @@ class CompanyService:
             status=status,
         )
         add_row(get_db_session(), row)
-        return self.get_company(row.id)
+        return self._detail(row.id)
 
     def update_company(self, company_id: Any, payload: dict) -> dict:
         row = get_alive(OrgCompany, company_id)
@@ -97,14 +105,14 @@ class CompanyService:
             row.legal_id_card_enc = enc
             row.legal_id_card_hash = digest
         # 编辑不改公众号容量，容量只走扩容。
-        return self.get_company(row.id)
+        return self._detail(row.id)
 
     def set_company_status(self, company_id: Any, status: str) -> dict:
         require_dict("dict_company_status", status)
         row = get_alive(OrgCompany, company_id)
         row.status = status
         get_db_session().flush()
-        return self.get_company(row.id)
+        return self._detail(row.id)
 
     def expand_company(self, company_id: Any, to_capacity: Any, reason: str) -> dict:
         row = get_alive(OrgCompany, company_id)
@@ -128,7 +136,7 @@ class CompanyService:
         add_row(get_db_session(), expansion)
         row.mp_capacity = target
         get_db_session().flush()
-        return self.get_company(row.id)
+        return self._detail(row.id)
 
     def list_company_options(self, keyword: str = "") -> list[dict]:
         """选择器：登录即可，不套数据范围，最多 50 条启用公司。"""
@@ -140,6 +148,10 @@ class CompanyService:
 
     def export_companies(self, name: str = "", status: str = "") -> dict:
         """异步导出：筛选与列表相同，身份证脱敏，结果放 Redis。"""
+        if company_rows_hidden():
+            task_id = uuid4().hex
+            Cache.set_json(f"ims:export:{task_id}", {"total": 0, "rows": []}, ttl=3600)
+            return {"taskId": task_id}
         total, rows = fetch_page(self._filtered(name, status), OrgCompany, 1, 100)
         payload = []
         for row in rows:

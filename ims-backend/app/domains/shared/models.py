@@ -23,7 +23,7 @@ class _Named(AuditBase):
 
 
 class OrgCompany(_Named):
-    """公司。不声明数据范围字段，路由不挂 scope_model。"""
+    """公司。__scope_fields__ 保持空，路由不挂 scope_model。DEPT/SELF 在服务里显式处理。"""
 
     __tablename__ = "ims_org_company"
 

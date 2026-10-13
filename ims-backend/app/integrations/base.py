@@ -8,6 +8,7 @@ Per FP-H04-01:
 - Circuit breaker (5 failures in 1 min -> breaker for 30s)
 """
 
+import ipaddress
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
@@ -22,11 +23,34 @@ T = TypeVar('T')
 
 
 def assert_http_url(url: str) -> bool:
-    """只放行 http / https。不解析主机，环回地址的 http(s) 也通过。"""
+    """只放行公网 http / https。
+
+    拒绝 ftp、file 以及其他 scheme。字面量主机落在私网、环回或链路本地时拒绝，
+    含 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、127.0.0.0/8、169.254.0.0/16。
+    不解析 DNS。域名（例如培训 AI 的公网地址）原样放行。
+    """
     if not url:
         return False
-    scheme = urlsplit(url).scheme.lower()
-    return scheme in ("http", "https")
+    parts = urlsplit(url)
+    if parts.scheme.lower() not in ("http", "https"):
+        return False
+    host = (parts.hostname or "").strip().lower().rstrip(".")
+    if not host or host == "localhost":
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    mapped = getattr(address, "ipv4_mapped", None)
+    if mapped is not None:
+        address = mapped
+    return not (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_unspecified
+        or address.is_reserved
+    )
 
 
 class CircuitBreaker:

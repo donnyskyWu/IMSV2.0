@@ -1,5 +1,5 @@
 # 公司资源共用的租户、软删、字典和数据范围谓词。
-"""公司不走数据范围。实名人、手机卡按非空 owner。证件用 cert_matches_scope。"""
+"""公司 DEPT/SELF 由 company_rows_hidden 显式判断。实名人、手机卡按非空 owner。证件用 cert_matches_scope。"""
 
 from __future__ import annotations
 
@@ -72,6 +72,19 @@ def scope_types() -> set[str]:
 def has_all_scope() -> bool:
     current = ctx.current_or_none
     return current is not None and current.has_all_data_scope()
+
+
+def company_rows_hidden() -> bool:
+    """公司没有 dept 列，路由不挂 scope_model。
+
+    仓储在 __scope_fields__ 为空时不会限制查询，所以这里显式判断：
+    只有 ALL 能看列表和按 id 读。DEPT 或 SELF（且没有 ALL）时列表为空、按 id 读 1504。
+    选择器不调用本函数。未配置数据范围也不在这条里。
+    """
+    current = ctx.current_or_none
+    if current is None or current.has_all_data_scope():
+        return False
+    return bool(current.get_data_scope_types() & {"DEPT", "SELF"})
 
 
 def owner_visible(query: Query, model: Any, owner_name: str) -> Query:

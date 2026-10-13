@@ -623,7 +623,7 @@ def test_ut_b5_bg_02_grant(b5):
 
 
 def test_ut_b5_ct_06_url():
-    """UT-B5-CT-06-URL 只校验 scheme。127.0.0.1、10.x、169.254 的 http(s) 放行，ftp 与 file 拒绝。"""
+    """UT-B5-CT-06-URL 拒绝环回、私网、169.254 和 ftp，不能只测 file。公网 http(s) 放行。"""
     assert assert_http_url("file://etc/passwd") is False
     assert assert_http_url("ftp://example.com") is False
     assert assert_http_url("ftp://127.0.0.1") is False
@@ -631,13 +631,17 @@ def test_ut_b5_ct_06_url():
     assert assert_http_url("ftp://169.254.169.254") is False
     assert assert_http_url("example.com") is False
     assert assert_http_url("") is False
-    assert assert_http_url("http://127.0.0.1") is True
-    assert assert_http_url("https://127.0.0.1") is True
-    assert assert_http_url("http://10.1.2.3") is True
-    assert assert_http_url("https://10.0.0.8/ocr") is True
-    assert assert_http_url("http://169.254.169.254") is True
-    assert assert_http_url("https://169.254.1.1") is True
+    assert assert_http_url("http://127.0.0.1") is False
+    assert assert_http_url("https://127.0.0.1") is False
+    assert assert_http_url("http://localhost/ocr") is False
+    assert assert_http_url("http://10.1.2.3") is False
+    assert assert_http_url("https://10.0.0.8/ocr") is False
+    assert assert_http_url("http://172.16.0.1") is False
+    assert assert_http_url("http://192.168.1.1") is False
+    assert assert_http_url("http://169.254.169.254") is False
+    assert assert_http_url("https://169.254.1.1") is False
     assert assert_http_url("https://example.com/ocr") is True
+    assert assert_http_url("http://8.8.8.8/ocr") is True
 
 
 def test_ut_b5_ct_06_literal():
