@@ -640,7 +640,8 @@ def ut_d07_16(db, _ctx, _clock):
     assert login.value.code == 1216
     with pytest.raises(BizError) as token:
         _run(auth.verify_token(first["access_token"]))
-    assert token.value.code == 1002
+    # B2 改进：离职用户返回 1216 而非 1002
+    assert token.value.code == 1216
     assert len([item for item in USER_EVENTS if item["type"] == "user.resigned"]) == 1
 
 
