@@ -16,11 +16,11 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-UT_PATTERN = re.compile(r'\bUT-[A-Z]\d{2}-\d{2}\b')
-# B5 编号是 UT-B5-CO-01，旧正则只认 UT-字母两位-两位。
-UT_PATTERN_LOOSE = re.compile(
+# 规格和测试共用。第一支认 UT-A01-10；第二支认 UT-B5-CO-01 以及 UT-B5-CO-05-1222。
+UT_PATTERN = re.compile(
     r'\b(?:[Uu][Tt]-[A-Za-z]\d{2}-\d{2}|[Uu][Tt]-B5-[A-Za-z]{2}-\d{2}(?:-[A-Za-z0-9]+)*)\b'
 )
+UT_PATTERN_LOOSE = UT_PATTERN
 
 
 def _is_pass_only(node: ast.FunctionDef) -> bool:
@@ -37,15 +37,15 @@ def _is_pass_only(node: ast.FunctionDef) -> bool:
 
 
 def _ids_in_text(text: str) -> set[str]:
-    return {m.group().upper() for m in UT_PATTERN_LOOSE.finditer(text)}
+    return {m.group().upper() for m in UT_PATTERN.finditer(text)}
 
 
 # Parse UT IDs from spec
 def parse_ut_ids_from_spec(spec_path: str) -> set[str]:
-    """Extract all UT-xxx IDs from the spec document."""
+    """Extract UT IDs from a spec, including UT-B5-CO-01."""
     with open(spec_path, 'r', encoding='utf-8') as f:
         content = f.read()
-    return set(UT_PATTERN.findall(content))
+    return _ids_in_text(content)
 
 
 def _function_source(lines: list[str], node: ast.FunctionDef) -> str:

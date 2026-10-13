@@ -298,6 +298,12 @@ def test_ut_b5_ct_06_ocr(b5, monkeypatch):
     found = CertService().recognize_cert("mine.png")
     assert found["recognized"] is True
     assert found["certNo"] == ID_OK
+    settings.train_ai.base_url = "http://10.1.2.3"
+    assert CertService().recognize_cert("mine.png")["recognized"] is True
+    settings.train_ai.base_url = "https://169.254.169.254"
+    assert CertService().recognize_cert("mine.png")["recognized"] is True
+    settings.train_ai.base_url = "ftp://10.0.0.1"
+    assert CertService().recognize_cert("mine.png")["recognized"] is False
     settings.train_ai.base_url = "file:///tmp/a"
     assert CertService().recognize_cert("mine.png")["recognized"] is False
     settings.train_ai.base_url = "https://example.com"

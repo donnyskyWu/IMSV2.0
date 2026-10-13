@@ -238,6 +238,54 @@ def test_ut_b5_co_05_1001(b5):
     _raise(lambda: CompanyService().expand_company(created["id"], 3, "  "), 1001)
 
 
+def test_ut_b5_co_02_1504(b5):
+    """UT-B5-CO-02-1504 update_company 不存在或跨租户 → 1504，响应无名称。"""
+    created = _company()
+    err = _raise(lambda: CompanyService().update_company(404, {"name": "无"}), 1504)
+    assert "星河" not in (err.msg or "")
+    use_scope("ALL", tid=2)
+    err = _raise(lambda: CompanyService().update_company(created["id"], {"name": "跨租户"}), 1504)
+    assert "星河" not in (err.msg or "")
+
+
+def test_ut_b5_co_02_1008(b5):
+    """UT-B5-CO-02-1008 公司 update 路由无权限码 → 1008。空数据范围仍可改。"""
+    from app.services.access import authorize
+    created = _company()
+    use_scope("ALL", perms=_all_perms() - {"ims:corp:company:update"})
+    _raise(lambda: authorize("ims:corp:company:update"), 1008)
+    use_scope("ALL", scopes=[])
+    updated = CompanyService().update_company(created["id"], {"name": "空范围仍可改"})
+    assert updated["name"] == "空范围仍可改"
+
+
+def test_ut_b5_co_03_1504(b5):
+    """UT-B5-CO-03-1504 set_company_status 不存在 → 1504。"""
+    err = _raise(lambda: CompanyService().set_company_status(404, "DISABLED"), 1504)
+    assert "星河" not in (err.msg or "")
+
+
+def test_ut_b5_co_05_1504(b5):
+    """UT-B5-CO-05-1504 expand_company 不存在或跨租户 → 1504，响应无名称。"""
+    created = _company()
+    err = _raise(lambda: CompanyService().expand_company(404, 9, "无"), 1504)
+    assert "星河" not in (err.msg or "")
+    use_scope("ALL", tid=2)
+    err = _raise(lambda: CompanyService().expand_company(created["id"], 9, "跨租户"), 1504)
+    assert "星河" not in (err.msg or "")
+
+
+def test_ut_b5_co_05_1008(b5):
+    """UT-B5-CO-05-1008 公司扩容路由无 expand 码 → 1008。空数据范围仍可扩容。"""
+    from app.services.access import authorize
+    created = _company()
+    use_scope("ALL", perms=_all_perms() - {"ims:corp:company:expand"})
+    _raise(lambda: authorize("ims:corp:company:expand"), 1008)
+    use_scope("ALL", scopes=[])
+    detail = CompanyService().expand_company(created["id"], 6, "空范围")
+    assert detail["mpCapacity"] == 6
+
+
 def test_ut_b5_co_06_export(b5):
     """UT-B5-CO-06 导出任务写入缓存且身份证脱敏。"""
     _company()
@@ -295,6 +343,20 @@ def test_ut_b5_rn_02_1503(b5):
     _raise(lambda: _realname(id_type="BAD"), 1503)
 
 
+def test_ut_b5_rn_02_1504(b5):
+    """UT-B5-RN-02-1504 update_realname 不存在 → 1504。"""
+    err = _raise(lambda: RealnameService().update_realname(404, {"name": "无"}), 1504)
+    assert "张三" not in (err.msg or "")
+
+
+def test_ut_b5_rn_02_1008(b5):
+    """UT-B5-RN-02-1008 update_realname、create_realname 没有数据范围 → 1008。"""
+    created = _realname()
+    use_scope("ALL", scopes=[])
+    _raise(lambda: RealnameService().update_realname(created["id"], {"name": "无范围"}), 1008)
+    _raise(lambda: _realname(name="另一个", id_card=ID_OK_2, phone="13900003333"), 1008)
+
+
 def test_ut_b5_rn_03_status(b5):
     """UT-B5-RN-03 离职后选择器排除，deleted 仍为 0。"""
     created = _realname()
@@ -349,6 +411,25 @@ def test_ut_b5_rn_05_1504(b5):
     _raise(lambda: RealnameService().delete_realname(404), 1504)
 
 
+def test_ut_b5_rn_03_1504(b5):
+    """UT-B5-RN-03-1504 set_realname_status 不存在 → 1504。"""
+    _raise(lambda: RealnameService().set_realname_status(404, "LEFT"), 1504)
+
+
+def test_ut_b5_rn_03_1008(b5):
+    """UT-B5-RN-03-1008 set_realname_status 没有数据范围 → 1008。"""
+    created = _realname()
+    use_scope("ALL", scopes=[])
+    _raise(lambda: RealnameService().set_realname_status(created["id"], "LEFT"), 1008)
+
+
+def test_ut_b5_rn_05_1008(b5):
+    """UT-B5-RN-05-1008 delete_realname 没有数据范围 → 1008。"""
+    created = _realname()
+    use_scope("ALL", scopes=[])
+    _raise(lambda: RealnameService().delete_realname(created["id"]), 1008)
+
+
 def test_ut_b5_rn_06_detail(b5):
     """UT-B5-RN-06 详情带中介人。"""
     created = _realname()
@@ -386,6 +467,7 @@ def test_ut_b5_sm_02_update_keeps_phone(b5):
     row_after = b5.get(MasterSimCard, int(created["id"]))
     assert row_after.phone_number_enc == row_before
     assert row_after.package_name == "新套餐"
+    assert row_after.phone_id is None
 
 
 def test_ut_b5_sm_02_1001(b5):
@@ -439,6 +521,44 @@ def test_ut_b5_sm_04_1502(b5):
     b5.add(MasterPhone(id=1, tenant_id=1, name="手机", sim_card_id=int(created["id"])))
     b5.flush()
     _raise(lambda: SimCardService().delete_sim_card(created["id"]), 1502)
+
+
+def test_ut_b5_sm_02_1504(b5):
+    """UT-B5-SM-02-1504 update_sim_card 不存在、跨租户或非本人归属 → 1504。"""
+    person = _realname()
+    created = _sim(person["id"])
+    err = _raise(lambda: SimCardService().update_sim_card(404, {"package_name": "无"}), 1504)
+    assert "138" not in (err.msg or "")
+    use_scope("ALL", tid=2)
+    _raise(lambda: SimCardService().update_sim_card(created["id"], {"package_name": "跨租户"}), 1504)
+    use_scope("SELF", uid=2)
+    _raise(lambda: SimCardService().update_sim_card(created["id"], {"package_name": "他人"}), 1504)
+
+
+def test_ut_b5_sm_02_1008(b5):
+    """UT-B5-SM-02-1008 update_sim_card、create_sim_card 没有数据范围 → 1008。"""
+    person = _realname()
+    created = _sim(person["id"])
+    use_scope("ALL", scopes=[])
+    _raise(lambda: SimCardService().update_sim_card(created["id"], {"package_name": "无范围"}), 1008)
+    _raise(lambda: _sim(person["id"], phone="13900004444", iccid="8986009999000011112"), 1008)
+
+
+def test_ut_b5_sm_04_1504(b5):
+    """UT-B5-SM-04-1504 delete_sim_card 不存在或跨租户 → 1504。"""
+    person = _realname()
+    created = _sim(person["id"])
+    _raise(lambda: SimCardService().delete_sim_card(404), 1504)
+    use_scope("ALL", tid=2)
+    _raise(lambda: SimCardService().delete_sim_card(created["id"]), 1504)
+
+
+def test_ut_b5_sm_04_1008(b5):
+    """UT-B5-SM-04-1008 delete_sim_card 没有数据范围 → 1008。"""
+    person = _realname()
+    created = _sim(person["id"])
+    use_scope("ALL", scopes=[])
+    _raise(lambda: SimCardService().delete_sim_card(created["id"]), 1008)
 
 
 def test_ut_b5_sm_05_export(b5):
@@ -503,12 +623,20 @@ def test_ut_b5_bg_02_grant(b5):
 
 
 def test_ut_b5_ct_06_url():
-    """UT-B5-CT-06-URL 只校验 scheme，环回 http 放行。"""
+    """UT-B5-CT-06-URL 只校验 scheme。127.0.0.1、10.x、169.254 的 http(s) 放行，ftp 与 file 拒绝。"""
     assert assert_http_url("file://etc/passwd") is False
     assert assert_http_url("ftp://example.com") is False
+    assert assert_http_url("ftp://127.0.0.1") is False
+    assert assert_http_url("ftp://10.1.2.3") is False
+    assert assert_http_url("ftp://169.254.169.254") is False
     assert assert_http_url("example.com") is False
     assert assert_http_url("") is False
     assert assert_http_url("http://127.0.0.1") is True
+    assert assert_http_url("https://127.0.0.1") is True
+    assert assert_http_url("http://10.1.2.3") is True
+    assert assert_http_url("https://10.0.0.8/ocr") is True
+    assert assert_http_url("http://169.254.169.254") is True
+    assert assert_http_url("https://169.254.1.1") is True
     assert assert_http_url("https://example.com/ocr") is True
 
 
