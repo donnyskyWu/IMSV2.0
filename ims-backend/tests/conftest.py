@@ -3,8 +3,8 @@
 Test fixtures and configuration.
 
 Rules:
-- Tests prefer MySQL 8 for CI (via IMS_DB_URL env var)
-- Fallback to SQLite for local dev without MySQL
+- Tests require MySQL 8 (via IMS_DB_URL env var)
+- Tests require Redis (via IMS_REDIS_URL env var)
 - Injectable clock for time-dependent tests (D4)
 - All external integrations use Mock mode
 """
@@ -18,74 +18,46 @@ import pytest
 
 # Set test environment BEFORE importing app modules
 os.environ.setdefault("IMS_ENV", "test")
-# Use MySQL if IMS_DB_URL is set (e.g., CI), otherwise fallback to SQLite
-if "IMS_DB_URL" not in os.environ:
-    os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
-if "IMS_REDIS_URL" not in os.environ:
-    os.environ.setdefault("IMS_REDIS_URL", "")  # Disable Redis for tests if not set
 os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 os.environ.setdefault("IMS_JWT_ACCESS_TOKEN_TTL", "7200")
 os.environ.setdefault("IMS_JWT_REFRESH_TOKEN_TTL", "604800")
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.core.clock import reset_clock, set_clock
 from app.core.context import RequestContext, ctx
 from app.db.base import Base
 
 
-def _is_sqlite(url: str) -> bool:
-    """Check if the database URL is for SQLite."""
-    return url.startswith("sqlite")
-
-
 @pytest.fixture(scope="function")
 def db_engine():
-    """Create database engine for tests (MySQL or SQLite)."""
-    db_url = os.environ.get("IMS_DB_URL", "sqlite:///:memory:")
-    is_sqlite = _is_sqlite(db_url)
+    """Create database engine for tests (MySQL only)."""
+    db_url = os.environ.get("IMS_DB_URL")
+    redis_url = os.environ.get("IMS_REDIS_URL")
+    if not db_url:
+        pytest.exit("IMS_DB_URL environment variable is required", returncode=1)
+    if not redis_url:
+        pytest.exit("IMS_REDIS_URL environment variable is required", returncode=1)
 
-    if is_sqlite:
-        engine = create_engine(
-            db_url,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-            echo=False,
-        )
-
-        # Enable foreign keys for SQLite
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-    else:
-        # MySQL or other DB - use connection pooling
-        engine = create_engine(
-            db_url,
-            echo=False,
-            pool_pre_ping=True,
-        )
+    engine = create_engine(
+        db_url,
+        echo=False,
+        pool_pre_ping=True,
+    )
 
     # Import all models to ensure they're registered with Base
     from app.domains.sys import models  # noqa: F401
 
     # Drop and recreate all tables for clean state
-    if not is_sqlite:
-        # For MySQL, drop tables first to ensure clean state
-        Base.metadata.drop_all(bind=engine)
-
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     yield engine
 
     # Cleanup
-    if not is_sqlite:
-        Base.metadata.drop_all(bind=engine)
-
+    Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
 

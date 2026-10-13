@@ -845,7 +845,7 @@ class AuthService:
             # 其它会话的旧刷新令牌一并失效，当前这次登录的刷新令牌保留。
             self._forget_refresh_index(Cache.get_json(session_key))
             Cache.delete(session_key)
-            Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
+            Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=settings.jwt.access_token_ttl)
             Cache.srem(sessions_key, sid)
         session.flush()
 

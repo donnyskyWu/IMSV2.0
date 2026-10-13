@@ -502,9 +502,9 @@ class UserService:
         if user.status == "RESIGNED":
             raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
 
-        # Users who have logged in cannot be deleted
+        # Users who have logged in cannot be deleted (LG-07: return 1001)
         if user.last_login_time is not None:
-            raise BizError(1502, refs=[{"entity": "有登录记录的用户", "count": 1}])
+            raise BizError(1001, msg="已登录过的用户不能删除，请改为冻结或离职")
 
         for check in USER_REF_CHECKS:
             count = check(session, user_id_int)
@@ -536,13 +536,16 @@ class UserService:
 
     def _drop_sessions(self, user_id: int) -> None:
         from app.core.cache import Cache
+        from app.core.config import get_settings
         from app.services.auth import AuthService
 
         auth = AuthService()
+        settings = get_settings()
+        blacklist_ttl = max(settings.jwt.access_token_ttl, 3600)
         key = f"{auth.USER_SESSIONS_PREFIX}{user_id}"
         for sid in list(Cache.smembers(key)):
             Cache.delete(f"{auth.SESSION_PREFIX}{sid}")
-            Cache.set(f"{auth.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
+            Cache.set(f"{auth.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=blacklist_ttl)
             Cache.srem(key, sid)
 
     async def freeze_user(self, user_id: str) -> None:

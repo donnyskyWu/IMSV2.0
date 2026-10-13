@@ -184,6 +184,8 @@ def register_routes(app: FastAPI) -> None:
     """Register all domain routers."""
     from app.api.auth import router as auth_router
     from app.api.health import router as health_router
+    from app.api.org_sync import router as org_sync_router
+    from app.api.org_sync_callback import router as org_sync_callback_router
     from app.api.system import router as system_router
 
     # Health check (anonymous)
@@ -194,6 +196,12 @@ def register_routes(app: FastAPI) -> None:
 
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])
+
+    # Org sync routes (/admin-api/ims/auth/org)
+    app.include_router(org_sync_router, prefix="/admin-api/ims/auth", tags=["组织同步"])
+
+    # DingTalk callback (anonymous, signature-authenticated)
+    app.include_router(org_sync_callback_router, prefix="/admin-api/ims", tags=["钉钉回调"])
 
     # Demo routes - test environment only (FP-B08-08)
     if settings.env == "test":

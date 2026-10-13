@@ -3,6 +3,8 @@
 
 业务服务只依赖 exchange()。测试替换整个客户端，不替换数据库或认证服务。
 真实 HTTP 只在 mode=real 时发出；mock 返回适配器里的固定用户。
+
+LG-07 扩展：get_user_detail() 拉取人员详情供即时同步使用。
 """
 
 from dataclasses import dataclass
@@ -11,15 +13,6 @@ from typing import Optional
 import httpx
 
 from app.integrations.dingtalk.client import DingTalkClient
-
-# 扫码走新版 OAuth，再用 unionId 换企业内 userid。
-# H5 免登走企业内部应用 access_token + getuserinfo，返回的就是企业 userid。
-_QR_TOKEN_URL = "https://api.dingtalk.com/v1.0/oauth2/userAccessToken"
-_QR_ME_URL = "https://api.dingtalk.com/v1.0/contact/users/me"
-_APP_TOKEN_URL = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
-_UNIONID_USER_URL = "https://oapi.dingtalk.com/topapi/user/getbyunionid"
-_H5_USERINFO_URL = "https://oapi.dingtalk.com/topapi/v2/user/getuserinfo"
-_USER_GET_URL = "https://oapi.dingtalk.com/topapi/v2/user/get"
 
 
 class DingTalkLoginError(Exception):
@@ -50,13 +43,24 @@ class HttpxDingTalkLoginClient:
         mode: str = "mock",
         timeout_seconds: float = 10.0,
         transport: Optional[httpx.AsyncBaseTransport] = None,
+        base_url: str = "https://oapi.dingtalk.com",
+        api_base_url: str = "https://api.dingtalk.com",
     ) -> None:
         self.app_key = app_key
         self.app_secret = app_secret
         self.mode = mode
         self.timeout = timeout_seconds
-        # 单测注入传输层，避免访问钉钉。生产不传。
         self._transport = transport
+        self.base_url = base_url
+        self.api_base_url = api_base_url
+
+        self._qr_token_url = f"{api_base_url}/v1.0/oauth2/userAccessToken"
+        self._qr_me_url = f"{api_base_url}/v1.0/contact/users/me"
+        self._app_token_url = f"{api_base_url}/v1.0/oauth2/accessToken"
+        self._unionid_user_url = f"{base_url}/topapi/user/getbyunionid"
+        self._h5_userinfo_url = f"{base_url}/topapi/v2/user/getuserinfo"
+        self._user_get_url = f"{base_url}/topapi/v2/user/get"
+        self._corp_token_url = f"{base_url}/gettoken"
 
     async def exchange(self, auth_code: str, channel: str) -> DingTalkIdentity:
         """channel 为 DINGTALK_QR 或 DINGTALK_H5。"""
@@ -75,7 +79,7 @@ class HttpxDingTalkLoginClient:
     async def _exchange_qr(self, auth_code: str) -> DingTalkIdentity:
         token_body = await self._json(
             "POST",
-            _QR_TOKEN_URL,
+            self._qr_token_url,
             json={
                 "clientId": self.app_key,
                 "clientSecret": self.app_secret,
@@ -88,10 +92,9 @@ class HttpxDingTalkLoginClient:
             raise DingTalkLoginError(1006)
         profile = await self._json(
             "GET",
-            _QR_ME_URL,
+            self._qr_me_url,
             headers={"x-acs-dingtalk-access-token": access_token},
         )
-        # unionId / openId 都不是企业内 userid，不能拿去对 dingtalk_user_id。
         union_id = str(profile.get("unionId") or "").strip()
         if not union_id:
             raise DingTalkLoginError(1006)
@@ -109,7 +112,7 @@ class HttpxDingTalkLoginClient:
         access_token = await self._app_access_token()
         body = await self._json(
             "POST",
-            _UNIONID_USER_URL,
+            self._unionid_user_url,
             params={"access_token": access_token},
             json={"unionid": union_id},
         )
@@ -123,10 +126,23 @@ class HttpxDingTalkLoginClient:
     async def _app_access_token(self) -> str:
         token_body = await self._json(
             "POST",
-            _APP_TOKEN_URL,
+            self._app_token_url,
             json={"appKey": self.app_key, "appSecret": self.app_secret},
         )
         access_token = str(token_body.get("accessToken") or "").strip()
+        if not access_token:
+            raise DingTalkLoginError(1006)
+        return access_token
+
+    async def _corp_access_token(self) -> str:
+        """Get corp access token for oapi endpoints."""
+        body = await self._json(
+            "GET",
+            self._corp_token_url,
+            params={"appkey": self.app_key, "appsecret": self.app_secret},
+        )
+        self._raise_if_errcode(body)
+        access_token = str(body.get("access_token") or "").strip()
         if not access_token:
             raise DingTalkLoginError(1006)
         return access_token
@@ -135,7 +151,7 @@ class HttpxDingTalkLoginClient:
         access_token = await self._app_access_token()
         info = await self._json(
             "POST",
-            _H5_USERINFO_URL,
+            self._h5_userinfo_url,
             params={"access_token": access_token},
             json={"code": auth_code},
         )
@@ -149,7 +165,7 @@ class HttpxDingTalkLoginClient:
         try:
             detail = await self._json(
                 "POST",
-                _USER_GET_URL,
+                self._user_get_url,
                 params={"access_token": access_token},
                 json={"userid": user_id},
             )
@@ -160,7 +176,6 @@ class HttpxDingTalkLoginClient:
             if detail_result.get("name"):
                 name = str(detail_result["name"])
         except DingTalkLoginError:
-            # 已经拿到 userid 时，手机号详情失败仍按 userid 匹配。
             mobile = None
         return DingTalkIdentity(
             user_id=user_id,
@@ -168,6 +183,42 @@ class HttpxDingTalkLoginClient:
             union_id=str(result.get("unionid") or "") or None,
             name=name,
         )
+
+    async def get_user_detail(self, userid: str) -> dict:
+        """
+        Fetch user details from DingTalk.
+
+        API: POST /topapi/v2/user/get
+        Docs: https://open.dingtalk.com/document/orgapp/query-user-details
+
+        Returns:
+            userid: User ID
+            name: Name
+            active: Whether active (True=active)
+            dept_id_list: Department ID list
+            job_number: Employee number
+            title: Job title
+            mobile: Phone (masked)
+        """
+        if self.mode != "real":
+            mock = DingTalkClient(mode="mock")._mock_user
+            return {
+                "userid": mock.user_id,
+                "name": mock.name,
+                "active": True,
+                "dept_id_list": [],
+                "job_number": "",
+            }
+
+        access_token = await self._corp_access_token()
+        body = await self._json(
+            "POST",
+            self._user_get_url,
+            params={"access_token": access_token},
+            json={"userid": userid},
+        )
+        self._raise_if_errcode(body)
+        return body.get("result", {})
 
     async def _json(self, method: str, url: str, **kwargs: object) -> dict:
         try:
