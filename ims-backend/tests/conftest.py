@@ -71,6 +71,8 @@ def db_engine():
         )
 
     # Import all models to ensure they're registered with Base
+    import app.domains.corp.models  # noqa: F401
+    import app.domains.shared.models  # noqa: F401
     from app.domains.sys import models  # noqa: F401
 
     # Drop and recreate all tables for clean state

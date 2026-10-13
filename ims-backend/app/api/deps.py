@@ -77,7 +77,10 @@ async def get_current_user_optional(
         ctx.set(context)
 
         return user_info["user_id"]
-    except BizError:
+    except BizError as exc:
+        # 1002 仍交给 get_current_user。冻结、离职和租户/权限版本要原样返回。
+        if exc.code in (1216, 1008):
+            raise
         return None
 
 

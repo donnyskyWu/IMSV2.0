@@ -17,7 +17,10 @@ from collections import defaultdict
 from pathlib import Path
 
 UT_PATTERN = re.compile(r'\bUT-[A-Z]\d{2}-\d{2}\b')
-UT_PATTERN_LOOSE = re.compile(r'\b[Uu][Tt]-[A-Za-z]\d{2}-\d{2}\b')
+# B5 编号是 UT-B5-CO-01，旧正则只认 UT-字母两位-两位。
+UT_PATTERN_LOOSE = re.compile(
+    r'\b(?:[Uu][Tt]-[A-Za-z]\d{2}-\d{2}|[Uu][Tt]-B5-[A-Za-z]{2}-\d{2}(?:-[A-Za-z0-9]+)*)\b'
+)
 
 
 def _is_pass_only(node: ast.FunctionDef) -> bool:

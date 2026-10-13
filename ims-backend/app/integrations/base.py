@@ -12,12 +12,21 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Generic, Optional, TypeVar
+from urllib.parse import urlsplit
 
 from app.core.clock import get_now
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
+
+
+def assert_http_url(url: str) -> bool:
+    """只放行 http / https。不解析主机，环回地址的 http(s) 也通过。"""
+    if not url:
+        return False
+    scheme = urlsplit(url).scheme.lower()
+    return scheme in ("http", "https")
 
 
 class CircuitBreaker:

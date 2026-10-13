@@ -20,6 +20,11 @@ DECLARED_LOGIN_ONLY = {
     "/admin-api/ims/system/user/simple-page",
     "/admin-api/ims/system/role/simple-list",
     "/admin-api/ims/demo/error",
+    # B5 选择器和原图查看只要求登录，权限在服务里再判可见性。
+    "/admin-api/ims/corp/resource/company/simple-list",
+    "/admin-api/ims/corp/resource/realname/simple-list",
+    "/admin-api/ims/corp/resource/sim-card/simple-list",
+    "/admin-api/ims/cert/security/view/{cert_id}",
 }
 
 

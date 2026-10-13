@@ -14,3 +14,12 @@ app/services/user.py
 app/db/session.py
 app/services/dict.py
 app/services/role.py
+# B5 公司资源：月租、证件删除与分级、字段加密。
+app/services/company.py
+app/services/realname.py
+app/services/sim_card.py
+app/services/cert.py
+app/services/cert_expire.py
+app/services/cert_security.py
+app/services/cert_file.py
+app/core/crypto.py

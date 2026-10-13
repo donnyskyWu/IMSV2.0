@@ -195,6 +195,22 @@ def register_routes(app: FastAPI) -> None:
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])
 
+    from app.api.cert import router as cert_router
+    from app.api.corp import router as corp_router
+    from app.core.route_policy import _iter_routes, validate_scope_models
+
+    app.include_router(corp_router, prefix="/admin-api/ims/corp/resource", tags=["公司资源"])
+    app.include_router(cert_router, prefix="/admin-api/ims/cert", tags=["证件"])
+    # FastAPI 把子路由包在 _IncludedRouter 里，scope_model 要抄到真正的路由上。
+    bound = []
+    for _path, route in _iter_routes(app.router):
+        endpoint = getattr(route, "endpoint", None)
+        model = getattr(endpoint, "__scope_model__", None)
+        if model is not None:
+            route.scope_model = model
+        bound.append(route)
+    validate_scope_models(bound)
+
     # Demo routes - test environment only (FP-B08-08)
     if settings.env == "test":
         from app.api.demo import router as demo_router

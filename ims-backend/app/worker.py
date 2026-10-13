@@ -3,19 +3,21 @@
 
 from typing import Any
 
-JOBS: list[str] = []
-
-
-def job(fn: Any) -> Any:
-    """Register a worker task."""
-    JOBS.append(fn.__name__)
-    return fn
+from app.jobs import JOBS, job
 
 
 @job
 def sync_retry() -> None:
     """Sample registered task."""
     return None
+
+
+def _register_domain_jobs() -> None:
+    """导入带 @job 的业务函数，完成登记。"""
+    from app.services import cert_expire  # noqa: F401
+
+
+_register_domain_jobs()
 
 
 class WorkerProcess:

@@ -15,6 +15,7 @@ import { useResponsive } from '@/utils/responsive'
 import { collectLeafPaths, resolveLanding, visibleMenus } from '@/utils/login-landing'
 import DownloadBar from '@/components/file/DownloadBar.vue'
 import type { MenuItem } from '@/types'
+import SidebarMenuTree from '@/components/layout/SidebarMenuTree.vue'
 
 const props = withDefaults(defineProps<{ hideSidebar?: boolean }>(), { hideSidebar: false })
 
@@ -188,32 +189,8 @@ function handleLogout() {
           :collapse-transition="false"
           @select="handleMenuSelect"
         >
-          <template v-for="item in sidebarMenus" :key="item.id">
-            <!-- 有子菜单 -->
-            <el-sub-menu v-if="item.children?.length" :index="item.id">
-              <template #title>
-                <el-icon v-if="item.icon">
-                  <component :is="item.icon" />
-                </el-icon>
-                <span>{{ item.name }}</span>
-              </template>
-              <el-menu-item
-                v-for="child in item.children"
-                :key="child.id"
-                :index="child.path || child.id"
-              >
-                {{ child.name }}
-              </el-menu-item>
-            </el-sub-menu>
-
-            <!-- 无子菜单 -->
-            <el-menu-item v-else :index="item.path || item.id">
-              <el-icon v-if="item.icon">
-                <component :is="item.icon" />
-              </el-icon>
-              <span>{{ item.name }}</span>
-            </el-menu-item>
-          </template>
+          <!-- 目录可多层。两级菜单与原来一样，三级（公司资产）也能点到叶子。 -->
+          <SidebarMenuTree v-for="item in sidebarMenus" :key="item.id" :item="item" />
         </el-menu>
 
         <!-- 无菜单时的侧栏提示。壳页面的同一句改由内容区展示，避免重复。 -->

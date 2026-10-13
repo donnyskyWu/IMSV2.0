@@ -745,11 +745,17 @@ class TestDepsBranches:
         from app.core.cache import Cache
         from app.core.clock import get_now
         from app.core.config import get_settings
+        from app.domains.sys.models import User
         from app.services.auth import AuthService
 
         settings = get_settings()
         now = get_now()
         session_id = "deps-test-session"
+        db_session.add(User(
+            id=1, tenant_id=1, username="deps_user", nickname="Deps",
+            status="ACTIVE", source="LOCAL",
+        ))
+        db_session.flush()
 
         # Setup session
         service = AuthService()
