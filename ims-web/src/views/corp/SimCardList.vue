@@ -17,7 +17,7 @@ import {
 } from '@/api/resource'
 
 const rows = ref<SimRow[]>([])
-const query = reactive({ operator: '' })
+const query = reactive({ phone: '', realname: '', operator: '' })
 const formOpen = ref(false)
 const detailOpen = ref(false)
 const editing = ref(false)
@@ -27,8 +27,19 @@ const exportText = ref('')
 const form = reactive({ phone: '', operator: '', realnameId: '', monthlyRent: '', iccid: '' })
 
 async function load() {
-  const page = await pageSimCards({ operator: query.operator })
-  rows.value = page.list || []
+  const page = await pageSimCards({ operator: query.operator, phone: query.phone })
+  let list = page.list || []
+  if (query.realname.trim()) {
+    list = list.filter((item) => (item.realnameName || '').includes(query.realname.trim()))
+  }
+  rows.value = list
+}
+
+function reset() {
+  query.phone = ''
+  query.realname = ''
+  query.operator = ''
+  load()
 }
 
 function openCreate() {
@@ -109,16 +120,22 @@ onMounted(load)
         </div>
       </header>
       <div class="filters">
+        <el-input v-model="query.phone" placeholder="号码" />
+        <el-input v-model="query.realname" placeholder="实名人" />
         <el-select v-model="query.operator" placeholder="运营商" clearable>
           <el-option label="移动" value="CMCC" />
           <el-option label="联通" value="CUCC" />
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
+        <el-button @click="reset">重置</el-button>
       </div>
       <p v-if="exportText" data-testid="sm-export">{{ exportText }}</p>
+      <div class="table-scroll">
       <el-table :data="rows">
+        <el-table-column prop="id" label="卡 ID" />
         <el-table-column prop="phone" label="号码" />
         <el-table-column prop="operatorLabel" label="运营商" />
+        <el-table-column prop="realnameName" label="实名人" />
         <el-table-column label="月租">
           <template #default="{ row }">¥{{ row.monthlyRent }}</template>
         </el-table-column>
@@ -130,6 +147,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <el-drawer v-model="formOpen" :title="editing ? '编辑手机卡' : '新增手机卡'">
         <p v-for="item in errors" :key="item">{{ item }}</p>
@@ -167,5 +185,11 @@ onMounted(load)
 
 .page-head {
   justify-content: space-between;
+}
+
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 </style>

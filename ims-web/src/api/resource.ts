@@ -82,6 +82,7 @@ export interface CertRow {
   status: string
   statusLabel?: string
   warnLevel: string
+  expireDate?: string
   version: number
   creatorId?: string
   daysLeft?: number | null

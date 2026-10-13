@@ -455,6 +455,10 @@ def test_ut_b5_sm_01_page(b5):
     assert page["total"] == 1
     assert page["list"][0]["phone"].startswith("138")
     assert "13812345678" not in page["list"][0]["phone"]
+    assert page["list"][0]["operatorLabel"] == "移动"
+    assert page["list"][0]["realnameName"] == "张三"
+    assert SimCardService().page_sim_cards(operator="CMCC")["total"] == 1
+    assert SimCardService().page_sim_cards(operator="CUCC")["total"] == 0
 
 
 def test_ut_b5_sm_02_update_keeps_phone(b5):

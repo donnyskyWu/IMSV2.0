@@ -45,21 +45,34 @@ def alive(model: Any) -> Any:
     return (model.tenant_id == tenant_id(), model.deleted == 0)
 
 
-def require_dict(dict_type: str, value: Optional[str]) -> None:
-    """空值跳过。有值则必须是启用的字典项，否则 1503。"""
-    if not value:
-        return
+def _dict_row(dict_type: str, value: str):
     from app.domains.sys.models import DictData
 
     session = get_db_session()
-    row = session.query(DictData).filter(
+    return session.query(DictData).filter(
         DictData.dict_type == dict_type,
         DictData.dict_value == value,
         DictData.deleted == 0,
         DictData.status == "ENABLED",
     ).first()
-    if row is None:
+
+
+def require_dict(dict_type: str, value: Optional[str]) -> None:
+    """空值跳过。有值则必须是启用的字典项，否则 1503。"""
+    if not value:
+        return
+    if _dict_row(dict_type, value) is None:
         raise BizError(1503)
+
+
+def dict_label(dict_type: str, value: Optional[str]) -> str:
+    """启用字典项的中文名。没有匹配时返回空串，页面不直接展示英文码。"""
+    if not value:
+        return ""
+    row = _dict_row(dict_type, value)
+    if row is None or not row.dict_label:
+        return ""
+    return str(row.dict_label)
 
 
 def scope_types() -> set[str]:

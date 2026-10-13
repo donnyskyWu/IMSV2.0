@@ -390,7 +390,9 @@ async function handle(route: Route, world: World, role: () => string) {
   if (path.endsWith('/sim-card/page')) {
     let list = world.sims
     const operator = url.searchParams.get('operator')
+    const phone = url.searchParams.get('phone')
     if (operator) list = list.filter((item) => item.operator === operator)
+    if (phone) list = list.filter((item) => item.phone.includes(phone))
     return reply(route, 0, {
       list: list.map((item) => ({
         id: item.id,
@@ -398,6 +400,7 @@ async function handle(route: Route, world: World, role: () => string) {
         operator: item.operator,
         operatorLabel: LABELS[item.operator],
         realnameId: item.realnameId,
+        realnameName: world.people.find((person) => person.id === item.realnameId)?.name || '',
         monthlyRent: Number(item.monthlyRent).toFixed(2),
         statusCode: item.statusCode,
         accounts: [],
@@ -892,7 +895,7 @@ test('E2E-B5-SM-01 新增手机卡', async ({ page }) => {
   await expect(page.getByText('号码必填')).toBeVisible()
   await expect(page.getByText('实名人必填')).toBeVisible()
   await expect(page.locator('.realname-select input')).toHaveJSProperty('readOnly', true)
-  await page.getByPlaceholder('号码').fill('13800001111')
+  await inDrawer(page, '号码').fill('13800001111')
   await choose(page, '运营商', '移动')
   await choose(page, '请选择实名人', 'TC实名人甲')
   await page.getByPlaceholder('月租').fill('128')
@@ -907,7 +910,7 @@ test('E2E-B5-SM-02 号码 / ICCID 重复', async ({ page }) => {
   session.world.sims.push({ id: '1111', phone: '13800001111', operator: 'CMCC', realnameId: '111', monthlyRent: '1', iccid: 'ICCID-A', statusCode: 'ENABLED' })
   await page.goto('/ims/corp/resource/sim-card')
   await page.getByRole('button', { name: '新增手机卡' }).click()
-  await page.getByPlaceholder('号码').fill('13800001111')
+  await inDrawer(page, '号码').fill('13800001111')
   await choose(page, '运营商', '移动')
   await choose(page, '请选择实名人', 'TC实名人甲')
   await page.getByRole('button', { name: '保存' }).click()
@@ -932,8 +935,8 @@ test('E2E-B5-SM-03 详情与编辑只读号码', async ({ page }) => {
   await expect(page.getByText('关联平台账号空状态')).toBeVisible()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: '编辑' }).click()
-  await expect(page.getByPlaceholder('号码')).toBeDisabled()
-  await expect(page.getByPlaceholder('号码')).toHaveValue('138****1111')
+  await expect(inDrawer(page, '号码')).toBeDisabled()
+  await expect(inDrawer(page, '号码')).toHaveValue('138****1111')
 })
 
 test('E2E-B5-SM-04 删除与筛选', async ({ page }) => {
@@ -1347,4 +1350,93 @@ test('E2E-B5-BG-05 库内加密核对', async ({ page }) => {
   const stored = session.world.people[0]
   expect(stored.idCard).not.toBe(maskId(stored.idCard))
   expect(stored.phone).not.toContain('****')
+})
+
+/**
+ * 对照 crCompany / crRealname / crSim / crCert 的页头、筛选、表头和 390 侧栏。
+ * 公司表多一列「信用代码」、筛选用「名称」而不是「公司名称」，以 02 的 E2E-B5-CO-01 为准。
+ * 实名人多一列「手机号」，同样以 02 的脱敏列表为准。证件三个 Tab 来自工作包，不在静态快照里。
+ */
+test('E2E-B5-PROTO 四页结构文案与响应式', async ({ page }) => {
+  await boot(page, 'xz')
+  const width = page.viewportSize()?.width || 1440
+  const mobile = width < 768
+  const pages: Array<{
+    path: string
+    title: string
+    buttons: string[]
+    headers: string[]
+    placeholders: string[]
+    tabs?: string[]
+  }> = [
+    {
+      path: '/ims/corp/resource/company',
+      title: '公司管理',
+      buttons: ['导出', '新建公司', '查询', '重置'],
+      headers: ['公司 ID', '名称', '信用代码', '公众号容量', '状态', '操作'],
+      placeholders: ['名称', '信用代码'],
+    },
+    {
+      path: '/ims/corp/resource/realname',
+      title: '实名人管理',
+      buttons: ['导出', '新增实名人', '查询', '重置'],
+      headers: ['实名人 ID', '姓名', '证件号', '手机号', '中介人', '状态', '操作'],
+      placeholders: ['姓名', '证件号'],
+    },
+    {
+      path: '/ims/corp/resource/sim-card',
+      title: '手机卡管理',
+      buttons: ['导出', '新增手机卡', '查询', '重置'],
+      headers: ['卡 ID', '号码', '运营商', '实名人', '月租', '操作'],
+      placeholders: ['号码', '实名人'],
+    },
+    {
+      path: '/ims/corp/resource/certificate',
+      title: '证件管理',
+      buttons: ['上传证件', '查询', '重置'],
+      headers: ['持有人', '类型', '证件号', '有效期至', '状态', '操作'],
+      placeholders: ['持有人'],
+      tabs: ['档案', '到期预警', '分级与审计'],
+    },
+  ]
+  for (const spec of pages) {
+    await page.goto(spec.path)
+    const title = page.getByRole('heading', { level: 1, name: spec.title })
+    await expect(title).toBeVisible()
+    for (const name of spec.buttons) {
+      await expect(page.getByRole('button', { name, exact: true }).first()).toBeVisible()
+    }
+    for (const placeholder of spec.placeholders) {
+      await expect(page.locator('.filters').getByPlaceholder(placeholder)).toBeVisible()
+    }
+    for (const tab of spec.tabs || []) {
+      await expect(page.getByRole('tab', { name: tab })).toBeVisible()
+    }
+    const cells = page.locator('.el-table:visible').first().locator('.el-table__header-wrapper th .cell')
+    const count = await cells.count()
+    const labels: string[] = []
+    for (let index = 0; index < count; index += 1) {
+      const text = (await cells.nth(index).innerText()).replace(/\s+/g, ' ').trim()
+      if (text) labels.push(text)
+    }
+    expect(labels).toEqual(spec.headers)
+    const titleBox = await title.boundingBox()
+    expect(titleBox).not.toBeNull()
+    expect(titleBox!.x).toBeGreaterThanOrEqual(0)
+    expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(width + 1)
+    const sidebar = page.locator('[data-testid="app-sidebar"]')
+    if (mobile) {
+      await expect(sidebar).toHaveClass(/mobile-hidden/)
+      await expect(page.locator('.menu-btn')).toBeVisible()
+    } else {
+      await expect(sidebar).not.toHaveClass(/mobile-hidden/)
+      const side = await sidebar.boundingBox()
+      expect(side).not.toBeNull()
+      expect(titleBox!.x).toBeGreaterThanOrEqual(side!.x + side!.width - 1)
+    }
+    const fits = await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+    )
+    expect(fits).toBe(true)
+  }
 })

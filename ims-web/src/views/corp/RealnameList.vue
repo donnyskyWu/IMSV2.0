@@ -33,6 +33,13 @@ async function load() {
   rows.value = page.list || []
 }
 
+function reset() {
+  query.name = ''
+  query.idCard = ''
+  query.status = ''
+  load()
+}
+
 function openCreate() {
   form.name = ''
   form.idType = ''
@@ -124,9 +131,12 @@ onMounted(load)
           <el-option label="离职" value="LEFT" />
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
+        <el-button @click="reset">重置</el-button>
       </div>
       <p v-if="exportText" data-testid="rn-export">{{ exportText }}</p>
+      <div class="table-scroll">
       <el-table :data="rows">
+        <el-table-column prop="id" label="实名人 ID" />
         <el-table-column prop="name" label="姓名" />
         <el-table-column prop="idCard" label="证件号" />
         <el-table-column prop="phone" label="手机号" />
@@ -144,6 +154,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <el-drawer v-model="formOpen" title="新增实名人">
         <p v-for="item in errors" :key="item" class="err">{{ item }}</p>
@@ -195,6 +206,12 @@ onMounted(load)
 
 .page-head {
   justify-content: space-between;
+}
+
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .err {

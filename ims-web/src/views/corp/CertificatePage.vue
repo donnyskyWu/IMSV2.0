@@ -61,11 +61,20 @@ const showExpire = computed(() => auth.hasPerm('ims:cert:expire:query'))
 const showSecurity = computed(() => auth.hasPerm('ims:cert:security:audit') || auth.hasPerm('ims:cert:security:config'))
 const canConfig = computed(() => auth.hasPerm('ims:cert:security:config'))
 const holderFilter = computed(() => String(route.query.holder || ''))
+const query = reactive({ holder: '' })
 
 const visibleRows = computed(() => {
-  if (!holderFilter.value) return rows.value
-  return rows.value.filter((item) => item.realnameId === holderFilter.value)
+  let list = rows.value
+  if (holderFilter.value) list = list.filter((item) => item.realnameId === holderFilter.value)
+  const holder = query.holder.trim()
+  if (holder) list = list.filter((item) => (item.holderName || '').includes(holder))
+  return list
 })
+
+function resetArchive() {
+  query.holder = ''
+  loadArchive()
+}
 
 function statusText(row: CertRow) {
   if (row.statusLabel) return row.statusLabel
@@ -242,12 +251,18 @@ onMounted(async () => {
         <h1>证件管理</h1>
         <el-button v-perm="'ims:cert:archive:upload'" type="primary" @click="openUpload">上传证件</el-button>
       </header>
+      <div class="filters">
+        <el-input v-model="query.holder" placeholder="持有人" />
+        <el-button type="primary" @click="loadArchive">查询</el-button>
+        <el-button @click="resetArchive">重置</el-button>
+      </div>
       <p v-if="rate" class="rate" :class="{ low: rateLow }" data-testid="digital-rate">
         数字化率 {{ rate }}%
         <el-button link>查看统计</el-button>
       </p>
       <el-tabs v-model="tab">
         <el-tab-pane label="档案" name="archive">
+          <div class="table-scroll">
           <el-table :data="visibleRows">
             <el-table-column prop="holderName" label="持有人">
               <template #default="{ row }">
@@ -257,6 +272,7 @@ onMounted(async () => {
             </el-table-column>
             <el-table-column prop="certTypeLabel" label="类型" />
             <el-table-column prop="certNo" label="证件号" />
+            <el-table-column prop="expireDate" label="有效期至" />
             <el-table-column label="状态">
               <template #default="{ row }">
                 <span :class="row.warnLevel">{{ statusText(row) }}</span>
@@ -272,6 +288,7 @@ onMounted(async () => {
               </template>
             </el-table-column>
           </el-table>
+          </div>
         </el-tab-pane>
         <el-tab-pane v-if="showExpire" label="到期预警" name="expire">
           <p data-testid="expire-stats">黄 {{ stats.YELLOW }} 红 {{ stats.RED }} 锁定 {{ stats.LOCKED }}</p>
@@ -342,11 +359,23 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-head {
+.page-head,
+.filters {
   display: flex;
-  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.page-head {
+  justify-content: space-between;
+}
+
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .rate.low {

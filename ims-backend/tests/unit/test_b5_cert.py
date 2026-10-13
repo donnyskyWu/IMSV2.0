@@ -97,7 +97,21 @@ def test_ut_b5_ct_01_list_and_metrics(b5):
     metrics = CertService().digital_metrics()
     assert metrics["total"] == 1
     assert metrics["covered"] == 1
-    assert CertService().list_certs()["total"] >= 1
+    listed = CertService().list_certs()
+    assert listed["total"] >= 1
+    dated = next(item for item in listed["list"] if item["certType"] == "ID_CARD")
+    assert dated["expireDate"] == "2030-01-01"
+    assert dated["certTypeLabel"] == "居民身份证"
+    assert isinstance(dated["daysLeft"], int)
+    CertService().upload_cert({
+        "holder_type": "REALNAME",
+        "realname_id": person["id"],
+        "cert_type": "HEALTH",
+        "cert_no": "H1",
+    }, "h.png", "image/png", png_bytes())
+    plain = next(item for item in CertService().list_certs()["list"] if item["certType"] == "HEALTH")
+    assert plain["expireDate"] == ""
+    assert plain["daysLeft"] is None
 
 
 def test_ut_b5_ct_01_query_self(b5):

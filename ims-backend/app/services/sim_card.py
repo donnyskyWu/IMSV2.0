@@ -11,11 +11,12 @@ from uuid import uuid4
 from app.core.cache import Cache
 from app.core.errors import BizError
 from app.db.session import get_db_session
-from app.domains.shared.models import MasterPhone, MasterSimCard
+from app.domains.shared.models import MasterPhone, MasterRealname, MasterSimCard
 from app.services.corp_support import (
     add_row,
     as_text_id,
     base_stmt,
+    dict_label,
     ensure_write_scope,
     fetch_page,
     hash_field,
@@ -32,13 +33,21 @@ from app.services.realname import RealnameService
 
 
 class SimCardService:
-    def page_sim_cards(self, phone: str = "", page_no: int = 1, page_size: int = 20) -> dict:
+    def page_sim_cards(
+        self,
+        phone: str = "",
+        operator: str = "",
+        page_no: int = 1,
+        page_size: int = 20,
+    ) -> dict:
         stmt = base_stmt(MasterSimCard)
         clause = owner_filter(MasterSimCard, "assigned_user_id")
         if clause is not None:
             stmt = stmt.where(clause)
         if phone:
             stmt = stmt.where(MasterSimCard.phone_number_hash == hash_field(phone))
+        if operator:
+            stmt = stmt.where(MasterSimCard.operator == operator)
         total, rows = fetch_page(stmt, MasterSimCard, page_no, page_size)
         return {"list": [self._view(row) for row in rows], "total": total}
 
@@ -149,12 +158,19 @@ class SimCardService:
         return {"taskId": task_id}
 
     def _view(self, row: MasterSimCard) -> dict:
+        person = None
+        if row.realname_id:
+            person = get_db_session().execute(
+                base_stmt(MasterRealname).where(MasterRealname.id == row.realname_id)
+            ).scalars().first()
         return {
             "id": as_text_id(row.id),
             "name": row.name,
             "phone": masked_phone(row.phone_number_enc),
             "realnameId": as_text_id(row.realname_id) if row.realname_id else "",
+            "realnameName": person.name if person else "",
             "operator": row.operator or "",
+            "operatorLabel": dict_label("dict_sim_operator", row.operator),
             "assignedUserId": as_text_id(row.assigned_user_id) if row.assigned_user_id else "",
             "packageName": row.package_name or "",
             "monthlyRent": money_text(row.monthly_rent),

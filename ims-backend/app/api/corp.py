@@ -216,10 +216,11 @@ def intermediary_delete(intermediary_id: str) -> CommonResult:
 @scoped(MasterSimCard)
 def sim_page(
     phone: str = "",
+    operator: str = "",
     page_no: int = Query(1, alias="pageNo"),
     page_size: int = Query(20, alias="pageSize"),
 ) -> CommonResult:
-    return CommonResult.success(SimCardService().page_sim_cards(phone, page_no, page_size))
+    return CommonResult.success(SimCardService().page_sim_cards(phone, operator, page_no, page_size))
 
 
 @router.get("/sim-card/simple-list", dependencies=[Depends(require_login)])

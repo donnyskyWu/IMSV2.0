@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 公司管理。登录加权限，不按数据范围分列表。版本 v1.0 · 2026-10-13
+ * 公司管理。列表和详情以接口结果为准：DEPT/SELF 由服务端返回空列表或 1504。版本 v1.0 · 2026-10-13
  */
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -124,6 +124,7 @@ onMounted(load)
         <el-button @click="reset">重置</el-button>
       </div>
       <p v-if="exportText" data-testid="export-preview">{{ exportText }}</p>
+      <div class="table-scroll">
       <el-table :data="rows">
         <el-table-column prop="id" label="公司 ID" />
         <el-table-column prop="name" label="名称" />
@@ -144,6 +145,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <el-drawer v-model="formOpen" title="新建公司">
         <el-form label-position="top">
@@ -193,5 +195,11 @@ onMounted(load)
 
 .page-head {
   justify-content: space-between;
+}
+
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 </style>
