@@ -198,18 +198,23 @@ class Cache:
             return False
 
     @staticmethod
-    def incr(key: str) -> int:
-        """Increment counter. Returns new value."""
+    def incr(key: str, ttl: Optional[int] = None) -> int:
+        """Increment counter. Returns new value. Sets TTL on first set if provided."""
         if _redis_client is not None:
             try:
-                return _redis_client.incr(key)
+                value = _redis_client.incr(key)
+                if value == 1 and ttl:
+                    _redis_client.expire(key, ttl)
+                return value
             except Exception as e:
                 logger.error(f"Redis incr error: {e}")
                 return 0
         else:
+            import time
             item = _memory_cache.get(key)
             if item is None:
-                _memory_cache[key] = ("1", None)
+                expires_at = time.time() + ttl if ttl else None
+                _memory_cache[key] = ("1", expires_at)
                 return 1
             value, expires_at = item
             new_val = int(value) + 1
