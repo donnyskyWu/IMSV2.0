@@ -6,12 +6,12 @@ Handles database operations with explicit scope filtering.
 Does NOT use __scope_fields__ for complex conditions.
 """
 
-from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import get_now
 from app.db.session import get_db_session
 from app.domains.train.models import (
     TrainDeptAlert,
@@ -164,7 +164,7 @@ class TrainMaterialRepo:
 
     def generate_material_no(self, tenant_id: int) -> str:
         """Generate material number MT+YYYYMMDD+seq."""
-        today = datetime.now().strftime("%Y%m%d")
+        today = get_now().strftime("%Y%m%d")
         prefix = f"MT{today}"
 
         max_no = self.session.scalar(
@@ -269,7 +269,7 @@ class TrainTaskRepo:
 
     def generate_task_no(self, tenant_id: int) -> str:
         """Generate task number TT+YYYYMMDD+seq."""
-        today = datetime.now().strftime("%Y%m%d")
+        today = get_now().strftime("%Y%m%d")
         prefix = f"TT{today}"
 
         max_no = self.session.scalar(

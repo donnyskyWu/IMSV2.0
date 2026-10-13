@@ -15,9 +15,9 @@ Prefix: /admin-api/ims/train
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import require_any_permission, require_login, require_permission
+from app.api.deps import require_any_permission, require_permission
 from app.core.pagination import PageResult
 from app.core.response import CommonResult
 from app.domains.train.schemas import (
@@ -31,9 +31,9 @@ from app.domains.train.schemas import (
     FinishRateOverview,
     MaterialCreateRequest,
     MaterialDetail,
+    MaterialHeatItem,
     MaterialListItem,
     MaterialUpdateRequest,
-    MaterialHeatItem,
     MyTaskListItem,
     OverdueItem,
     PositionPreviewResponse,
@@ -69,12 +69,12 @@ async def get_cate_tree(
 ) -> CommonResult[list[CateTreeNode]]:
     """
     Get material category tree.
-    
+
     - Managers see all categories
     - Students only see their position's categories
     """
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     tree = await service.get_cate_tree(for_student=for_student)
     return CommonResult.success(data=tree)
@@ -89,7 +89,7 @@ async def get_cate_tree(
 async def create_cate(req: CateCreateRequest) -> CommonResult[CateTreeNode]:
     """Create a new category."""
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     cate = await service.create_cate(req)
     return CommonResult.success(data=cate)
@@ -107,7 +107,7 @@ async def update_cate(
 ) -> CommonResult[CateTreeNode]:
     """Update category."""
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     cate = await service.update_cate(cate_id, req)
     return CommonResult.success(data=cate)
@@ -122,7 +122,7 @@ async def update_cate(
 async def delete_cate(cate_id: str) -> CommonResult:
     """Delete category (must have no children or materials)."""
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     await service.delete_cate(cate_id)
     return CommonResult.success()
@@ -150,12 +150,12 @@ async def list_materials(
 ) -> CommonResult[PageResult[MaterialListItem]]:
     """
     List materials.
-    
+
     - Managers can filter by status
     - Students only see published materials for their position
     """
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     items, total = await service.list_materials(
         cate_id=cate_id,
@@ -183,11 +183,11 @@ async def list_materials(
 async def create_material(req: MaterialCreateRequest) -> CommonResult[MaterialDetail]:
     """
     Create material.
-    
+
     File upload should be done separately via /file/upload with scene TRAIN_DOC or TRAIN_VIDEO.
     """
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     material = await service.create_material(req)
     return CommonResult.success(data=material)
@@ -205,7 +205,7 @@ async def create_material(req: MaterialCreateRequest) -> CommonResult[MaterialDe
 async def get_material_detail(material_id: str) -> CommonResult[MaterialDetail]:
     """Get material detail with version history."""
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     material = await service.get_material_detail(material_id)
     return CommonResult.success(data=material)
@@ -223,7 +223,7 @@ async def update_material(
 ) -> CommonResult[MaterialDetail]:
     """Update material (creates new version if content changes)."""
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     material = await service.update_material(material_id, req)
     return CommonResult.success(data=material)
@@ -238,7 +238,7 @@ async def update_material(
 async def offline_material(material_id: str) -> CommonResult:
     """Offline (soft delete) material."""
     from app.domains.train.service import TrainMaterialService
-    
+
     service = TrainMaterialService()
     await service.offline_material(material_id)
     return CommonResult.success()
@@ -275,7 +275,7 @@ async def list_tasks(
 ) -> CommonResult[PageResult[TaskListItem]]:
     """List tasks with data scope filtering."""
     from app.domains.train.service import TrainTaskService
-    
+
     service = TrainTaskService()
     items, total = await service.list_tasks(
         status=status,
@@ -300,12 +300,12 @@ async def list_tasks(
 async def create_task(req: TaskCreateRequest) -> CommonResult[TaskDetail]:
     """
     Create learning task.
-    
+
     - BY_USER: specify assigned_user_ids
     - BY_POSITION: specify assigned_position_codes
     """
     from app.domains.train.service import TrainTaskService
-    
+
     service = TrainTaskService()
     if req.assign_scope == "BY_USER":
         task = await service.create_task_by_user(req)
@@ -326,12 +326,12 @@ async def create_task(req: TaskCreateRequest) -> CommonResult[TaskDetail]:
 async def get_task_detail(task_id: str) -> CommonResult[TaskDetail]:
     """
     Get task detail.
-    
+
     - With task:query: check data scope, return 1504 if out of scope
     - With study:query only: check if assigned, return 1105 if not
     """
     from app.domains.train.service import TrainTaskService
-    
+
     service = TrainTaskService()
     task = await service.get_task_detail(task_id)
     return CommonResult.success(data=task)
@@ -349,7 +349,7 @@ async def update_task(
 ) -> CommonResult[TaskDetail]:
     """Update task (only IN_PROGRESS and before deadline)."""
     from app.domains.train.service import TrainTaskService
-    
+
     service = TrainTaskService()
     task = await service.update_task(task_id, req)
     return CommonResult.success(data=task)
@@ -364,7 +364,7 @@ async def update_task(
 async def delete_task(task_id: str) -> CommonResult:
     """Delete task."""
     from app.domains.train.service import TrainTaskService
-    
+
     service = TrainTaskService()
     await service.delete_task(task_id)
     return CommonResult.success()
@@ -381,7 +381,7 @@ async def preview_position_users(
 ) -> CommonResult[list[PositionPreviewResponse]]:
     """Preview users for position assignment."""
     from app.domains.train.service import TrainTaskService
-    
+
     codes = [c.strip() for c in position_codes.split(",") if c.strip()]
     service = TrainTaskService()
     result = await service.preview_position_users(codes)
@@ -428,7 +428,7 @@ async def get_my_tasks(
 ) -> CommonResult[PageResult[MyTaskListItem]]:
     """Get current user's learning tasks."""
     from app.domains.train.service import TrainStudyService
-    
+
     service = TrainStudyService()
     items, total = await service.get_my_tasks(
         status=status,
@@ -452,7 +452,7 @@ async def get_my_tasks(
 async def get_study_task_detail(task_id: str) -> CommonResult[StudyTaskDetail]:
     """Get task detail for study execution."""
     from app.domains.train.service import TrainStudyService
-    
+
     service = TrainStudyService()
     detail = await service.get_task_for_study(task_id)
     return CommonResult.success(data=detail)
@@ -470,20 +470,20 @@ async def report_progress(
 ) -> CommonResult[dict]:
     """
     Report study progress (heartbeat).
-    
+
     Video: validates anti-cheat rules (Q-D11, Q-D12)
     """
-    from app.domains.train.service import TrainStudyService
-    from app.domains.train.models import TrainMaterial
     from app.db.session import get_db_session
-    
+    from app.domains.train.models import TrainMaterial
+    from app.domains.train.service import TrainStudyService
+
     session = get_db_session()
     material = session.query(TrainMaterial).filter(
         TrainMaterial.id == int(req.material_id),
     ).first()
-    
+
     service = TrainStudyService()
-    
+
     if material and material.material_type == "VIDEO":
         result = await service.report_video_progress(
             task_id=task_id,
@@ -504,7 +504,7 @@ async def report_progress(
             material_id=req.material_id,
             heartbeat_interval=req.heartbeat_interval,
         )
-    
+
     return CommonResult.success(data=result)
 
 
@@ -520,7 +520,7 @@ async def save_quiz_draft(
 ) -> CommonResult:
     """Save quiz draft answers."""
     from app.domains.train.service import TrainStudyService
-    
+
     service = TrainStudyService()
     await service.save_quiz_draft(task_id, req.answers)
     return CommonResult.success()
@@ -538,24 +538,24 @@ async def confirm_completion(
 ) -> CommonResult[ConfirmResponse]:
     """
     Confirm task completion.
-    
+
     - DURATION type: check if duration requirement met
     - QUIZ type: submit answers and grade
     """
-    from app.domains.train.service import TrainStudyService, TrainTaskService
+    from app.core.context import ctx
     from app.db.session import get_db_session
     from app.domains.train.models import TrainTask
-    from app.core.context import ctx
-    
+    from app.domains.train.service import TrainStudyService
+
     session = get_db_session()
     task = session.query(TrainTask).filter(
         TrainTask.id == int(task_id),
         TrainTask.tenant_id == ctx.tenant_id,
         TrainTask.deleted == 0,
     ).first()
-    
+
     service = TrainStudyService()
-    
+
     if task and task.confirm_type == "QUIZ":
         if not req or not req.answers:
             from app.core.errors import BizError
@@ -563,7 +563,7 @@ async def confirm_completion(
         result = await service.submit_quiz(task_id, req.answers)
     else:
         result = await service.confirm_duration(task_id)
-    
+
     return CommonResult.success(data=result)
 
 
@@ -585,7 +585,7 @@ async def get_finish_rate(
 ) -> CommonResult[FinishRateOverview]:
     """Get finish rate overview with data scope filtering."""
     from app.domains.train.service import TrainStatService
-    
+
     service = TrainStatService()
     result = await service.get_finish_rate(
         dept_id=dept_id,
@@ -686,7 +686,7 @@ async def get_material_heat(
 async def ai_generate_quiz(req: AIGenerateRequest) -> CommonResult[AIGenerateResponse]:
     """
     Generate quiz using AI.
-    
+
     Error codes:
     - 1101: Material not found or not published
     - 1106: AI call failed (no mock fallback)
@@ -695,5 +695,5 @@ async def ai_generate_quiz(req: AIGenerateRequest) -> CommonResult[AIGenerateRes
     - 1109: AI not configured
     """
     from app.core.errors import BizError
-    
+
     raise BizError(1109, msg="培训AI未配置或未启用")

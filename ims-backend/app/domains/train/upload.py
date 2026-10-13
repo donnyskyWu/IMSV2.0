@@ -16,11 +16,11 @@ Scenes:
 """
 
 import uuid
-from datetime import datetime
 from typing import Optional
 
 from fastapi import UploadFile
 
+from app.core.clock import get_now
 from app.core.errors import BizError
 
 TRAIN_DOC_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"}
@@ -128,5 +128,5 @@ def generate_storage_path(scene: str, tenant_id: int, ext: str) -> str:
     Path format: train/{scene}/{tenant_id}/{yyyyMM}/{uuid}.{ext}
     Client-provided paths are NOT accepted (prevent path traversal).
     """
-    now = datetime.now()
+    now = get_now()
     return f"train/{scene.lower()}/{tenant_id}/{now.strftime('%Y%m')}/{uuid.uuid4()}.{ext}"
