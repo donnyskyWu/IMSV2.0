@@ -2,7 +2,7 @@
 /**
  * 账号密码登录（FP-B1-LG-01 / LG-02 / LG-03）
  * 本 PR 不做钉钉扫码，因此不显示 Tab，只保留账号登录。
- * 锁定倒计时、1216 / 1008 按错误码展示；次数与改密是否生效等后端第 2 个 PR 联调。
+ * 锁定倒计时、1216 / 1008 按错误码展示。次数与改密落库由 live-proxy 对真实后端断言。
  */
 import { computed, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
