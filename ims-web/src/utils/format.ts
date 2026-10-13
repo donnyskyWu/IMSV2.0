@@ -41,6 +41,15 @@ export function fmtPercent(value: number | null | undefined): string {
 }
 
 /**
+ * 格式化日期时间
+ * @param value ISO 时间字符串
+ * @returns 格式化后的时间 "YYYY-MM-DD HH:mm"
+ */
+export function fmtDateTime(value: string | null | undefined): string {
+  return fmtTime(value)
+}
+
+/**
  * 格式化时间
  * @param value ISO 时间字符串
  * @returns 格式化后的时间 "YYYY-MM-DD HH:mm"
