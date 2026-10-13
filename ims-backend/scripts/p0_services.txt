@@ -14,3 +14,6 @@ app/services/user.py
 app/db/session.py
 app/services/dict.py
 app/services/role.py
+# B18-M18 会议模块
+app/domains/meet/service.py
+app/domains/meet/jobs.py

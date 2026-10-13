@@ -18,6 +18,10 @@ def sync_retry() -> None:
     return None
 
 
+# Import meet jobs to ensure they are registered with @job decorator
+import app.domains.meet.jobs  # noqa: F401, E402
+
+
 class WorkerProcess:
     """Process that runs ``@job`` tasks and does not mount HTTP routes."""
 

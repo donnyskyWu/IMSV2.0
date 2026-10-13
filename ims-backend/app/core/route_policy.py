@@ -20,6 +20,7 @@ DECLARED_LOGIN_ONLY = {
     "/admin-api/ims/system/user/simple-page",
     "/admin-api/ims/system/role/simple-list",
     "/admin-api/ims/demo/error",
+    "/admin-api/ims/meet/minutes/action-item/{item_id}",
 }
 
 

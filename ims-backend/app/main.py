@@ -195,6 +195,10 @@ def register_routes(app: FastAPI) -> None:
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])
 
+    # Meeting routes (/admin-api/ims/meet) - B18-M18
+    from app.domains.meet.router import router as meet_router
+    app.include_router(meet_router, prefix="/admin-api/ims/meet", tags=["会议"])
+
     # Demo routes - test environment only (FP-B08-08)
     if settings.env == "test":
         from app.api.demo import router as demo_router

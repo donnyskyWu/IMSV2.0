@@ -30,6 +30,7 @@ CODE_RANGES: dict[str, tuple[int, int]] = {
     "CONTENT": (1051, 1070),
     "COMP": (1041, 1050),
     "TRAIN": (1101, 1120),
+    "MEET": (1111, 1120),  # B18-M18 会议模块
     "LIVE": (1271, 1280),
     "SYSTEM": (5001, 5007),
 }
@@ -206,6 +207,11 @@ error_codes.register(1106, "TRAIN", "调用失败，请稍后再试", FrontStrat
 error_codes.register(1107, "TRAIN", "生成超时，请稍后再试", FrontStrategy.TOAST)
 error_codes.register(1108, "TRAIN", "生成的题目数量为 0", FrontStrategy.TOAST)
 error_codes.register(1109, "TRAIN", "服务未配置或未启用", FrontStrategy.TOAST)
+
+# MEET domain (1111-1120) - B18-M18 会议模块
+error_codes.register(1116, "MEET", "录入/归档超时提示", FrontStrategy.TOAST)
+error_codes.register(1117, "MEET", "已归档纪要不可操作", FrontStrategy.TOAST)
+error_codes.register(1118, "MEET", "非行动项责任人，无权回填", FrontStrategy.TOAST)
 
 # LIVE domain (1271-1280) - Football errors
 error_codes.register(1271, "LIVE", "直播服务异常", FrontStrategy.TOAST)

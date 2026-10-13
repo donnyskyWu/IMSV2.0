@@ -138,6 +138,24 @@ const b1Routes: RouteRecordRaw[] = [
   },
 ]
 
+/**
+ * B18 会议模块路由
+ */
+const b18Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/meet/minutes',
+    name: 'MeetMinutes',
+    component: () => import('@/views/meet/MinutesList.vue'),
+    meta: { title: '会议纪要' },
+  },
+  {
+    path: '/ims/meet/archive-rate',
+    name: 'MeetArchiveRate',
+    component: () => import('@/views/meet/ArchiveRate.vue'),
+    meta: { title: '留痕率统计' },
+  },
+]
+
 /** 壳路径。无菜单时停在这里，提示由 AppLayout 内容区展示。 */
 const shellRoute: RouteRecordRaw = {
   path: '/',
@@ -164,6 +182,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b18Routes,
       ...demoRoutes,
       unknownRoute,
     ]
@@ -178,6 +197,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b18Routes,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
