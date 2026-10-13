@@ -330,6 +330,7 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     row = db_session.query(User).filter(User.username == "refresh_frozen").one()
     row.status = "FROZEN"
     db_session.commit()
+    db_session.expire_all()
     frozen_resp = _refresh(app_client, frozen_tokens["refreshToken"])
     assert frozen_resp.status_code == 401
     assert frozen_resp.json()["code"] == 1216
@@ -339,6 +340,7 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     resigned = db_session.query(User).filter(User.username == "refresh_resigned").one()
     resigned.status = "RESIGNED"
     db_session.commit()
+    db_session.expire_all()
     resigned_resp = _refresh(app_client, resigned_tokens["refreshToken"])
     assert resigned_resp.status_code == 401
     assert resigned_resp.json()["code"] == 1216
