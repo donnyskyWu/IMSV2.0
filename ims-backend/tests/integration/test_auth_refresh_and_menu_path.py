@@ -325,24 +325,33 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     assert gone_resp.status_code == 401
     assert gone_resp.json()["code"] == 1002
 
+    from sqlalchemy.orm import sessionmaker as sm
+
     frozen_user = _add_user(db_session, "refresh_frozen")
     frozen_tokens = _login(app_client, frozen_user.username)
-    row = db_session.query(User).filter(User.username == "refresh_frozen").one()
-    row.status = "FROZEN"
-    db_session.commit()
+    # Use a fresh session for the status update to avoid identity map issues
+    engine = db_session.get_bind()
+    update_session = sm(bind=engine)()
+    frozen_row = update_session.query(User).filter(User.username == "refresh_frozen").one()
+    frozen_row.status = "FROZEN"
+    update_session.commit()
+    update_session.close()
+    # Clear the main session's cache so the next query will reload
     db_session.expire_all()
     frozen_resp = _refresh(app_client, frozen_tokens["refreshToken"])
-    assert frozen_resp.status_code == 401
+    assert frozen_resp.status_code == 401, f"Expected 401 but got {frozen_resp.status_code}: {frozen_resp.json()}"
     assert frozen_resp.json()["code"] == 1216
 
     resigned_user = _add_user(db_session, "refresh_resigned")
     resigned_tokens = _login(app_client, resigned_user.username)
-    resigned = db_session.query(User).filter(User.username == "refresh_resigned").one()
-    resigned.status = "RESIGNED"
-    db_session.commit()
+    update_session2 = sm(bind=engine)()
+    resigned_row = update_session2.query(User).filter(User.username == "refresh_resigned").one()
+    resigned_row.status = "RESIGNED"
+    update_session2.commit()
+    update_session2.close()
     db_session.expire_all()
     resigned_resp = _refresh(app_client, resigned_tokens["refreshToken"])
-    assert resigned_resp.status_code == 401
+    assert resigned_resp.status_code == 401, f"Expected 401 but got {resigned_resp.status_code}: {resigned_resp.json()}"
     assert resigned_resp.json()["code"] == 1216
 
 
