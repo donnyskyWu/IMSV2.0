@@ -6,8 +6,11 @@ from typing import Any, Iterable, Optional
 ANONYMOUS_WHITELIST = {
     "/health",
     "/admin-api/ims/auth/login",
+    "/admin-api/ims/auth/login-options",
     "/admin-api/ims/auth/sso/dingtalk/redirect",
     "/admin-api/ims/auth/sso/dingtalk/callback",
+    "/admin-api/ims/auth/sso/dingtalk/authorize-params",
+    "/admin-api/ims/auth/sso/dingtalk/h5-login",
 }
 
 DECLARED_LOGIN_ONLY = {

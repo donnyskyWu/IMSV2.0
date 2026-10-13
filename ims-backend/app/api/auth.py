@@ -121,6 +121,26 @@ class SessionListResponse(BaseSchema):
     list: list[SessionItem]
 
 
+class LoginOptionsResponse(BaseSchema):
+    """登录入口。不包含任何密钥。"""
+    dingtalk_enabled: bool
+    corp_id: str = ""
+    client_id: str = ""
+
+
+class AuthorizeParamsResponse(BaseSchema):
+    """内嵌扫码参数。"""
+    client_id: str
+    redirect_uri: str
+    state: str
+    scope: str
+
+
+class H5LoginRequest(BaseSchema):
+    """钉钉内免登码。"""
+    auth_code: str = ""
+
+
 # ============== Endpoints ==============
 
 @router.post("/login", response_model=CommonResult[LoginResponse], summary="账号密码登录")
@@ -331,8 +351,57 @@ async def delete_my_session(
 delete_my_session.__login_only__ = True
 
 
+def _dingtalk_callback_uri(request: Request) -> str:
+    """回调地址跟当前请求的根路径走，不把环境地址写进代码。"""
+    return str(request.base_url).rstrip("/") + "/admin-api/ims/auth/sso/dingtalk/callback"
+
+
+@router.get(
+    "/login-options",
+    response_model=CommonResult[LoginOptionsResponse],
+    summary="登录入口选项",
+)
+async def login_options() -> CommonResult[LoginOptionsResponse]:
+    """钉钉是否启用。匿名，不返回密钥。"""
+    from app.services.dingtalk_login import DingTalkLoginService
+
+    return CommonResult.success(data=DingTalkLoginService().login_options())
+
+
+@router.get(
+    "/sso/dingtalk/authorize-params",
+    response_model=CommonResult[AuthorizeParamsResponse],
+    summary="钉钉扫码参数",
+)
+async def dingtalk_authorize_params(
+    request: Request,
+    redirect: str = "/",
+) -> CommonResult[AuthorizeParamsResponse]:
+    """内嵌扫码用的 clientId、回调地址、一次性 state。未启用返回 1008。"""
+    from app.services.dingtalk_login import DingTalkLoginService
+
+    data = await DingTalkLoginService().authorize_params(
+        redirect,
+        _dingtalk_callback_uri(request),
+    )
+    return CommonResult.success(data=data)
+
+
+@router.post(
+    "/sso/dingtalk/h5-login",
+    response_model=CommonResult[LoginResponse],
+    summary="钉钉内免登",
+)
+async def dingtalk_h5_login(body: H5LoginRequest) -> CommonResult[LoginResponse]:
+    """用免登码换令牌。匹配、租户和冻结规则与扫码相同。"""
+    from app.services.dingtalk_login import DingTalkLoginService
+
+    result = await DingTalkLoginService().h5_login(body.auth_code)
+    return CommonResult.success(data=result)
+
+
 @router.get("/sso/dingtalk/redirect", summary="钉钉SSO跳转")
-async def dingtalk_sso_redirect(redirect: str = "/"):
+async def dingtalk_sso_redirect(request: Request, redirect: str = "/"):
     """
     DingTalk SSO redirect.
 
@@ -343,30 +412,40 @@ async def dingtalk_sso_redirect(redirect: str = "/"):
     """
     from fastapi.responses import RedirectResponse
 
-    from app.services.auth import AuthService
+    from app.services.dingtalk_login import DingTalkLoginService
 
-    auth_service = AuthService()
-    redirect_url = await auth_service.get_dingtalk_redirect_url(redirect)
-    return RedirectResponse(url=redirect_url)
+    redirect_url = await DingTalkLoginService().build_redirect_url(
+        redirect,
+        _dingtalk_callback_uri(request),
+    )
+    return RedirectResponse(url=redirect_url, status_code=302)
 
 
 @router.get("/sso/dingtalk/callback", summary="钉钉SSO回调")
-async def dingtalk_sso_callback(auth_code: str, state: str):
+async def dingtalk_sso_callback(request: Request):
     """
-    DingTalk SSO callback.
-
-    Rules per FP-D02-02:
-    - state not exist/expired/used -> 1002 (GETDEL atomic)
-    - Use authCode to get DingTalk userid + phone
-    - Match: ims_auth_user_mapping.dingtalk_user_id -> mobile_hash
-    - No match -> 1217, no token issued
-    - FROZEN/RESIGNED -> 1216
-    - Success: issue tokens, 302 to /sso-callback#accessToken=...&refreshToken=...&redirect=...
+    钉钉回调。成功 302 到片段令牌；失败 302 到 /login?ssoError=。
+    取消授权回到登录页且不带错误码。
     """
     from fastapi.responses import RedirectResponse
 
-    from app.services.auth import AuthService
+    from app.core.errors import BizError
+    from app.services.dingtalk_login import DingTalkLoginService, sso_error_location
 
-    auth_service = AuthService()
-    callback_url = await auth_service.handle_dingtalk_callback(auth_code, state)
-    return RedirectResponse(url=callback_url)
+    params = request.query_params
+    # 钉钉新版回跳用 authCode；标准 OAuth 回跳用 code。三者都认。
+    auth_code = (
+        params.get("authCode")
+        or params.get("auth_code")
+        or params.get("code")
+        or ""
+    )
+    try:
+        target = await DingTalkLoginService().handle_callback(
+            auth_code,
+            params.get("state") or "",
+            params.get("error") or "",
+        )
+    except BizError as exc:
+        target = sso_error_location(exc)
+    return RedirectResponse(url=target, status_code=302)
