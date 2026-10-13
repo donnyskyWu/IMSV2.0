@@ -138,6 +138,42 @@ const b1Routes: RouteRecordRaw[] = [
   },
 ]
 
+/**
+ * B21 培训管理业务页
+ */
+const b21Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/train/material',
+    name: 'TrainMaterial',
+    component: () => import('@/views/train/material/MaterialList.vue'),
+    meta: { title: '岗位资料库' },
+  },
+  {
+    path: '/ims/train/task',
+    name: 'TrainTask',
+    component: () => import('@/views/train/task/TaskList.vue'),
+    meta: { title: '学习任务' },
+  },
+  {
+    path: '/ims/train/study',
+    name: 'TrainStudyCenter',
+    component: () => import('@/views/train/study/StudyCenter.vue'),
+    meta: { title: '学习中心' },
+  },
+  {
+    path: '/ims/train/study/:taskId',
+    name: 'TrainStudyExecution',
+    component: () => import('@/views/train/study/StudyExecution.vue'),
+    meta: { title: '学习执行', menuless: true },
+  },
+  {
+    path: '/ims/train/stat',
+    name: 'TrainStat',
+    component: () => import('@/views/train/stat/StatDashboard.vue'),
+    meta: { title: '培训统计' },
+  },
+]
+
 /** 壳路径。无菜单时停在这里，提示由 AppLayout 内容区展示。 */
 const shellRoute: RouteRecordRaw = {
   path: '/',
@@ -164,6 +200,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b21Routes,
       ...demoRoutes,
       unknownRoute,
     ]
@@ -178,6 +215,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b21Routes,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
