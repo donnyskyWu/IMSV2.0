@@ -8,13 +8,118 @@ Implements:
 """
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, List
 
-from sqlalchemy import text
+from sqlalchemy import text, and_, or_
 
 from app.core.cache import Cache
 from app.core.clock import get_now
 from app.db.session import get_db_session
+
+
+PERM_SUPERVISE = "ims:meet:minutes:supervise"
+
+
+def _get_supervise_users_for_minutes(session: Any, minutes: Any) -> List[int]:
+    """
+    获取有 supervise 权限且数据范围覆盖该会议的用户列表。
+    
+    Q-D7/Q-D9: supervise 接收人按权限码 + 数据范围，不按角色名。
+    数据范围覆盖条件：ALL 或 dept_id 在用户可见部门内 或 本人相关。
+    """
+    from app.domains.sys.models import User, Role, UserRole, RoleMenu, Menu, Dept
+    
+    supervise_menu = session.query(Menu).filter(
+        Menu.perm_code == PERM_SUPERVISE,
+        Menu.deleted == 0,
+    ).first()
+    
+    if not supervise_menu:
+        return []
+    
+    role_ids_with_perm = session.query(RoleMenu.role_id).filter(
+        RoleMenu.menu_id == supervise_menu.id,
+    ).distinct().all()
+    role_ids_with_perm = [r[0] for r in role_ids_with_perm]
+    
+    if not role_ids_with_perm:
+        return []
+    
+    roles = session.query(Role).filter(
+        Role.id.in_(role_ids_with_perm),
+        Role.tenant_id == minutes.tenant_id,
+        Role.status == 0,
+        Role.deleted == 0,
+    ).all()
+    
+    if not roles:
+        return []
+    
+    valid_role_ids = [r.id for r in roles]
+    
+    user_roles = session.query(UserRole).filter(
+        UserRole.role_id.in_(valid_role_ids),
+    ).all()
+    
+    user_ids = list(set(ur.user_id for ur in user_roles))
+    if not user_ids:
+        return []
+    
+    users = session.query(User).filter(
+        User.id.in_(user_ids),
+        User.tenant_id == minutes.tenant_id,
+        User.deleted == 0,
+        User.status.notin_(["FROZEN", "RESIGNED"]),
+    ).all()
+    
+    if not users:
+        return []
+    
+    result_user_ids = []
+    
+    for user in users:
+        user_role_ids = [ur.role_id for ur in user_roles if ur.user_id == user.id]
+        user_roles_obj = [r for r in roles if r.id in user_role_ids]
+        
+        can_see = False
+        
+        for role in user_roles_obj:
+            if role.data_scope == 1:
+                can_see = True
+                break
+            elif role.data_scope == 2:
+                if user.main_dept_id == minutes.dept_id:
+                    can_see = True
+                    break
+            elif role.data_scope == 3:
+                if user.main_dept_id:
+                    user_dept = session.query(Dept).filter(
+                        Dept.id == user.main_dept_id,
+                        Dept.deleted == 0,
+                    ).first()
+                    if user_dept and user_dept.path:
+                        minutes_dept = session.query(Dept).filter(
+                            Dept.id == minutes.dept_id,
+                            Dept.deleted == 0,
+                        ).first()
+                        if minutes_dept and minutes_dept.path:
+                            if minutes_dept.path.startswith(user_dept.path):
+                                can_see = True
+                                break
+            elif role.data_scope == 5:
+                if user.id == minutes.recorder_user_id:
+                    can_see = True
+                    break
+                attendees = minutes.attendees or {}
+                internal_ids = attendees.get("internal", [])
+                if user.id in internal_ids:
+                    can_see = True
+                    break
+        
+        if can_see:
+            result_user_ids.append(user.id)
+    
+    return result_user_ids
 
 
 async def meeting_reminder_job() -> dict[str, Any]:
@@ -23,7 +128,7 @@ async def meeting_reminder_job() -> dict[str, Any]:
     
     每小时执行一次：
     - 会后超 24h 仍 REGISTERED → 给记录人发消息
-    - 会后超 48h 未归档 → 给记录人 + supervise 用户发消息
+    - 会后超 48h 未归档 → 给记录人 + supervise 用户（有权限且数据范围覆盖）发消息
     
     幂等：remind_24h_at / remind_48h_at 非空时跳过
     """
@@ -36,6 +141,7 @@ async def meeting_reminder_job() -> dict[str, Any]:
     stats = {
         "reminded_24h": 0,
         "reminded_48h": 0,
+        "reminded_48h_supervise": 0,
         "skipped_resigned": 0,
     }
     
@@ -96,6 +202,9 @@ async def meeting_reminder_job() -> dict[str, Any]:
             stats["skipped_resigned"] += 1
             continue
         
+        supervise_user_ids = _get_supervise_users_for_minutes(session, m)
+        stats["reminded_48h_supervise"] += len(supervise_user_ids)
+        
         result = session.execute(
             text("""
             UPDATE ims_meeting_minutes 
@@ -121,7 +230,7 @@ async def meeting_overdue_job() -> dict[str, Any]:
     - 扫描 due_date < 今天 且 status != CLOSED 的行动项
     - 标记 status = OVERDUE
     - 逾期满 1 天（due_date + 1 < 今天）→ 推送责任人
-    - 逾期满 3 天（due_date + 3 < 今天）→ 推送 supervise 用户
+    - 逾期满 3 天（due_date + 3 < 今天）→ 推送 supervise 用户（有权限且数据范围覆盖）
     
     幂等：notified_at / escalated_at 非空时跳过
     """
@@ -136,6 +245,7 @@ async def meeting_overdue_job() -> dict[str, Any]:
         "marked_overdue": 0,
         "notified_1d": 0,
         "escalated_3d": 0,
+        "escalated_3d_supervise_count": 0,
         "skipped_resigned": 0,
     }
     
@@ -182,6 +292,15 @@ async def meeting_overdue_job() -> dict[str, Any]:
             lock_key = f"meet:overdue:{item.id}:3d"
             if not Cache.setnx(lock_key, "1", ttl=86400 * 7):
                 continue
+            
+            minutes = session.query(MeetingMinutes).filter(
+                MeetingMinutes.id == item.minutes_id,
+                MeetingMinutes.deleted == 0,
+            ).first()
+            
+            if minutes:
+                supervise_user_ids = _get_supervise_users_for_minutes(session, minutes)
+                stats["escalated_3d_supervise_count"] += len(supervise_user_ids)
             
             result = session.execute(
                 text("""

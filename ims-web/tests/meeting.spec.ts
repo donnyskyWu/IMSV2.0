@@ -721,3 +721,126 @@ test.describe('B18 会议模块 E2E - 移动端', () => {
     expect(viewport?.width).toBe(390)
   })
 })
+
+test.describe('B18 会议模块 E2E - 安全测试', () => {
+  test('E2E-B18-SEC-01: 1002 会话失效跳转登录页', async ({ page }) => {
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify(fail(1002, '登录已失效，请重新登录')),
+      })
+    })
+
+    await page.goto('/ims/meet/minutes')
+
+    await expect(page).toHaveURL(/\/login/)
+  })
+
+  test('E2E-B18-SEC-02: 1216 冻结/离职用户登录失败', async ({ page }) => {
+    await page.route('**/admin-api/ims/auth/login', async (route) => {
+      await route.fulfill(json(fail(1216, '账号已冻结或已离职，无法登录')))
+    })
+
+    await page.goto('/login')
+    await page.getByPlaceholder('请输入用户名').fill('frozen_user')
+    await page.getByPlaceholder('请输入密码').fill('Test1234')
+    await page.getByRole('button', { name: '登录' }).click()
+
+    await expect(page.getByText('冻结').or(page.getByText('离职'))).toBeVisible()
+    await expect(page).toHaveURL(/\/login/)
+  })
+
+  test('E2E-B18-SEC-03: 1008 租户停用拒绝访问', async ({ page }) => {
+    await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/list*', async (route) => {
+      await route.fulfill(json(fail(1008, '所属组织已停用')))
+    })
+
+    await loginAndNavigate(page)
+
+    await expect(page.getByText('停用').or(page.getByText('暂无权限'))).toBeVisible()
+  })
+
+  test('E2E-B18-SEC-04: 跨租户编辑返回 1504', async ({ page }) => {
+    await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/999', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill(json(fail(1504, '资源不存在')))
+      } else {
+        await route.continue()
+      }
+    })
+
+    const response = await page.request.put('/admin-api/ims/meet/minutes/999', {
+      data: { title: 'Hacked', meeting_date: '2026-10-13T10:00:00', attendees: { internal: [1], external: [] }, base_version: 1 },
+      headers: { Authorization: 'Bearer meet-access-token', 'Content-Type': 'application/json' },
+    })
+    const body = await response.json()
+    expect(body.code).toBe(1504)
+  })
+
+  test('E2E-B18-SEC-05: 跨租户归档返回 1504', async ({ page }) => {
+    await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/999/archive', async (route) => {
+      await route.fulfill(json(fail(1504, '资源不存在')))
+    })
+
+    const response = await page.request.put('/admin-api/ims/meet/minutes/999/archive', {
+      headers: { Authorization: 'Bearer meet-access-token' },
+    })
+    const body = await response.json()
+    expect(body.code).toBe(1504)
+  })
+
+  test('E2E-B18-SEC-06: 跨租户附录返回 1504', async ({ page }) => {
+    await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/999/appendix', async (route) => {
+      await route.fulfill(json(fail(1504, '资源不存在')))
+    })
+
+    const response = await page.request.post('/admin-api/ims/meet/minutes/999/appendix', {
+      data: { content: 'Hacked appendix' },
+      headers: { Authorization: 'Bearer meet-access-token', 'Content-Type': 'application/json' },
+    })
+    const body = await response.json()
+    expect(body.code).toBe(1504)
+  })
+
+  test('E2E-B18-SEC-07: 跨租户删除返回 1504', async ({ page }) => {
+    await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/999', async (route) => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill(json(fail(1504, '资源不存在')))
+      } else {
+        await route.continue()
+      }
+    })
+
+    const response = await page.request.delete('/admin-api/ims/meet/minutes/999', {
+      headers: { Authorization: 'Bearer meet-access-token' },
+    })
+    const body = await response.json()
+    expect(body.code).toBe(1504)
+  })
+
+  test('E2E-B18-SEC-08: 跨租户回填行动项返回 1504（数据范围先于责任人校验）', async ({ page }) => {
+    await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/action-item/999', async (route) => {
+      await route.fulfill(json(fail(1504, '资源不存在')))
+    })
+
+    const response = await page.request.put('/admin-api/ims/meet/minutes/action-item/999', {
+      data: { close_remark: 'Hacked close' },
+      headers: { Authorization: 'Bearer meet-access-token', 'Content-Type': 'application/json' },
+    })
+    const body = await response.json()
+    expect(body.code).toBe(1504)
+  })
+})

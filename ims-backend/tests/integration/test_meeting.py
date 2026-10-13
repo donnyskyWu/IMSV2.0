@@ -659,3 +659,496 @@ class TestArchiveRate:
         
         assert result.total_meetings == 0
         assert result.archive_rate == 100.0
+
+
+class TestSecurityCrossTenant:
+    """安全测试：跨租户 1504 覆盖全部接口。"""
+
+    @pytest.fixture
+    def other_tenant_context(self):
+        """他租户上下文。"""
+        context = RequestContext(
+            trace_id="other-tenant-trace",
+            user_id=100,
+            tenant_id=999,
+            perm_codes={
+                "ims:meet:minutes:query",
+                "ims:meet:minutes:add",
+                "ims:meet:minutes:edit",
+                "ims:meet:minutes:archive",
+                "ims:meet:minutes:delete",
+                "ims:meet:minutes:appendix",
+                "ims:meet:minutes:supervise",
+            },
+            data_scopes=[{"scope_type": "ALL", "role_id": 1}],
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_get_minutes(self, db_session, meet_admin_context, sample_users_for_meet, other_tenant_context):
+        """UT-B18-SEC-01: 跨租户获取详情 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Tenant 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-cross-001",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_tenant_context)
+        
+        with pytest.raises(BizError) as exc:
+            await service.get_minutes(minutes_id)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_update_minutes(self, db_session, meet_admin_context, sample_users_for_meet, other_tenant_context):
+        """UT-B18-SEC-02: 跨租户编辑 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, MeetingMinutesUpdateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Tenant 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-cross-002",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_tenant_context)
+        
+        update_req = MeetingMinutesUpdateReq(
+            title="Hacked Title",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            base_version=1,
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.update_minutes(minutes_id, update_req)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_archive(self, db_session, meet_admin_context, sample_users_for_meet, other_tenant_context):
+        """UT-B18-SEC-03: 跨租户归档 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Tenant 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            client_token="test-token-cross-003",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_tenant_context)
+        
+        with pytest.raises(BizError) as exc:
+            await service.archive_minutes(minutes_id)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_appendix(self, db_session, meet_admin_context, sample_users_for_meet, other_tenant_context):
+        """UT-B18-SEC-04: 跨租户附录 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, AppendixCreateReq
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Tenant 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            client_token="test-token-cross-004",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        await service.archive_minutes(minutes_id)
+        
+        ctx.set(other_tenant_context)
+        
+        appendix_req = AppendixCreateReq(content="Hacked appendix")
+        
+        with pytest.raises(BizError) as exc:
+            await service.add_appendix(minutes_id, appendix_req)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_delete(self, db_session, meet_admin_context, sample_users_for_meet, other_tenant_context):
+        """UT-B18-SEC-05: 跨租户删除 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Tenant 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-cross-005",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_tenant_context)
+        
+        with pytest.raises(BizError) as exc:
+            await service.delete_minutes(minutes_id)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_cross_tenant_close_action_item(self, db_session, meet_admin_context, sample_users_for_meet, other_tenant_context):
+        """UT-B18-SEC-06: 跨租户回填行动项 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema, ActionItemCloseReq
+        from app.domains.meet.models import MeetingActionItem
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        tomorrow = (now + timedelta(days=1)).date()
+        
+        request = MeetingMinutesCreateReq(
+            title="Tenant 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            action_items=[
+                ActionItemCreateSchema(
+                    description="Action 1",
+                    assignee_user_id=1,
+                    due_date=tomorrow,
+                )
+            ],
+            client_token="test-token-cross-006",
+        )
+        result = await service.create_minutes(request)
+        
+        session = get_db_session()
+        item = session.query(MeetingActionItem).filter(
+            MeetingActionItem.minutes_id == int(result["data"].id),
+            MeetingActionItem.deleted == 0,
+        ).first()
+        
+        ctx.set(other_tenant_context)
+        
+        close_req = ActionItemCloseReq(close_remark="Hacked close")
+        
+        with pytest.raises(BizError) as exc:
+            await service.close_action_item(item.id, close_req)
+        
+        assert exc.value.code == 1504
+
+
+class TestSecurityDataScope:
+    """安全测试：数据范围校验。"""
+
+    @pytest.fixture
+    def other_dept_context(self):
+        """他部门上下文（DEPT 范围）。"""
+        context = RequestContext(
+            trace_id="other-dept-trace",
+            user_id=10,
+            tenant_id=1,
+            perm_codes={
+                "ims:meet:minutes:query",
+                "ims:meet:minutes:edit",
+                "ims:meet:minutes:archive",
+                "ims:meet:minutes:delete",
+                "ims:meet:minutes:appendix",
+            },
+            data_scopes=[{"scope_type": "DEPT", "role_id": 2}],
+            dept_ids=[99],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_data_scope_get_other_dept(self, db_session, meet_admin_context, sample_users_for_meet, other_dept_context):
+        """UT-B18-SEC-07: DEPT 范围获取他部门会议 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Dept 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-scope-001",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_dept_context)
+        
+        with pytest.raises(BizError) as exc:
+            await service.get_minutes(minutes_id)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_data_scope_edit_other_dept(self, db_session, meet_admin_context, sample_users_for_meet, other_dept_context):
+        """UT-B18-SEC-08: DEPT 范围编辑他部门会议 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, MeetingMinutesUpdateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Dept 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-scope-002",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_dept_context)
+        
+        update_req = MeetingMinutesUpdateReq(
+            title="Hacked Title",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            base_version=1,
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.update_minutes(minutes_id, update_req)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_data_scope_archive_other_dept(self, db_session, meet_admin_context, sample_users_for_meet, other_dept_context):
+        """UT-B18-SEC-09: DEPT 范围归档他部门会议 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Dept 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            client_token="test-token-scope-003",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_dept_context)
+        
+        with pytest.raises(BizError) as exc:
+            await service.archive_minutes(minutes_id)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_data_scope_delete_other_dept(self, db_session, meet_admin_context, sample_users_for_meet, other_dept_context):
+        """UT-B18-SEC-10: DEPT 范围删除他部门会议 → 1504。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Dept 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-scope-004",
+        )
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        ctx.set(other_dept_context)
+        
+        with pytest.raises(BizError) as exc:
+            await service.delete_minutes(minutes_id)
+        
+        assert exc.value.code == 1504
+
+    @pytest.mark.asyncio
+    async def test_action_item_close_scope_before_assignee(self, db_session, meet_admin_context, sample_users_for_meet, other_dept_context):
+        """UT-B18-SEC-11: 回填先校验数据范围再校验责任人（不在范围 → 1504，不泄露存在性）。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema, ActionItemCloseReq
+        from app.domains.meet.models import MeetingActionItem
+        
+        ctx.set(meet_admin_context)
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        tomorrow = (now + timedelta(days=1)).date()
+        
+        request = MeetingMinutesCreateReq(
+            title="Dept 1 Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            action_items=[
+                ActionItemCreateSchema(
+                    description="Action 1",
+                    assignee_user_id=1,
+                    due_date=tomorrow,
+                )
+            ],
+            client_token="test-token-scope-005",
+        )
+        result = await service.create_minutes(request)
+        
+        session = get_db_session()
+        item = session.query(MeetingActionItem).filter(
+            MeetingActionItem.minutes_id == int(result["data"].id),
+            MeetingActionItem.deleted == 0,
+        ).first()
+        
+        ctx.set(other_dept_context)
+        
+        close_req = ActionItemCloseReq(close_remark="Trying to close")
+        
+        with pytest.raises(BizError) as exc:
+            await service.close_action_item(item.id, close_req)
+        
+        assert exc.value.code == 1504
+
+
+class TestSecurityFrozenResigned:
+    """安全测试：1216 冻结/离职用户。"""
+
+    @pytest.fixture
+    def frozen_user_context(self):
+        """冻结用户上下文。"""
+        context = RequestContext(
+            trace_id="frozen-user-trace",
+            user_id=4,
+            tenant_id=1,
+            perm_codes={
+                "ims:meet:minutes:query",
+                "ims:meet:minutes:add",
+            },
+            data_scopes=[{"scope_type": "ALL", "role_id": 1}],
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_resigned_user_as_recorder(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-SEC-12: 离职用户作为记录人 → 1501。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            recorder_user_id=4,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            client_token="test-token-resigned-001",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1501
+
+    @pytest.mark.asyncio
+    async def test_resigned_user_as_attendee(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-SEC-13: 离职用户作为参会人 → 1501。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1, 4], external=[]),
+            client_token="test-token-resigned-002",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1501
+
+    @pytest.mark.asyncio
+    async def test_resigned_user_as_assignee(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-SEC-14: 离职用户作为行动项责任人 → 1501。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema
+        
+        service = MeetingService()
+        
+        now = datetime.now(BEIJING_TZ)
+        tomorrow = (now + timedelta(days=1)).date()
+        
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            action_items=[
+                ActionItemCreateSchema(
+                    description="Action 1",
+                    assignee_user_id=4,
+                    due_date=tomorrow,
+                )
+            ],
+            client_token="test-token-resigned-003",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1501
