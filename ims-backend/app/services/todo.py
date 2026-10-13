@@ -19,7 +19,7 @@ from typing import Optional
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from app.core.cache import get_redis
+from app.core.cache import Cache
 from app.core.clock import get_now
 from app.core.context import ctx
 from app.core.errors import BizError
@@ -473,13 +473,9 @@ def _todo_to_dict(
 
 def _push_dingtalk_notification(todo: TodoItem, user_ids: list[int]) -> None:
     """钉钉推送（24 小时去重）。"""
-    redis = get_redis()
-    if not redis:
-        return
-
     for user_id in user_ids:
         dedup_key = f"todo:{todo.source_type}:{todo.source_id}:{user_id}"
-        if redis.exists(dedup_key):
+        if Cache.get(dedup_key):
             logger.debug(f"钉钉推送去重跳过: {dedup_key}")
             continue
 
@@ -487,4 +483,4 @@ def _push_dingtalk_notification(todo: TodoItem, user_ids: list[int]) -> None:
         logger.info(f"钉钉推送待办: user={user_id}, title={todo.title}")
 
         # 设置去重标记
-        redis.setex(dedup_key, TODO_DEDUP_TTL, "1")
+        Cache.set(dedup_key, "1", TODO_DEDUP_TTL)

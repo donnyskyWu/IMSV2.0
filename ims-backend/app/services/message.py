@@ -17,7 +17,7 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.cache import get_redis
+from app.core.cache import Cache
 from app.core.clock import get_now
 from app.core.context import ctx
 from app.core.errors import BizError
@@ -61,8 +61,7 @@ def notify(
     for user_id in receivers:
         # 去重检查
         dedup_key = f"msg:{event_type}:{biz_key}:{user_id}"
-        redis = get_redis()
-        if redis and redis.exists(dedup_key):
+        if Cache.get(dedup_key):
             logger.debug(f"消息去重跳过: {dedup_key}")
             continue
 
@@ -84,8 +83,7 @@ def notify(
         messages.append(msg)
 
         # 设置去重标记
-        if redis:
-            redis.setex(dedup_key, MESSAGE_DEDUP_TTL, "1")
+        Cache.set(dedup_key, "1", MESSAGE_DEDUP_TTL)
 
         # 钉钉推送
         if channels and "dingtalk" in channels:
