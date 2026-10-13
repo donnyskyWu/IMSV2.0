@@ -7,7 +7,7 @@ Covers endpoints in app/api/system.py
 import os
 
 os.environ.setdefault("IMS_ENV", "test")
-os.environ["IMS_DB_URL"] = "sqlite:///:memory:"
+os.environ.setdefault("IMS_DB_URL", "sqlite:///:memory:")
 os.environ.setdefault("IMS_REDIS_URL", "")
 os.environ.setdefault("IMS_JWT_SECRET", "test-jwt-secret-key-for-testing-only")
 
