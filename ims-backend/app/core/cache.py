@@ -49,16 +49,28 @@ def _claim_text(value: Any) -> str:
 
 
 def _parse_claim(raw: Any) -> tuple[str, int | None, str]:
-    """解析 Lua 返回的 {value, status}。value 格式 session_id:user_id，返回 (session_id, user_id, status)。"""
+    """解析 Lua 返回的 {value, status}。
+
+    - ok: value 是 session_id:user_id（索引值），解析出 user_id
+    - reuse: value 是 session_id（used_key 只存 sid），user_id 为 None
+    - concurrent/missing: value 为空
+    """
     if isinstance(raw, (list, tuple)) and len(raw) >= 2:
         status = _claim_text(raw[1])
         if not status:
             status = "missing"
         val = _claim_text(raw[0])
         if val:
+            # ok 分支的索引值是 session_id:user_id，reuse 分支只有 session_id
             parts = val.split(":", 1)
             session_id = parts[0]
-            user_id = int(parts[1]) if len(parts) > 1 and parts[1] else None
+            if status == "ok" and len(parts) > 1 and parts[1]:
+                try:
+                    user_id = int(parts[1])
+                except ValueError:
+                    user_id = None
+            else:
+                user_id = None
             return session_id, user_id, status
         return "", None, status
     return "", None, "missing"
@@ -293,10 +305,8 @@ class Cache:
             return session_id, user_id, "ok"
         used = Cache.get(used_key)
         if used:
-            parts = str(used).split(":", 1)
-            session_id = parts[0]
-            user_id = int(parts[1]) if len(parts) > 1 and parts[1] else None
-            return session_id, user_id, "reuse"
+            # used_key 只存 session_id，reuse 分支不返回 user_id
+            return str(used), None, "reuse"
         return "", None, "missing"
 
     @staticmethod

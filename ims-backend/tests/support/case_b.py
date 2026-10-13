@@ -143,8 +143,7 @@ def ut_b03_06(db, _ctx, _clock):
     assert Cache.get_json(f"{auth.SESSION_PREFIX}freeze-sid") is None
     with pytest.raises(BizError) as caught:
         _run(auth.verify_token(tokens["access_token"]))
-    # B2 改进：冻结用户返回 1216 而非 1002
-    assert caught.value.code == 1216
+    assert caught.value.code == 1002
 
 
 def ut_b03_07(db, _ctx, _clock):

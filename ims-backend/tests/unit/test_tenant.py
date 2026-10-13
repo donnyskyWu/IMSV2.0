@@ -183,7 +183,14 @@ class TestTenantPackageSync:
         换套餐时同步 R1 只补不删：旧套餐有、新套餐没有的菜单保留在 R1 中。
         这保证了租户管理员不会因为换套餐而丢失已有权限。
         """
-        from app.domains.sys.models import Menu, Role, RoleMenu, Tenant, TenantPackage, TenantPackageMenu
+        from app.domains.sys.models import (
+            Menu,
+            Role,
+            RoleMenu,
+            Tenant,
+            TenantPackage,
+            TenantPackageMenu,
+        )
         from tests.support.rows import add
 
         tenant = add(db_session, Tenant(

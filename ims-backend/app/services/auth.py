@@ -399,11 +399,6 @@ class AuthService:
         # Check if session is still valid
         session_data = Cache.get_json(f"{self.SESSION_PREFIX}{session_id}")
         if not session_data:
-            # 会话缺失时查用户状态，冻结/离职返回 1216
-            from app.domains.sys.models import User
-            user = get_db_session().query(User).filter(User.id == user_id, User.deleted == 0).first()
-            if user and user.status in ("FROZEN", "RESIGNED"):
-                raise BizError(1216)
             raise BizError(1002)
         # 会话从登录起绝对 7 天，到点后访问令牌也失效（不靠 Redis 滑动续期）。
         if session_remaining_seconds(session_data) <= 0:
@@ -411,11 +406,6 @@ class AuthService:
 
         # Check blacklist
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
-            # 黑名单时查用户状态，冻结/离职返回 1216
-            from app.domains.sys.models import User
-            user = get_db_session().query(User).filter(User.id == user_id, User.deleted == 0).first()
-            if user and user.status in ("FROZEN", "RESIGNED"):
-                raise BizError(1216)
             raise BizError(1002)
 
         # 须改密标记以库里的当前值为准。用户行不存在时不在这里改 1002，
@@ -536,26 +526,17 @@ class AuthService:
         refresh_token: str,
         used_key: str,
     ) -> dict[str, Any]:
-        """校验会话后签发新的 access 与 refresh，并把旧刷新令牌记成已轮换。"""
+        """校验会话后签发新的 access 与 refresh，并把旧刷新令牌记成已轮换。
+
+        user_id 参数来自 claim_refresh 解析的索引值，用于冻结/离职检查。
+        """
         from app.domains.sys.models import User
 
         session_key = f"{self.SESSION_PREFIX}{session_id}"
         session_data = Cache.get_json(session_key)
         if not isinstance(session_data, dict) or session_data.get("refresh_token") != refresh_token:
-            # 会话缺失分支：用 user_id 查用户状态，冻结/离职返回 1216
-            if user_id:
-                db = get_db_session()
-                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
-                if user and user.status in ("FROZEN", "RESIGNED"):
-                    raise BizError(1216)
             raise BizError(1002)
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
-            # 黑名单分支：用 user_id 查用户状态，冻结/离职返回 1216
-            if user_id:
-                db = get_db_session()
-                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
-                if user and user.status in ("FROZEN", "RESIGNED"):
-                    raise BizError(1216)
             raise BizError(1002)
 
         db = get_db_session()
@@ -600,7 +581,7 @@ class AuthService:
         )
         # 新令牌落库之后才标记旧令牌。重放旧令牌时凭这个标记吊销整段会话。
         # 已轮换标记的 TTL 同样用剩余时长，不重新给满 7 天。
-        Cache.set(used_key, f"{session_id}:{user.id}", ttl=remaining)
+        Cache.set(used_key, session_id, ttl=remaining)
         return {
             "access_token": access_token,
             "refresh_token": new_refresh,

@@ -53,7 +53,7 @@ class TestB2RefreshRegression:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "freeze_after_login")
+        _add_user(db_session, "freeze_after_login")
         db_session.flush()
         service = AuthService()
 
@@ -80,7 +80,7 @@ class TestB2RefreshRegression:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "resign_after_login")
+        _add_user(db_session, "resign_after_login")
         db_session.flush()
         service = AuthService()
 
@@ -143,7 +143,7 @@ class TestB2RefreshRegression:
         from app.core.errors import BizError
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "logout_after_rotate")
+        _add_user(db_session, "logout_after_rotate")
         db_session.flush()
         service = AuthService()
 
@@ -175,7 +175,7 @@ class TestB2RefreshRegression:
 
         settings = get_settings()
         full_ttl = settings.jwt.refresh_token_ttl
-        person = _add_user(db_session, "seven_day_user")
+        _add_user(db_session, "seven_day_user")
         db_session.flush()
         service = AuthService()
 
@@ -199,17 +199,22 @@ class TestB2RefreshRegression:
         assert exc_info.value.code == 1002
 
 
-class TestB2SessionMissingAndBlacklistReturns1216:
-    """会话失效分支（session_missing/blacklist）在用户冻结/离职时返回 1216。"""
+class TestB2SessionMissingAndBlacklistReturns1002:
+    """会话失效分支（session_missing/blacklist）按 main 行为返回 1002。
 
-    def test_session_missing_frozen_returns_1216(self, db_session, test_context):
-        """会话缺失时，若用户已冻结，_issue_rotated_tokens 返回 1216。"""
+    根据代码评审要求，refresh 分支中 session_missing 和 blacklist 场景
+    保持 main 的行为：返回 1002（会话无效），不检查用户状态返回 1216。
+    只有 _issue_rotated_tokens 中从 session_data 查到用户后才检查冻结/离职。
+    """
+
+    def test_session_missing_frozen_returns_1002(self, db_session, test_context):
+        """会话缺失时，返回 1002（保持 main 行为，不检查用户状态）。"""
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "session_missing_frozen")
+        _add_user(db_session, "session_missing_frozen")
         db_session.flush()
         service = AuthService()
 
@@ -227,16 +232,16 @@ class TestB2SessionMissingAndBlacklistReturns1216:
 
         with pytest.raises(BizError) as exc_info:
             _run(service.refresh(refresh_token))
-        assert exc_info.value.code == 1216
+        assert exc_info.value.code == 1002
 
-    def test_blacklist_resigned_returns_1216(self, db_session, test_context):
-        """会话被拉黑时，若用户已离职，_issue_rotated_tokens 返回 1216。"""
+    def test_blacklist_resigned_returns_1002(self, db_session, test_context):
+        """会话被拉黑时，返回 1002（保持 main 行为，不检查用户状态）。"""
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "blacklist_resigned")
+        _add_user(db_session, "blacklist_resigned")
         db_session.flush()
         service = AuthService()
 
@@ -254,20 +259,24 @@ class TestB2SessionMissingAndBlacklistReturns1216:
 
         with pytest.raises(BizError) as exc_info:
             _run(service.refresh(refresh_token))
-        assert exc_info.value.code == 1216
+        assert exc_info.value.code == 1002
 
 
-class TestB2VerifyTokenReturns1216:
-    """verify_token 在会话失效分支返回 1216。"""
+class TestB2VerifyTokenReturns1002:
+    """verify_token 在会话失效分支返回 1002（保持 main 行为）。
 
-    def test_verify_session_missing_frozen_returns_1216(self, db_session, test_context):
-        """verify_token 会话缺失时，若用户已冻结，返回 1216。"""
+    根据代码评审要求，verify_token 保持 main 的行为：
+    会话缺失或被拉黑时返回 1002，不检查用户状态返回 1216。
+    """
+
+    def test_verify_session_missing_frozen_returns_1002(self, db_session, test_context):
+        """verify_token 会话缺失时，返回 1002（保持 main 行为）。"""
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "verify_missing_frozen")
+        _add_user(db_session, "verify_missing_frozen")
         db_session.flush()
         service = AuthService()
 
@@ -286,16 +295,16 @@ class TestB2VerifyTokenReturns1216:
 
         with pytest.raises(BizError) as exc_info:
             _run(service.verify_token(access_token))
-        assert exc_info.value.code == 1216
+        assert exc_info.value.code == 1002
 
-    def test_verify_blacklist_resigned_returns_1216(self, db_session, test_context):
-        """verify_token 会话被拉黑时，若用户已离职，返回 1216。"""
+    def test_verify_blacklist_resigned_returns_1002(self, db_session, test_context):
+        """verify_token 会话被拉黑时，返回 1002（保持 main 行为）。"""
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "verify_blacklist_resigned")
+        _add_user(db_session, "verify_blacklist_resigned")
         db_session.flush()
         service = AuthService()
 
@@ -314,4 +323,4 @@ class TestB2VerifyTokenReturns1216:
 
         with pytest.raises(BizError) as exc_info:
             _run(service.verify_token(access_token))
-        assert exc_info.value.code == 1216
+        assert exc_info.value.code == 1002
