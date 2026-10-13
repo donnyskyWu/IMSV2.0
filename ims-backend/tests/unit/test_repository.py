@@ -76,12 +76,19 @@ class ScopedEntity(AuditBase):
     ip_group_id = Column(Integer, nullable=True)
 
 
-@pytest.fixture
-def engine():
-    """Create in-memory SQLite engine for testing."""
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    Base.metadata.create_all(engine)
-    return engine
+@pytest.fixture(scope="module")
+def engine(tmp_path_factory):
+    """Create isolated SQLite engine for repository tests.
+
+    Uses a file-based SQLite database to avoid conflicts with the global
+    singleton engine in conftest.py. The module scope ensures the engine
+    and its metadata are shared across all tests in this module.
+    """
+    db_path = tmp_path_factory.mktemp("repo_tests") / "test.db"
+    test_engine = create_engine(f"sqlite:///{db_path}", echo=False)
+    Base.metadata.create_all(test_engine)
+    yield test_engine
+    test_engine.dispose()
 
 
 @pytest.fixture
@@ -89,6 +96,13 @@ def db_session(engine):
     """Create a test database session."""
     session_factory = sessionmaker(bind=engine)
     session = session_factory()
+    # Clean up any leftover data from previous tests
+    for table in reversed(Base.metadata.sorted_tables):
+        try:
+            session.execute(table.delete())
+        except Exception:
+            pass
+    session.commit()
     yield session
     session.close()
 
