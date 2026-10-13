@@ -171,7 +171,7 @@ async def get_minutes(minutes_id: int) -> CommonResult[MeetingMinutesVO]:
     "/minutes/{minutes_id}",
     response_model=CommonResult[MeetingCreateResp],
     summary="编辑纪要",
-    dependencies=[Depends(require_login())],
+    dependencies=[Depends(require_login)],
 )
 async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> CommonResult[MeetingCreateResp]:
     """
@@ -201,7 +201,7 @@ async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> C
     "/minutes/{minutes_id}/archive",
     response_model=CommonResult[MeetingCreateResp],
     summary="归档",
-    dependencies=[Depends(require_login())],
+    dependencies=[Depends(require_login)],
 )
 async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     """
@@ -232,7 +232,7 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     "/minutes/{minutes_id}/appendix",
     response_model=CommonResult[MeetingMinutesVO],
     summary="附录说明",
-    dependencies=[Depends(require_login())],
+    dependencies=[Depends(require_login)],
 )
 async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonResult[MeetingMinutesVO]:
     """
@@ -278,7 +278,7 @@ async def delete_minutes(minutes_id: int) -> CommonResult:
     "/minutes/action-item/{item_id}",
     response_model=CommonResult[ActionItemVO],
     summary="行动项回填",
-    dependencies=[Depends(require_login())],
+    dependencies=[Depends(require_login)],
 )
 async def close_action_item(item_id: int, request: ActionItemCloseReq) -> CommonResult[ActionItemVO]:
     """
