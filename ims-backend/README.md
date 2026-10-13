@@ -174,6 +174,7 @@ mypy app/ --ignore-missing-imports
 
 ## 版本历史
 
+- **2.0.3**: 账号密码登录补齐锁定（第 5 次 1215，`remainMinutes`）、冻结/离职（密码正确才 1216）和登录日志。新增 `POST /admin-api/ims/auth/password/change`（`oldPassword` / `newPassword`）。失败登录先提交再返回。须改密时只放行改密、退出和 `/me`。刷新轮换、绝对 7 天、嵌套 `/me` 树和租户 1008 保持 #18。
 - **2.0.2**: 合入刷新令牌原子轮换（GETDEL、重放吊销整段会话、登录起绝对 7 天、登录和刷新共用 1008）。`/me` 仍按目录 → 菜单嵌套，按钮只进 `permCodes`，目录节点保留库里的 `path`。
 - **2.0.1**: 刷新令牌用 Redis Lua（SET NX + GETDEL）原子轮换；重放已轮换的刷新令牌会吊销整段会话。`/me` 的 MENU 节点返回种子里的 `path`。
 - **2.0.0**: 初始版本，框架核心实现

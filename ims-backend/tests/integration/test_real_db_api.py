@@ -458,3 +458,149 @@ def test_r10_me_only_workbench_and_other_api_forbidden(tmp_path):
             assert org_sync.json()["code"] == 1008
     finally:
         _release_real_db(original_url, context_token)
+
+
+def test_real_lock_freeze_and_password_change(tmp_path):
+    """真实库覆盖锁定、冻结/离职和改密。不替换 get_db，也不替换鉴权。"""
+    from app.domains.sys.models import LoginLog, User
+    from app.main import app
+    from tools.seed.users import E2E_PASSWORD
+
+    db_url, original_url, context_token = _prepare_real_db(tmp_path)
+    try:
+        with TestClient(app) as client:
+            for _ in range(4):
+                wrong = client.post(
+                    "/admin-api/ims/auth/login",
+                    json={"username": "test_lock", "password": "Wrong1234"},
+                )
+                assert wrong.status_code == 200
+                assert wrong.json()["code"] == 1214
+
+            locked = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_lock", "password": "Wrong1234"},
+            )
+            locked_body = locked.json()
+            assert locked_body["code"] == 1215, locked_body
+            assert locked_body["data"]["remainMinutes"] == 15
+            assert "15" in locked_body["msg"]
+
+            still = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_lock", "password": E2E_PASSWORD},
+            )
+            still_body = still.json()
+            assert still_body["code"] == 1215
+            assert still_body["data"]["remainMinutes"] == 15
+
+            frozen_wrong = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_frozen", "password": "Wrong1234"},
+            )
+            assert frozen_wrong.json()["code"] == 1214
+            frozen = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_frozen", "password": E2E_PASSWORD},
+            )
+            assert frozen.json()["code"] == 1216
+            resigned = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_resigned", "password": E2E_PASSWORD},
+            )
+            assert resigned.json()["code"] == 1216
+
+            tenant = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_t2", "password": E2E_PASSWORD},
+            )
+            tenant_body = tenant.json()
+            assert tenant_body["code"] == 1008
+            assert tenant_body["msg"] == "所属组织已停用"
+
+            first = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_reset", "password": E2E_PASSWORD},
+            )
+            first_body = first.json()
+            assert first_body["code"] == 0, first_body
+            assert first_body["data"]["pwdResetRequired"] is True
+            token = first_body["data"]["accessToken"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            other = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_reset", "password": E2E_PASSWORD},
+            )
+            other_token = other.json()["data"]["accessToken"]
+
+            me_before = client.get("/admin-api/ims/auth/me", headers=headers)
+            assert me_before.status_code == 200
+            assert me_before.json()["data"]["user"]["pwdResetRequired"] is True
+
+            blocked = client.get("/admin-api/ims/system/dict-type/list", headers=headers)
+            assert blocked.json()["code"] == 1008
+
+            bad_old = client.post(
+                "/admin-api/ims/auth/password/change",
+                headers=headers,
+                json={"oldPassword": "Wrong1234", "newPassword": "Abcd5678!"},
+            )
+            assert bad_old.json()["code"] == 1214
+            weak = client.post(
+                "/admin-api/ims/auth/password/change",
+                headers=headers,
+                json={"oldPassword": E2E_PASSWORD, "newPassword": "abcdefgh"},
+            )
+            assert weak.json()["code"] == 1001
+            changed = client.post(
+                "/admin-api/ims/auth/password/change",
+                headers=headers,
+                json={"oldPassword": E2E_PASSWORD, "newPassword": "Abcd5678!"},
+            )
+            assert changed.json()["code"] == 0, changed.json()
+
+            kept = client.get("/admin-api/ims/auth/me", headers=headers)
+            assert kept.status_code == 200
+            assert kept.json()["data"]["user"]["pwdResetRequired"] is False
+            dropped = client.get(
+                "/admin-api/ims/auth/me",
+                headers={"Authorization": f"Bearer {other_token}"},
+            )
+            assert dropped.status_code == 401
+            assert dropped.json()["code"] == 1002
+
+            old_login = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_reset", "password": E2E_PASSWORD},
+            )
+            assert old_login.json()["code"] == 1214
+            new_login = client.post(
+                "/admin-api/ims/auth/login",
+                json={"username": "test_reset", "password": "Abcd5678!"},
+            )
+            new_body = new_login.json()
+            assert new_body["code"] == 0, new_body
+            assert new_body["data"]["pwdResetRequired"] is False
+
+        # 失败响应返回之后，新连接仍能看见次数和日志，说明失败先提交了。
+        check_engine, check = _connect(db_url)
+        try:
+            locked_user = check.query(User).filter(User.username == "test_lock").one()
+            assert locked_user.login_fail_count == 5
+            results = {
+                row.result
+                for row in check.query(LoginLog).filter(LoginLog.username == "test_lock").all()
+            }
+            assert "BAD_CREDENTIAL" in results
+            assert "LOCKED" in results
+            frozen_results = {
+                row.result
+                for row in check.query(LoginLog).filter(LoginLog.username == "test_frozen").all()
+            }
+            assert "DISABLED" in frozen_results
+        finally:
+            check.close()
+            check_engine.dispose()
+    finally:
+        _release_real_db(original_url, context_token)

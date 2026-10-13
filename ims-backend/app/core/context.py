@@ -43,6 +43,11 @@ class RequestContext:
     dept_ids: list[int] = field(default_factory=list)
     ip_group_ids: list[int] = field(default_factory=list)
     client_ip: str = ""
+    user_agent: str = ""
+    # 当前访问令牌里的会话 id。改密时用来保留本机会话。
+    session_id: str = ""
+    # 登录后必须先改密时为 True。只放行改密、退出和我的信息。
+    pwd_reset_required: bool = False
     is_system: bool = False  # True for Worker system context
 
     @property

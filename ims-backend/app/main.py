@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     # 延迟导入，避免会话/鉴权依赖在模块加载时拉回 main。
-    from app.api.deps import get_current_user_optional
+    from app.api.deps import enforce_password_reset, get_current_user_optional
     from app.db.session import get_db
 
     app = FastAPI(
@@ -70,7 +70,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         # get_db 必须在鉴权前面：校验令牌时要读库。两者都挂在应用上，
         # 业务路由不用各自声明，匿名接口没有令牌时鉴权依赖直接放过。
-        dependencies=[Depends(get_db), Depends(get_current_user_optional)],
+        # 改密标记要在令牌解析之后看，所以排在鉴权依赖后面。
+        dependencies=[
+            Depends(get_db),
+            Depends(get_current_user_optional),
+            Depends(enforce_password_reset),
+        ],
     )
 
     # CORS middleware
@@ -90,6 +95,7 @@ def create_app() -> FastAPI:
         context = RequestContext(
             trace_id=trace_id or str(__import__("uuid").uuid4()),
             client_ip=request.client.host if request.client else "",
+            user_agent=request.headers.get("user-agent") or "",
         )
         ctx.set(context)
 

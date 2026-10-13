@@ -89,6 +89,12 @@ class MeResponse(BaseSchema):
     data_scope_text: str
 
 
+class ChangePasswordRequest(BaseSchema):
+    """修改本人密码。长度交给服务层校验，以便返回规格文案。"""
+    old_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=1, max_length=128)
+
+
 class DingTalkSSORequest(BaseSchema):
     """DingTalk SSO redirect request."""
     redirect: Optional[str] = "/"
@@ -187,6 +193,37 @@ async def get_current_user_info() -> CommonResult[MeResponse]:
 
 
 get_current_user_info.__login_only__ = True
+
+
+@router.post(
+    "/password/change",
+    response_model=CommonResult,
+    summary="修改本人密码",
+)
+async def change_password(body: ChangePasswordRequest) -> CommonResult:
+    """
+    修改本人密码（FP-B1-PW-01）。
+
+    原密码错误返回 1214。规则不符或与当前密码相同返回 1001。
+    成功后清除须改密标记，其他会话失效，当前会话保留。
+    """
+    from app.core.context import ctx
+    from app.core.errors import BizError
+    from app.services.auth import AuthService
+
+    current = ctx.current_or_none
+    if current is None or not current.user_id:
+        raise BizError(1002)
+    await AuthService().change_own_password(
+        user_id=current.user_id,
+        old_password=body.old_password,
+        new_password=body.new_password,
+        keep_session_id=current.session_id,
+    )
+    return CommonResult.success()
+
+
+change_password.__login_only__ = True
 
 
 @router.get("/sso/dingtalk/redirect", summary="钉钉SSO跳转")
