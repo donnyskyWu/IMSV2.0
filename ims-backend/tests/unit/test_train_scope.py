@@ -29,7 +29,7 @@ def make_mock_ctx(
     mock = MagicMock()
     mock.user_id = user_id
     mock.tenant_id = tenant_id
-    mock.dept_ids = dept_ids or [1]
+    mock.dept_ids = dept_ids if dept_ids is not None else [1]
     mock.data_scopes = [{"scope_type": data_scope, "role_id": 1}]
     return mock
 
