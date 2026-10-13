@@ -75,12 +75,12 @@ def _create_meeting_minutes() -> None:
         sa.Column("remind_24h_at", sa.DateTime(), nullable=True, comment="已发送 24h 提醒时间（幂等用）"),
         sa.Column("remind_48h_at", sa.DateTime(), nullable=True, comment="已发送 48h 提醒时间（幂等用）"),
         sa.Column("version", sa.Integer(), nullable=False, server_default="1", comment="乐观锁版本号"),
+        sa.UniqueConstraint("tenant_id", "code", "deleted", name="uk_minutes_code"),
     )
     op.create_index("idx_minutes_tenant_date", "ims_meeting_minutes", ["tenant_id", "meeting_date"])
     op.create_index("idx_minutes_recorder", "ims_meeting_minutes", ["recorder_user_id"])
     op.create_index("idx_minutes_status", "ims_meeting_minutes", ["tenant_id", "status"])
     op.create_index("idx_minutes_dept", "ims_meeting_minutes", ["tenant_id", "dept_id"])
-    op.create_unique_constraint("uk_minutes_code", "ims_meeting_minutes", ["tenant_id", "code", "deleted"])
 
 
 def _create_meeting_decision() -> None:
@@ -92,10 +92,10 @@ def _create_meeting_decision() -> None:
         sa.Column("minutes_id", sa.BigInteger(), nullable=False, comment="关联纪要"),
         sa.Column("seq", sa.Integer(), nullable=False, comment="序号"),
         sa.Column("content", sa.String(512), nullable=False, comment="决议内容（HTML 转义存储）"),
+        sa.UniqueConstraint("tenant_id", "minutes_id", "seq", "deleted", name="uk_decision_seq"),
     )
     op.create_index("idx_decision_minutes", "ims_meeting_decision", ["minutes_id"])
     op.create_index("idx_decision_tenant", "ims_meeting_decision", ["tenant_id"])
-    op.create_unique_constraint("uk_decision_seq", "ims_meeting_decision", ["tenant_id", "minutes_id", "seq", "deleted"])
 
 
 def _create_meeting_action_item() -> None:
@@ -145,8 +145,8 @@ def _create_client_token_table() -> None:
         sa.Column("result_id", sa.BigInteger(), nullable=True, comment="创建结果 ID"),
         sa.Column("created_at", sa.DateTime(), nullable=False, comment="创建时间"),
         sa.Column("expires_at", sa.DateTime(), nullable=False, comment="过期时间（24h）"),
+        sa.UniqueConstraint("tenant_id", "client_token", name="uk_client_token"),
     )
-    op.create_unique_constraint("uk_client_token", "ims_meeting_client_token", ["tenant_id", "client_token"])
     op.create_index("idx_client_token_expires", "ims_meeting_client_token", ["expires_at"])
 
 
