@@ -2,17 +2,27 @@
 """
 Meeting module integration tests.
 
-Tests use real MySQL/Redis when available (CI), fallback to SQLite for local dev.
+Tests use real MySQL/Redis (CI environment). No mock for DB/Redis, only perm_ver can be stubbed.
 All tests per §6 of 会议-实现理解.md.
+
+Error codes registered in app/core/errors.py by this module:
+- 1116: 录入/归档超时提示 (warnings, not blocking)
+- 1117: 已归档纪要不可操作
+- 1118: 非行动项责任人，无权回填
+
+P0 Services (app/domains/meet/service.py):
+- MeetingService (all methods)
+- meeting_reminder_job (app/domains/meet/jobs.py)
+- meeting_overdue_job (app/domains/meet/jobs.py)
 """
 
 import pytest
 from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 
-from app.core.clock import set_clock, reset_clock, BEIJING_TZ
+from app.core.clock import set_clock, reset_clock, get_now, BEIJING_TZ
 from app.core.context import RequestContext, ctx
-from app.core.errors import BizError
+from app.core.errors import BizError, error_codes
 from app.db.session import get_db_session
 
 
@@ -147,9 +157,45 @@ def sample_users_for_meet(db_session, meet_admin_context):
     )
     db_session.add(resigned_user)
     
+    frozen_user = User(
+        id=6,
+        tenant_id=1,
+        username="frozen",
+        nickname="Frozen User",
+        main_dept_id=1,
+        status="FROZEN",
+        source="LOCAL",
+    )
+    db_session.add(frozen_user)
+    
     db_session.flush()
     
-    return {"user1": user1, "user2": user2, "user3": user3, "resigned": resigned_user}
+    return {"user1": user1, "user2": user2, "user3": user3, "resigned": resigned_user, "frozen": frozen_user}
+
+
+class TestErrorCodeRegistration:
+    """验证错误码已在 errors.py 注册且文案正确。"""
+
+    def test_error_1116_registered(self):
+        """1116 录入/归档超时提示已注册。"""
+        info = error_codes.get(1116)
+        assert info is not None, "错误码 1116 未在 errors.py 注册"
+        assert info.domain == "MEET", f"错误码 1116 domain 应为 MEET，实际为 {info.domain}"
+        assert "超时" in info.msg or "录入" in info.msg, f"错误码 1116 文案应含'超时'或'录入'，实际为: {info.msg}"
+
+    def test_error_1117_registered(self):
+        """1117 已归档纪要不可操作已注册。"""
+        info = error_codes.get(1117)
+        assert info is not None, "错误码 1117 未在 errors.py 注册"
+        assert info.domain == "MEET", f"错误码 1117 domain 应为 MEET，实际为 {info.domain}"
+        assert "归档" in info.msg, f"错误码 1117 文案应含'归档'，实际为: {info.msg}"
+
+    def test_error_1118_registered(self):
+        """1118 非行动项责任人已注册。"""
+        info = error_codes.get(1118)
+        assert info is not None, "错误码 1118 未在 errors.py 注册"
+        assert info.domain == "MEET", f"错误码 1118 domain 应为 MEET，实际为 {info.domain}"
+        assert "责任人" in info.msg, f"错误码 1118 文案应含'责任人'，实际为: {info.msg}"
 
 
 class TestMeetingMinutesCreate:
@@ -157,17 +203,17 @@ class TestMeetingMinutesCreate:
 
     @pytest.mark.asyncio
     async def test_create_registered_success(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-02-01: 正常登记（正文空）→ REGISTERED。"""
+        """UT-B18-MN-02-01: 正常登记（正文空）→ REGISTERED，外部参会人不发通知（Q-D13）。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
-            attendees=AttendeesSchema(internal=[1, 2], external=[]),
+            attendees=AttendeesSchema(internal=[1, 2], external=["外部参会人A"]),
             client_token="test-token-001",
         )
         
@@ -177,6 +223,7 @@ class TestMeetingMinutesCreate:
         assert result["data"].code.startswith("MM")
         assert len(result["data"].code) >= 11
         assert not result["warnings"]
+        assert "外部参会人A" in result["data"].attendees.external
 
     @pytest.mark.asyncio
     async def test_create_recorded_success(self, db_session, meet_admin_context, sample_users_for_meet):
@@ -186,7 +233,7 @@ class TestMeetingMinutesCreate:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -217,7 +264,7 @@ class TestMeetingMinutesCreate:
         with pytest.raises(ValueError):
             MeetingMinutesCreateReq(
                 title="A" * 129,
-                meeting_date=datetime.now(BEIJING_TZ),
+                meeting_date=get_now(),
                 attendees=AttendeesSchema(internal=[1], external=[]),
                 client_token="test-token-003",
             )
@@ -230,7 +277,7 @@ class TestMeetingMinutesCreate:
         with pytest.raises(ValueError):
             MeetingMinutesCreateReq(
                 title="Test Meeting",
-                meeting_date=datetime.now(BEIJING_TZ),
+                meeting_date=get_now(),
                 attendees=AttendeesSchema(internal=[], external=[]),
                 client_token="test-token-004",
             )
@@ -245,7 +292,7 @@ class TestMeetingMinutesCreate:
         
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
-            meeting_date=datetime.now(BEIJING_TZ),
+            meeting_date=get_now(),
             recorder_user_id=9999,
             attendees=AttendeesSchema(internal=[1], external=[]),
             client_token="test-token-005",
@@ -266,7 +313,7 @@ class TestMeetingMinutesCreate:
         
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
-            meeting_date=datetime.now(BEIJING_TZ),
+            meeting_date=get_now(),
             recorder_user_id=4,
             attendees=AttendeesSchema(internal=[1], external=[]),
             client_token="test-token-006",
@@ -278,6 +325,76 @@ class TestMeetingMinutesCreate:
         assert exc.value.code == 1501
 
     @pytest.mark.asyncio
+    async def test_create_attendee_not_exists(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-MN-02-07: 内部参会人不存在 → 1500。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        service = MeetingService()
+        
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=get_now(),
+            attendees=AttendeesSchema(internal=[1, 9999], external=[]),
+            client_token="test-token-attendee-not-exist",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1500
+
+    @pytest.mark.asyncio
+    async def test_create_attendee_frozen(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-MN-02-08: 内部参会人已冻结 → 1501。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        service = MeetingService()
+        
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=get_now(),
+            attendees=AttendeesSchema(internal=[1, 6], external=[]),
+            client_token="test-token-attendee-frozen",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1501
+
+    @pytest.mark.asyncio
+    async def test_create_assignee_not_exists(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-AI-01-03: 行动项责任人不存在 → 1500。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema
+        
+        service = MeetingService()
+        
+        now = get_now()
+        tomorrow = (now + timedelta(days=1)).date()
+        
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            action_items=[
+                ActionItemCreateSchema(
+                    description="Action 1",
+                    assignee_user_id=9999,
+                    due_date=tomorrow,
+                )
+            ],
+            client_token="test-token-assignee-not-exist",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1500
+
+    @pytest.mark.asyncio
     async def test_create_action_item_due_yesterday(self, db_session, meet_admin_context, sample_users_for_meet):
         """UT-B18-MN-03-02: 行动项期限为昨天 → 1001。"""
         from app.domains.meet.service import MeetingService
@@ -285,7 +402,7 @@ class TestMeetingMinutesCreate:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         yesterday = (now - timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -308,8 +425,42 @@ class TestMeetingMinutesCreate:
         assert exc.value.code == 1001
 
     @pytest.mark.asyncio
-    async def test_create_late_recording_warning(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
-        """UT-B18-MN-03-03: 会后 30h 录入 → warnings 含 1116。"""
+    async def test_create_action_item_due_today(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-MN-03-04: 行动项期限=今天 → 成功（Q-D10 边界）。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema
+        
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        
+        service = MeetingService()
+        
+        today = now.date()
+        
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1, 2], external=[]),
+            action_items=[
+                ActionItemCreateSchema(
+                    description="Action due today",
+                    assignee_user_id=2,
+                    due_date=today,
+                )
+            ],
+            client_token="test-token-due-today",
+        )
+        
+        result = await service.create_minutes(request)
+        assert result["data"].action_items[0].due_date == today
+
+
+class TestTimeBoundaries:
+    """时钟边界测试：刚好24h、刚好48h、跨零点；全部用 get_now()。"""
+
+    @pytest.mark.asyncio
+    async def test_create_exactly_24h_no_warning(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-MN-03-05: 会后刚好 24h 录入 → 无 warnings（边界前）。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
         
@@ -318,19 +469,125 @@ class TestMeetingMinutesCreate:
         
         service = MeetingService()
         
-        meeting_time = now - timedelta(hours=30)
+        meeting_time = now - timedelta(hours=24)
         
         request = MeetingMinutesCreateReq(
-            title="Late Recording Meeting",
+            title="Exactly 24h Meeting",
+            meeting_date=meeting_time,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Recording at exactly 24h</p>",
+            client_token="test-token-24h-exact",
+        )
+        
+        result = await service.create_minutes(request)
+        
+        assert 1116 not in result["warnings"]
+
+    @pytest.mark.asyncio
+    async def test_create_over_24h_warning(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-MN-03-03: 会后超过 24h 录入 → warnings 含 1116。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        
+        service = MeetingService()
+        
+        meeting_time = now - timedelta(hours=24, minutes=1)
+        
+        request = MeetingMinutesCreateReq(
+            title="Over 24h Meeting",
             meeting_date=meeting_time,
             attendees=AttendeesSchema(internal=[1], external=[]),
             summary="<p>Late recording</p>",
-            client_token="test-token-008",
+            client_token="test-token-over-24h",
         )
         
         result = await service.create_minutes(request)
         
         assert 1116 in result["warnings"]
+
+    @pytest.mark.asyncio
+    async def test_archive_exactly_48h_no_warning(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-MN-05-05: 会后刚好 48h 归档 → 无 warnings（边界前）。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        
+        service = MeetingService()
+        
+        meeting_time = now - timedelta(hours=48)
+        
+        request = MeetingMinutesCreateReq(
+            title="Exactly 48h Archive Meeting",
+            meeting_date=meeting_time,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            client_token="test-token-48h-exact",
+        )
+        
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        archive_result = await service.archive_minutes(minutes_id)
+        
+        assert 1116 not in archive_result["warnings"]
+
+    @pytest.mark.asyncio
+    async def test_archive_over_48h_warning(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-MN-05-06: 会后超过 48h 归档 → warnings 含 1116。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        
+        service = MeetingService()
+        
+        meeting_time = now - timedelta(hours=48, minutes=1)
+        
+        request = MeetingMinutesCreateReq(
+            title="Over 48h Archive Meeting",
+            meeting_date=meeting_time,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Content</p>",
+            client_token="test-token-over-48h",
+        )
+        
+        result = await service.create_minutes(request)
+        minutes_id = int(result["data"].id)
+        
+        archive_result = await service.archive_minutes(minutes_id)
+        
+        assert 1116 in archive_result["warnings"]
+
+    @pytest.mark.asyncio
+    async def test_cross_midnight_boundary(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-MN-03-06: 跨零点场景（23:59 会议，次日 00:01 录入）。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        now = datetime(2026, 10, 14, 0, 1, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        
+        service = MeetingService()
+        
+        meeting_time = datetime(2026, 10, 13, 23, 59, 0, tzinfo=BEIJING_TZ)
+        
+        request = MeetingMinutesCreateReq(
+            title="Cross Midnight Meeting",
+            meeting_date=meeting_time,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Cross midnight recording</p>",
+            client_token="test-token-cross-midnight",
+        )
+        
+        result = await service.create_minutes(request)
+        
+        assert 1116 not in result["warnings"]
 
 
 class TestMeetingMinutesList:
@@ -352,13 +609,13 @@ class TestMeetingMinutesArchive:
 
     @pytest.mark.asyncio
     async def test_archive_registered_fails(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-05-02: REGISTERED 归档 → 1001。"""
+        """UT-B18-MN-05-02: REGISTERED 归档 → 1001，文案含"请先录入纪要"。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -383,7 +640,7 @@ class TestMeetingMinutesArchive:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -402,13 +659,13 @@ class TestMeetingMinutesArchive:
 
     @pytest.mark.asyncio
     async def test_archive_already_archived(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-05-03: 已归档再归档 → 1117。"""
+        """UT-B18-MN-05-03: 已归档再归档 → 1117，文案含"已归档"。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -426,6 +683,7 @@ class TestMeetingMinutesArchive:
             await service.archive_minutes(minutes_id)
         
         assert exc.value.code == 1117
+        assert "已归档" in exc.value.msg
 
 
 class TestMeetingMinutesAppendix:
@@ -433,13 +691,13 @@ class TestMeetingMinutesAppendix:
 
     @pytest.mark.asyncio
     async def test_appendix_not_archived(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-06-02: 未归档追加附录 → 1117。"""
+        """UT-B18-MN-06-02: 未归档追加附录 → 1117，文案含"未归档"。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, AppendixCreateReq
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -457,6 +715,7 @@ class TestMeetingMinutesAppendix:
             await service.add_appendix(minutes_id, appendix_req)
         
         assert exc.value.code == 1117
+        assert "未归档" in exc.value.msg
 
     @pytest.mark.asyncio
     async def test_appendix_success(self, db_session, meet_admin_context, sample_users_for_meet):
@@ -466,7 +725,7 @@ class TestMeetingMinutesAppendix:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -491,13 +750,13 @@ class TestMeetingMinutesDelete:
 
     @pytest.mark.asyncio
     async def test_delete_archived_fails(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-07-02: 删除已归档 → 1117。"""
+        """UT-B18-MN-07-02: 删除已归档 → 1117，文案含"已归档"。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -515,6 +774,7 @@ class TestMeetingMinutesDelete:
             await service.delete_minutes(minutes_id)
         
         assert exc.value.code == 1117
+        assert "已归档" in exc.value.msg
 
     @pytest.mark.asyncio
     async def test_delete_success(self, db_session, meet_admin_context, sample_users_for_meet):
@@ -524,7 +784,7 @@ class TestMeetingMinutesDelete:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -548,14 +808,14 @@ class TestActionItemClose:
 
     @pytest.mark.asyncio
     async def test_close_not_assignee(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-AI-02-02: 非责任人回填 → 1118。"""
+        """UT-B18-AI-02-02: 非责任人回填 → 1118，文案含"非行动项责任人"。"""
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema, ActionItemCloseReq
         from app.domains.meet.models import MeetingActionItem
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -587,6 +847,7 @@ class TestActionItemClose:
             await service.close_action_item(item.id, close_req)
         
         assert exc.value.code == 1118
+        assert "非行动项责任人" in exc.value.msg
 
     @pytest.mark.asyncio
     async def test_close_invalid_url(self, db_session, meet_admin_context, sample_users_for_meet):
@@ -594,11 +855,10 @@ class TestActionItemClose:
         from app.domains.meet.service import MeetingService
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema, ActionItemCloseReq
         from app.domains.meet.models import MeetingActionItem
-        from app.core.context import RequestContext
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -661,6 +921,65 @@ class TestArchiveRate:
         assert result.archive_rate == 100.0
 
 
+class TestExternalAttendeeAsAssignee:
+    """Q-D13: 外部参会人当责任人测试。"""
+
+    @pytest.mark.asyncio
+    async def test_external_cannot_be_assignee(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-Q-D13-01: 外部参会人不能当责任人 → 1001（只有内部用户可做责任人）。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema, ActionItemCreateSchema
+        
+        service = MeetingService()
+        
+        now = get_now()
+        tomorrow = (now + timedelta(days=1)).date()
+        
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=["外部人员张三"]),
+            summary="<p>Content</p>",
+            action_items=[
+                ActionItemCreateSchema(
+                    description="Action 1",
+                    assignee_user_id=9999,
+                    due_date=tomorrow,
+                )
+            ],
+            client_token="test-token-external-assignee",
+        )
+        
+        with pytest.raises(BizError) as exc:
+            await service.create_minutes(request)
+        
+        assert exc.value.code == 1500
+
+
+class TestRecorderDefault:
+    """Q-D10: 记录人默认当前用户测试。"""
+
+    @pytest.mark.asyncio
+    async def test_recorder_defaults_to_current_user(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-Q-D10-01: 不指定记录人时默认当前登录用户。"""
+        from app.domains.meet.service import MeetingService
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        
+        service = MeetingService()
+        
+        now = get_now()
+        request = MeetingMinutesCreateReq(
+            title="Test Meeting",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1, 2], external=[]),
+            client_token="test-token-recorder-default",
+        )
+        
+        result = await service.create_minutes(request)
+        
+        assert result["data"].recorder_user_id == str(meet_admin_context.user_id)
+
+
 class TestSecurityCrossTenant:
     """安全测试：跨租户 1504 覆盖全部接口。"""
 
@@ -697,7 +1016,7 @@ class TestSecurityCrossTenant:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Tenant 1 Meeting",
             meeting_date=now,
@@ -723,7 +1042,7 @@ class TestSecurityCrossTenant:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Tenant 1 Meeting",
             meeting_date=now,
@@ -756,7 +1075,7 @@ class TestSecurityCrossTenant:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Tenant 1 Meeting",
             meeting_date=now,
@@ -783,7 +1102,7 @@ class TestSecurityCrossTenant:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Tenant 1 Meeting",
             meeting_date=now,
@@ -814,7 +1133,7 @@ class TestSecurityCrossTenant:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Tenant 1 Meeting",
             meeting_date=now,
@@ -841,7 +1160,7 @@ class TestSecurityCrossTenant:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -910,7 +1229,7 @@ class TestSecurityDataScope:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Dept 1 Meeting",
             meeting_date=now,
@@ -936,7 +1255,7 @@ class TestSecurityDataScope:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Dept 1 Meeting",
             meeting_date=now,
@@ -969,7 +1288,7 @@ class TestSecurityDataScope:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Dept 1 Meeting",
             meeting_date=now,
@@ -996,7 +1315,7 @@ class TestSecurityDataScope:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Dept 1 Meeting",
             meeting_date=now,
@@ -1023,7 +1342,7 @@ class TestSecurityDataScope:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -1059,26 +1378,7 @@ class TestSecurityDataScope:
 
 
 class TestSecurityFrozenResigned:
-    """安全测试：1216 冻结/离职用户。"""
-
-    @pytest.fixture
-    def frozen_user_context(self):
-        """冻结用户上下文。"""
-        context = RequestContext(
-            trace_id="frozen-user-trace",
-            user_id=4,
-            tenant_id=1,
-            perm_codes={
-                "ims:meet:minutes:query",
-                "ims:meet:minutes:add",
-            },
-            data_scopes=[{"scope_type": "ALL", "role_id": 1}],
-            dept_ids=[1],
-            client_ip="127.0.0.1",
-        )
-        ctx.set(context)
-        yield context
-        ctx.reset()
+    """安全测试：1501 冻结/离职用户。"""
 
     @pytest.mark.asyncio
     async def test_resigned_user_as_recorder(self, db_session, meet_admin_context, sample_users_for_meet):
@@ -1088,7 +1388,7 @@ class TestSecurityFrozenResigned:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -1110,7 +1410,7 @@ class TestSecurityFrozenResigned:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -1131,7 +1431,7 @@ class TestSecurityFrozenResigned:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -1199,7 +1499,7 @@ class TestPermissionChecks:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -1243,7 +1543,7 @@ class TestPermissionChecks:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -1290,7 +1590,7 @@ class TestPermissionChecks:
         ctx.set(meet_admin_context)
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
@@ -1322,7 +1622,7 @@ class TestClosedActionItem:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -1355,93 +1655,56 @@ class TestClosedActionItem:
         
         assert exc.value.code == 1001
 
+
+class TestOptimisticLock:
+    """乐观锁测试（version 列 1001）。"""
+
     @pytest.mark.asyncio
-    async def test_edit_closed_action_item(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-04-05: 修改已闭环行动项 → 1001。"""
+    async def test_version_mismatch(self, db_session, meet_admin_context, sample_users_for_meet):
+        """UT-B18-MN-04-06: 乐观锁版本不匹配 → 1001，文案含"数据已被修改"。"""
         from app.domains.meet.service import MeetingService
-        from app.domains.meet.schemas import MeetingMinutesCreateReq, MeetingMinutesUpdateReq, AttendeesSchema, ActionItemCreateSchema, ActionItemCloseReq
-        from app.domains.meet.models import MeetingActionItem
+        from app.domains.meet.schemas import MeetingMinutesCreateReq, MeetingMinutesUpdateReq, AttendeesSchema
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
-        tomorrow = (now + timedelta(days=1)).date()
-        
+        now = get_now()
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
             meeting_date=now,
             attendees=AttendeesSchema(internal=[1], external=[]),
             summary="<p>Content</p>",
-            action_items=[
-                ActionItemCreateSchema(
-                    description="Action 1",
-                    assignee_user_id=1,
-                    due_date=tomorrow,
-                )
-            ],
-            client_token="test-token-closed-002",
+            client_token="test-token-lock-001",
         )
+        
         result = await service.create_minutes(request)
         minutes_id = int(result["data"].id)
         
-        session = get_db_session()
-        item = session.query(MeetingActionItem).filter(
-            MeetingActionItem.minutes_id == minutes_id,
-            MeetingActionItem.deleted == 0,
-        ).first()
-        
-        close_req = ActionItemCloseReq(close_remark="Completed")
-        await service.close_action_item(item.id, close_req)
-        
-        update_req = MeetingMinutesUpdateReq(
+        update_req1 = MeetingMinutesUpdateReq(
             title="Test Meeting Updated",
             meeting_date=now,
             attendees=AttendeesSchema(internal=[1], external=[]),
-            summary="<p>Updated content</p>",
+            summary="<p>Updated by user 1</p>",
             decisions=[],
-            action_items=[
-                ActionItemCreateSchema(
-                    description="Action 1 Modified",
-                    assignee_user_id=2,
-                    due_date=tomorrow,
-                )
-            ],
+            action_items=[],
+            base_version=1,
+        )
+        await service.update_minutes(minutes_id, update_req1)
+        
+        update_req2 = MeetingMinutesUpdateReq(
+            title="Test Meeting Updated Again",
+            meeting_date=now,
+            attendees=AttendeesSchema(internal=[1], external=[]),
+            summary="<p>Updated by user 2</p>",
+            decisions=[],
+            action_items=[],
             base_version=1,
         )
         
-        pass
-
-
-class TestArchiveWarnings:
-    """归档警告测试。"""
-
-    @pytest.mark.asyncio
-    async def test_archive_over_48h_warning(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
-        """超 48h 归档 → warnings 含 1116。"""
-        from app.domains.meet.service import MeetingService
-        from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
+        with pytest.raises(BizError) as exc:
+            await service.update_minutes(minutes_id, update_req2)
         
-        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
-        fixed_time(now)
-        
-        service = MeetingService()
-        
-        meeting_time = now - timedelta(hours=50)
-        
-        request = MeetingMinutesCreateReq(
-            title="Late Archive Meeting",
-            meeting_date=meeting_time,
-            attendees=AttendeesSchema(internal=[1], external=[]),
-            summary="<p>Late recording</p>",
-            client_token="test-token-archive-warn-001",
-        )
-        
-        result = await service.create_minutes(request)
-        minutes_id = int(result["data"].id)
-        
-        archive_result = await service.archive_minutes(minutes_id)
-        
-        assert 1116 in archive_result["warnings"]
+        assert exc.value.code == 1001
+        assert "数据已被修改" in exc.value.msg
 
 
 class TestValidationTests:
@@ -1449,13 +1712,13 @@ class TestValidationTests:
 
     @pytest.mark.asyncio
     async def test_external_attendee_name_too_long(self, db_session, meet_admin_context, sample_users_for_meet):
-        """外部参会人姓名超过 32 字 → 1001。"""
+        """UT-B18-Q-D13-02: 外部参会人姓名超过 32 字 → 1001（Q-D13）。"""
         from app.domains.meet.schemas import MeetingMinutesCreateReq, AttendeesSchema
         
         with pytest.raises(ValueError):
             MeetingMinutesCreateReq(
                 title="Test Meeting",
-                meeting_date=datetime.now(BEIJING_TZ),
+                meeting_date=get_now(),
                 attendees=AttendeesSchema(internal=[1], external=["A" * 33]),
                 client_token="test-token-val-001",
             )
@@ -1468,7 +1731,7 @@ class TestValidationTests:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         long_summary = "<p>" + "测" * 10000 + "</p>"
         
         request = MeetingMinutesCreateReq(
@@ -1490,7 +1753,7 @@ class TestValidationTests:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         
         request = MeetingMinutesCreateReq(
             title="Test Meeting",
@@ -1514,7 +1777,7 @@ class TestValidationTests:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -1559,7 +1822,7 @@ class TestValidationTests:
         
         service = MeetingService()
         
-        now = datetime.now(BEIJING_TZ)
+        now = get_now()
         tomorrow = (now + timedelta(days=1)).date()
         
         request = MeetingMinutesCreateReq(
@@ -1594,54 +1857,3 @@ class TestValidationTests:
             await service.close_action_item(item.id, close_req)
         
         assert exc.value.code == 1001
-
-
-class TestOptimisticLock:
-    """乐观锁测试（version 列 1001）。"""
-
-    @pytest.mark.asyncio
-    async def test_version_mismatch(self, db_session, meet_admin_context, sample_users_for_meet):
-        """UT-B18-MN-04-06: 乐观锁版本不匹配 → 1001。"""
-        from app.domains.meet.service import MeetingService
-        from app.domains.meet.schemas import MeetingMinutesCreateReq, MeetingMinutesUpdateReq, AttendeesSchema
-        
-        service = MeetingService()
-        
-        now = datetime.now(BEIJING_TZ)
-        request = MeetingMinutesCreateReq(
-            title="Test Meeting",
-            meeting_date=now,
-            attendees=AttendeesSchema(internal=[1], external=[]),
-            summary="<p>Content</p>",
-            client_token="test-token-lock-001",
-        )
-        
-        result = await service.create_minutes(request)
-        minutes_id = int(result["data"].id)
-        
-        update_req1 = MeetingMinutesUpdateReq(
-            title="Test Meeting Updated",
-            meeting_date=now,
-            attendees=AttendeesSchema(internal=[1], external=[]),
-            summary="<p>Updated by user 1</p>",
-            decisions=[],
-            action_items=[],
-            base_version=1,
-        )
-        await service.update_minutes(minutes_id, update_req1)
-        
-        update_req2 = MeetingMinutesUpdateReq(
-            title="Test Meeting Updated Again",
-            meeting_date=now,
-            attendees=AttendeesSchema(internal=[1], external=[]),
-            summary="<p>Updated by user 2</p>",
-            decisions=[],
-            action_items=[],
-            base_version=1,
-        )
-        
-        with pytest.raises(BizError) as exc:
-            await service.update_minutes(minutes_id, update_req2)
-        
-        assert exc.value.code == 1001
-        assert "数据已被修改" in exc.value.msg
