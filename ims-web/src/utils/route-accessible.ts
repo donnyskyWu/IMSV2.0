@@ -1,70 +1,53 @@
 /**
- * 路由可达判断（B3 新建）
- * 依据: 个人工作台-实现理解 §7.3「路由可达」策略
+ * 路由可达判断（B3）
+ * 依据: 个人工作台-实现理解 §7.3，以及产品复核：只看直接上一级。
  *
- * 无菜单的子页面（如 /ims/workbench/todos、/ims/workbench/messages）不在 menuTree 中，
- * 但若其父路由在 menuTree 中，则允许访问。
+ * 允许访问当且仅当：
+ * 1. 页面本身在菜单树内；或
+ * 2. 该页是无菜单二级页，且直接父菜单在菜单树内。
+ * 有自身菜单、但不在当前用户菜单树里的叶子，即使上级目录在树内，也不可访问。
  */
 import type { MenuItem } from '@/types'
 
-/**
- * 收集菜单树中所有路径（包括目录和叶子）。
- */
 function collectAllPaths(menus: MenuItem[]): Set<string> {
   const paths = new Set<string>()
   const walk = (items: MenuItem[]) => {
     for (const item of items) {
-      if (item.path) {
-        paths.add(item.path)
-      }
-      if (item.children) {
-        walk(item.children)
-      }
+      if (item.path) paths.add(normalizePath(item.path))
+      if (item.children?.length) walk(item.children)
     }
   }
   walk(menus)
   return paths
 }
 
-/**
- * 获取路由的父路径列表。
- * 例如: /ims/workbench/todos → ['/ims/workbench', '/ims', '/']
- */
-function getParentPaths(route: string): string[] {
-  const parts = route.split('/').filter(Boolean)
-  const parents: string[] = []
-  for (let i = parts.length - 1; i > 0; i--) {
-    parents.push('/' + parts.slice(0, i).join('/'))
-  }
-  parents.push('/')
-  return parents
+/** 去掉 query/hash，并去掉多余的结尾斜杠。 */
+export function normalizePath(route: string): string {
+  const path = (route.split(/[?#]/)[0] || '').trim()
+  if (path.length > 1 && path.endsWith('/')) return path.slice(0, -1)
+  return path
+}
+
+/** 只取直接上一级，不继续往根走。`/ims/workbench/todos` → `/ims/workbench`。 */
+export function directParentPath(route: string): string | null {
+  const parts = normalizePath(route).split('/').filter(Boolean)
+  if (parts.length < 2) return null
+  return `/${parts.slice(0, -1).join('/')}`
 }
 
 /**
- * 判断路由是否可达。
- *
- * 规则：
- * 1. 路由本身在菜单树中 → 允许
- * 2. 路由的任一父路由在菜单树中 → 允许
- * 3. 否则 → 不允许
- *
- * @param route 要判断的路由路径
- * @param menus 菜单树
- * @returns 是否可达
+ * @param route 目标路径，可带 query
+ * @param menus 当前用户菜单树
+ * @param menuless 目标是否为无菜单二级页。有自身菜单的页面必须传 false。
  */
-export function isRouteAccessible(route: string, menus: MenuItem[]): boolean {
-  if (!route || !menus.length) return false
+export function isRouteAccessible(route: string, menus: MenuItem[], menuless = false): boolean {
+  const path = normalizePath(route)
+  if (!path || !menus.length) return false
 
   const menuPaths = collectAllPaths(menus)
+  if (menuPaths.has(path)) return true
+  if (!menuless) return false
 
-  // 路由本身在菜单树中
-  if (menuPaths.has(route)) return true
-
-  // 检查父路由
-  const parents = getParentPaths(route)
-  for (const parent of parents) {
-    if (menuPaths.has(parent)) return true
-  }
-
-  return false
+  const parent = directParentPath(path)
+  return parent !== null && menuPaths.has(parent)
 }

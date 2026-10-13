@@ -421,6 +421,25 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page).toHaveURL(/\/login/)
   })
 
+  test('1216 冻结无法登录，未带令牌访问 /me 返回 1002', async ({ page }) => {
+    await installAuth(page, async (route) => {
+      await fulfillLogin(route, fail(1216, '账号已冻结或已离职，无法登录'))
+    })
+    await page.goto('/login')
+    await submitLogin(page, 'test_frozen', 'Test1234')
+    await expect(page.getByTestId('login-banner')).toHaveText('账号已冻结或已离职，无法登录，请联系管理员')
+    await expect(page).toHaveURL(/\/login/)
+    await expect(page.evaluate(() => localStorage.getItem('ims_access_token'))).resolves.toBeNull()
+
+    const me = await page.evaluate(async () => {
+      const response = await fetch('/admin-api/ims/auth/me')
+      const body = await response.json() as { code?: number }
+      return { status: response.status, code: body.code }
+    })
+    expect(me.status).toBe(401)
+    expect(me.code).toBe(1002)
+  })
+
   test('1216 与 1008 使用固定提示且不进入系统', async ({ page }) => {
     let code = 1216
     await installAuth(page, async (route) => {

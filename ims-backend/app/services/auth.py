@@ -681,7 +681,7 @@ class AuthService:
         - dataScopeText in Chinese
         - Empty permissions -> empty menus with prompt
         """
-        from app.domains.sys.models import Dept, User
+        from app.domains.sys.models import Dept, Role, User, UserDept, UserRole
         session = get_db_session()
 
         user = session.query(User).filter(User.id == user_id).first()
@@ -694,6 +694,27 @@ class AuthService:
             dept = session.query(Dept).filter(Dept.id == user.main_dept_id).first()
             if dept:
                 main_dept_name = dept.name
+
+        dept_names = [
+            row.name
+            for row in session.query(Dept)
+            .join(UserDept, UserDept.dept_id == Dept.id)
+            .filter(UserDept.user_id == user_id, Dept.deleted == 0)
+            .order_by(Dept.sort.asc(), Dept.id.asc())
+            .all()
+        ]
+        role_names = [
+            row.name
+            for row in session.query(Role)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .filter(
+                UserRole.user_id == user_id,
+                Role.status == "ENABLED",
+                Role.deleted == 0,
+            )
+            .order_by(Role.sort.asc(), Role.id.asc())
+            .all()
+        ]
 
         # Get permissions
         perm_data = await self._get_user_permissions(user_id)
@@ -711,7 +732,8 @@ class AuthService:
                 "nickname": user.nickname,
                 "avatar": None,  # TODO
                 "main_dept_name": main_dept_name,
-                "dept_names": [],  # TODO
+                "dept_names": dept_names,
+                "role_names": role_names,
                 "position_label": None,  # TODO
                 "pwd_reset_required": user.pwd_reset_required or False,
             },

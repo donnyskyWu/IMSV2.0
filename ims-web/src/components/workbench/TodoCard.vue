@@ -1,36 +1,22 @@
 <script setup lang="ts">
 /**
- * 待办卡片组件 (B3-TD)
- * 依据: 个人工作台-实现理解 §4.2
- *
- * 功能:
- * - 显示待办标题、类型、截止时间
- * - 逾期红底高亮 (TD-02)
+ * 待办卡片（首页预览）
+ * 类型 Tab 在首页容器上；行内提供〔去处理〕〔关闭〕。
  */
 import { computed } from 'vue'
 import type { TodoItem } from '@/api/workbench'
+import { canCloseTodo, overdueText, todoTypeInfo } from '@/utils/todo-display'
 
 const props = defineProps<{
   todo: TodoItem
 }>()
 
 defineEmits<{
-  click: []
+  go: []
+  close: []
 }>()
 
-const typeLabels: Record<string, { text: string; type: 'primary' | 'warning' | 'info' | 'success' | 'danger' | '' }> = {
-  APPROVAL: { text: '审批', type: 'primary' },
-  RETURN: { text: '归还', type: 'warning' },
-  REVIEW: { text: '审核', type: 'info' },
-  CONFIRM: { text: '确认', type: 'success' },
-  WARNING: { text: '预警', type: 'warning' },
-  ALERT: { text: '告警', type: 'danger' },
-  STUDY: { text: '学习', type: '' },
-}
-
-const typeInfo = computed(() => {
-  return typeLabels[props.todo.type || ''] || { text: props.todo.type || '待办', type: '' }
-})
+const typeInfo = computed(() => todoTypeInfo(props.todo.type))
 
 const dueTimeDisplay = computed(() => {
   if (!props.todo.dueTime) return null
@@ -42,19 +28,14 @@ const dueTimeDisplay = computed(() => {
   return `${month}/${day} ${hours}:${minutes}`
 })
 
-const overdueText = computed(() => {
-  if (!props.todo.isOverdue) return null
-  const days = props.todo.overdueDays || 0
-  if (days === 0) return '已逾期'
-  return `逾期 ${days} 天`
-})
+const overdueLabel = computed(() => overdueText(props.todo.isOverdue, props.todo.overdueDays || 0))
+const showClose = computed(() => props.todo.status === 'PENDING' && canCloseTodo(props.todo.type))
 </script>
 
 <template>
   <div
     class="todo-card"
     :class="{ overdue: todo.isOverdue }"
-    @click="$emit('click')"
     data-testid="todo-card"
   >
     <div class="todo-content">
@@ -64,19 +45,22 @@ const overdueText = computed(() => {
       <span class="todo-title">{{ todo.title }}</span>
     </div>
     <div class="todo-meta">
-      <span v-if="overdueText" class="overdue-text">{{ overdueText }}</span>
+      <span v-if="overdueLabel" class="overdue-text">{{ overdueLabel }}</span>
       <span v-else-if="dueTimeDisplay" class="due-time">截止 {{ dueTimeDisplay }}</span>
-      <el-icon class="arrow-icon"><arrow-right /></el-icon>
+      <el-button
+        v-if="todo.status === 'PENDING'"
+        size="small"
+        type="primary"
+        @click="$emit('go')"
+      >
+        去处理
+      </el-button>
+      <el-button v-if="showClose" size="small" @click="$emit('close')">
+        关闭
+      </el-button>
     </div>
   </div>
 </template>
-
-<script lang="ts">
-import { ArrowRight } from '@element-plus/icons-vue'
-export default {
-  components: { ArrowRight },
-}
-</script>
 
 <style lang="scss" scoped>
 .todo-card {
@@ -86,26 +70,16 @@ export default {
   padding: 12px;
   background-color: var(--bg);
   border-radius: var(--r-xs);
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: var(--blue-bg);
-  }
+  gap: 8px;
 
   &.overdue {
     background-color: var(--danger-bg, #fef0f0);
-
-    &:hover {
-      background-color: var(--danger-bg-hover, #fde2e2);
-    }
   }
 
   @media (width <= 767px) {
     padding: 10px;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
   }
 }
 
@@ -137,7 +111,7 @@ export default {
 
   @media (width <= 767px) {
     width: 100%;
-    justify-content: space-between;
+    flex-wrap: wrap;
   }
 }
 
@@ -150,10 +124,5 @@ export default {
   font-size: 12px;
   color: var(--danger);
   font-weight: 500;
-}
-
-.arrow-icon {
-  color: var(--text2);
-  font-size: 14px;
 }
 </style>

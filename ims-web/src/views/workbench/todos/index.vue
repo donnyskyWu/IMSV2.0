@@ -1,28 +1,32 @@
 <script setup lang="ts">
 /**
  * 待办中心 (B3-TD)
- * 依据: 个人工作台-实现理解 §4.2
+ * 依据: 个人工作台-实现理解 §4.2，UI 对齐 workbenchTodos 与产品复核。
  *
  * 功能:
- * - TD-01: 列表与筛选
+ * - TD-01: 列表与筛选（默认待处理，已过期）
  * - TD-02: 排序与逾期高亮
- * - TD-03: 去处理
+ * - TD-03: 去处理（先 GET 确认仍为 PENDING）
  * - TD-04: 关闭待办
  * - TD-05: 待办计数
  */
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
+import DetailDrawer from '@/components/form/DetailDrawer.vue'
 import { todoApi, type TodoItem, type TodoCountResponse } from '@/api/workbench'
-import { useAuthStore } from '@/stores/auth'
-import { isRouteAccessible } from '@/utils/route-accessible'
-import { ApiError } from '@/api/request'
+import { useTodoActions } from '@/composables/useTodoActions'
+import {
+  TODO_TABS,
+  canCloseTodo,
+  isTodoTabKey,
+  overdueText,
+  todoStatusText,
+  todoTypeInfo,
+} from '@/utils/todo-display'
 
-const router = useRouter()
 const route = useRoute()
-const authStore = useAuthStore()
 
 const loading = ref(false)
 const todos = ref<TodoItem[]>([])
@@ -30,44 +34,28 @@ const total = ref(0)
 const counts = ref<TodoCountResponse | null>(null)
 
 const currentTab = ref<string>('all')
-const currentStatus = ref<string>('')
+const currentStatus = ref<string>('PENDING')
 const keyword = ref('')
 const pageNo = ref(1)
 const pageSize = ref(20)
+const detailVisible = ref(false)
+const detailTodo = ref<TodoItem | null>(null)
 
 const tabs = computed(() => {
-  const items = [
-    { key: 'all', label: '全部', count: counts.value?.total || 0 },
-    { key: 'APPROVAL', label: '审批', count: counts.value?.byType?.APPROVAL || 0 },
-    { key: 'RETURN', label: '归还', count: counts.value?.byType?.RETURN || 0 },
-    { key: 'REVIEW', label: '审核', count: counts.value?.byType?.REVIEW || 0 },
-    { key: 'CONFIRM', label: '确认', count: counts.value?.byType?.CONFIRM || 0 },
-    { key: 'WARNING', label: '预警', count: counts.value?.byType?.WARNING || 0 },
-    { key: 'ALERT', label: '告警', count: counts.value?.byType?.ALERT || 0 },
-  ]
-  return items.filter((item) => item.key === 'all' || item.count > 0)
+  return TODO_TABS.map((tab) => ({
+    ...tab,
+    count: tab.key === 'all'
+      ? counts.value?.total || 0
+      : counts.value?.byType?.[tab.key] || 0,
+  }))
 })
 
 const statusOptions = [
   { value: '', label: '全部状态' },
   { value: 'PENDING', label: '待处理' },
-  { value: 'OVERDUE', label: '已逾期' },
+  { value: 'OVERDUE', label: '已过期' },
   { value: 'DONE', label: '已处理' },
 ]
-
-const typeLabels: Record<string, { text: string; type: 'primary' | 'warning' | 'info' | 'success' | 'danger' | '' }> = {
-  APPROVAL: { text: '审批', type: 'primary' },
-  RETURN: { text: '归还', type: 'warning' },
-  REVIEW: { text: '审核', type: 'info' },
-  CONFIRM: { text: '确认', type: 'success' },
-  WARNING: { text: '预警', type: 'warning' },
-  ALERT: { text: '告警', type: 'danger' },
-  STUDY: { text: '学习', type: '' },
-}
-
-function getTypeInfo(type: string | null) {
-  return typeLabels[type || ''] || { text: type || '待办', type: '' }
-}
 
 function formatDueTime(dueTime: string | null): string {
   if (!dueTime) return '-'
@@ -80,11 +68,19 @@ function formatDueTime(dueTime: string | null): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
-function getOverdueText(todo: TodoItem): string {
-  if (!todo.isOverdue) return ''
-  const days = todo.overdueDays || 0
-  if (days === 0) return '已逾期'
-  return `逾期 ${days} 天`
+function statusTagType(row: TodoItem): 'warning' | 'success' | 'danger' | 'info' {
+  if (row.status === 'DONE') return 'success'
+  if (row.isOverdue) return 'danger'
+  if (row.status === 'PENDING') return 'warning'
+  return 'info'
+}
+
+function showView(row: TodoItem): boolean {
+  return row.status === 'DONE' || row.isOverdue
+}
+
+function showGo(row: TodoItem): boolean {
+  return row.status === 'PENDING'
 }
 
 async function fetchData() {
@@ -113,6 +109,8 @@ async function fetchData() {
   }
 }
 
+const { handleGo, handleClose } = useTodoActions(fetchData)
+
 function handleTabChange(key: string) {
   currentTab.value = key
   pageNo.value = 1
@@ -131,7 +129,7 @@ function handleSearch() {
 
 function handleReset() {
   keyword.value = ''
-  currentStatus.value = ''
+  currentStatus.value = 'PENDING'
   pageNo.value = 1
   fetchData()
 }
@@ -141,64 +139,24 @@ function handlePageChange(page: number) {
   fetchData()
 }
 
-async function handleGo(todo: TodoItem) {
-  if (!todo.route) {
-    ElMessage.info('暂无跳转目标')
-    return
-  }
-
-  if (!isRouteAccessible(todo.route, authStore.menus)) {
-    ElMessage.warning('暂无权限访问')
-    return
-  }
-
-  try {
-    await router.push(todo.route)
-  } catch (err) {
-    if (err instanceof ApiError && err.code === 1504) {
-      ElMessage.warning('单据已被处理或删除')
-    }
-  }
+function openDetail(row: TodoItem) {
+  detailTodo.value = row
+  detailVisible.value = true
 }
 
-async function handleClose(todo: TodoItem) {
-  if (todo.type === 'APPROVAL' || todo.type === 'REVIEW') {
-    ElMessage.warning('该待办需在来源单据中处理')
-    return
-  }
-
-  try {
-    await ElMessageBox.confirm('确定关闭该待办吗？关闭后将不再显示。', '提示', {
-      confirmButtonText: '关闭',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-
-    const res = await todoApi.close(todo.id)
-    if (res.code === 0) {
-      ElMessage.success('待办已关闭')
-      fetchData()
-    }
-  } catch (err) {
-    if (err === 'cancel') return
-    if (err instanceof ApiError) {
-      if (err.code === 1001) {
-        ElMessage.warning(err.message)
-      }
-    }
+function applyTabQuery(tab: unknown) {
+  if (typeof tab === 'string' && isTodoTabKey(tab)) {
+    currentTab.value = tab
   }
 }
 
 onMounted(() => {
-  const tabFromQuery = route.query.tab as string
-  if (tabFromQuery && tabs.value.some((t) => t.key === tabFromQuery)) {
-    currentTab.value = tabFromQuery
-  }
+  applyTabQuery(route.query.tab)
   fetchData()
 })
 
 watch(() => route.query.tab, (newTab) => {
-  if (newTab && typeof newTab === 'string') {
+  if (typeof newTab === 'string' && isTodoTabKey(newTab) && newTab !== currentTab.value) {
     currentTab.value = newTab
     pageNo.value = 1
     fetchData()
@@ -211,7 +169,6 @@ watch(() => route.query.tab, (newTab) => {
     <div class="todos-page">
       <PageHeader title="待办中心" />
 
-      <!-- Tab 切换 -->
       <div class="tabs-row">
         <el-radio-group v-model="currentTab" @change="handleTabChange">
           <el-radio-button v-for="tab in tabs" :key="tab.key" :value="tab.key">
@@ -221,7 +178,6 @@ watch(() => route.query.tab, (newTab) => {
         </el-radio-group>
       </div>
 
-      <!-- 筛选栏 -->
       <div class="filter-row">
         <el-select v-model="currentStatus" placeholder="状态" style="width: 120px" @change="handleStatusChange">
           <el-option v-for="opt in statusOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
@@ -237,39 +193,41 @@ watch(() => route.query.tab, (newTab) => {
         <el-button @click="handleReset">重置</el-button>
       </div>
 
-      <!-- 列表 -->
       <el-table :data="todos" v-loading="loading" style="width: 100%">
-        <el-table-column label="类型" width="100">
+        <el-table-column label="类型" width="120">
           <template #default="{ row }">
-            <el-tag :type="getTypeInfo(row.type).type" size="small">
-              {{ getTypeInfo(row.type).text }}
+            <el-tag :type="todoTypeInfo(row.type).type" size="small">
+              {{ todoTypeInfo(row.type).text }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="sourceModule" label="来源" width="120" show-overflow-tooltip />
-        <el-table-column label="截止时间" width="160">
+        <el-table-column label="截止时间" width="180">
           <template #default="{ row }">
             <span :class="{ 'overdue-text': row.isOverdue }">
               {{ formatDueTime(row.dueTime) }}
             </span>
-            <span v-if="row.isOverdue" class="overdue-badge">{{ getOverdueText(row) }}</span>
+            <span v-if="row.isOverdue" class="overdue-badge">{{ overdueText(true, row.overdueDays || 0) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag v-if="row.status === 'PENDING'" type="warning" size="small">待处理</el-tag>
-            <el-tag v-else-if="row.status === 'DONE'" type="success" size="small">已处理</el-tag>
-            <el-tag v-else size="small">{{ row.status }}</el-tag>
+            <el-tag :type="statusTagType(row)" size="small">
+              {{ todoStatusText(row.status, row.isOverdue) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.route && row.status === 'PENDING'" text type="primary" @click="handleGo(row)">
+            <el-button v-if="showView(row)" text type="primary" @click="openDetail(row)">
+              查看
+            </el-button>
+            <el-button v-if="showGo(row)" text type="primary" @click="handleGo(row)">
               去处理
             </el-button>
             <el-button
-              v-if="row.status === 'PENDING' && row.type !== 'APPROVAL' && row.type !== 'REVIEW'"
+              v-if="row.status === 'PENDING' && canCloseTodo(row.type)"
               text
               type="default"
               @click="handleClose(row)"
@@ -278,9 +236,11 @@ watch(() => route.query.tab, (newTab) => {
             </el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <span class="table-empty">暂无待办</span>
+        </template>
       </el-table>
 
-      <!-- 分页 -->
       <div class="pagination-row">
         <el-pagination
           v-model:current-page="pageNo"
@@ -290,6 +250,35 @@ watch(() => route.query.tab, (newTab) => {
           @current-change="handlePageChange"
         />
       </div>
+
+      <DetailDrawer v-model="detailVisible" :title="detailTodo?.title || '待办详情'">
+        <div v-if="detailTodo" class="detail-body">
+          <div class="detail-row">
+            <span class="detail-label">类型</span>
+            <span>{{ todoTypeInfo(detailTodo.type).text }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">状态</span>
+            <span>{{ todoStatusText(detailTodo.status, detailTodo.isOverdue) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">来源</span>
+            <span>{{ detailTodo.sourceModule || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">截止时间</span>
+            <span>{{ formatDueTime(detailTodo.dueTime) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">内容</span>
+            <span>{{ detailTodo.content || '-' }}</span>
+          </div>
+          <div v-if="detailTodo.doneByName" class="detail-row">
+            <span class="detail-label">处理人</span>
+            <span>{{ detailTodo.doneByName }}</span>
+          </div>
+        </div>
+      </DetailDrawer>
     </div>
   </AppLayout>
 </template>
@@ -301,6 +290,8 @@ watch(() => route.query.tab, (newTab) => {
 
 .tabs-row {
   margin-bottom: 16px;
+  max-width: 100%;
+  overflow-x: auto;
 
   :deep(.el-radio-button__inner) {
     position: relative;
@@ -343,9 +334,34 @@ watch(() => route.query.tab, (newTab) => {
   border-radius: 2px;
 }
 
+.table-empty {
+  color: var(--text2);
+  font-size: 14px;
+}
+
 .pagination-row {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.detail-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-row {
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.detail-label {
+  flex: none;
+  width: 72px;
+  color: var(--text2);
 }
 </style>

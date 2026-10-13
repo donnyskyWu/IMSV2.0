@@ -16,7 +16,10 @@ import TodoCard from '@/components/workbench/TodoCard.vue'
 import MessageCard from '@/components/workbench/MessageCard.vue'
 import { workbenchApi, todoApi, messageApi, type DashboardData, type TodoItem, type MessageItem } from '@/api/workbench'
 import { useAuthStore } from '@/stores/auth'
+import { useTodoActions } from '@/composables/useTodoActions'
 import { useResponsive } from '@/utils/responsive'
+import { greetingForHour } from '@/utils/greeting'
+import { TODO_TABS } from '@/utils/todo-display'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -26,23 +29,43 @@ const loading = ref(true)
 const dashboard = ref<DashboardData | null>(null)
 const todos = ref<TodoItem[]>([])
 const messages = ref<MessageItem[]>([])
+const currentTab = ref('all')
 
-const greeting = computed(() => {
-  const hour = new Date().getHours()
-  if (hour >= 5 && hour < 11) return '早上好'
-  if (hour >= 11 && hour < 13) return '中午好'
-  if (hour >= 13 && hour < 18) return '下午好'
-  return '晚上好'
-})
+const greeting = computed(() => greetingForHour(new Date().getHours()))
 
 const nickname = computed(() => authStore.user?.nickname || '用户')
+
+const profileLine = computed(() => {
+  const user = authStore.user
+  if (!user) return ''
+  const parts: string[] = []
+  const dept = user.mainDeptName || user.deptName
+  if (dept) parts.push(`主部门：${dept}`)
+  if (user.roleNames?.length) parts.push(`角色：${user.roleNames.join('、')}`)
+  return parts.join(' · ')
+})
+
+function todoQuery() {
+  return {
+    type: currentTab.value === 'all' ? undefined : currentTab.value,
+    status: 'PENDING',
+    pageSize: 10,
+  }
+}
+
+async function loadTodos() {
+  const todosRes = await todoApi.getMyPage(todoQuery())
+  if (todosRes.code === 0 && todosRes.data) {
+    todos.value = todosRes.data.list
+  }
+}
 
 async function fetchData() {
   loading.value = true
   try {
     const [dashboardRes, todosRes, messagesRes] = await Promise.all([
       workbenchApi.getDashboard(),
-      todoApi.getMyPage({ pageSize: 10 }),
+      todoApi.getMyPage(todoQuery()),
       messageApi.getMyPage({ pageSize: 10 }),
     ])
 
@@ -63,20 +86,18 @@ async function fetchData() {
 }
 
 function goToTodos() {
-  router.push('/ims/workbench/todos')
+  router.push({ path: '/ims/workbench/todos', query: { tab: currentTab.value } })
 }
 
 function goToMessages() {
   router.push('/ims/workbench/messages')
 }
 
-function handleTodoClick(todo: TodoItem) {
-  if (todo.route) {
-    router.push(todo.route)
-  } else {
-    router.push('/ims/workbench/todos')
-  }
+function handleTabChange() {
+  loadTodos()
 }
+
+const { handleGo, handleClose } = useTodoActions(fetchData)
 
 function handleMessageClick(message: MessageItem) {
   if (message.route) {
@@ -93,7 +114,7 @@ onMounted(() => {
 
 <template>
   <div class="workbench-page">
-      <PageHeader :title="`${greeting}，${nickname}`" />
+      <PageHeader :title="`${greeting}，${nickname}`" :sub-title="profileLine" />
 
       <!-- 数据卡片区 -->
       <div class="stats-cards">
@@ -101,7 +122,7 @@ onMounted(() => {
           <div class="stat-value">{{ dashboard?.todoCount || 0 }}</div>
           <div class="stat-label">待办事项</div>
           <div v-if="dashboard?.todoOverdue" class="stat-extra danger">
-            {{ dashboard.todoOverdue }} 项已逾期
+            {{ dashboard.todoOverdue }} 项已过期
           </div>
         </div>
         <div class="stat-card" @click="goToMessages" data-testid="stat-message">
@@ -113,21 +134,29 @@ onMounted(() => {
       <!-- 待办预览卡 -->
       <section class="preview-section" data-testid="todo-preview">
         <div class="section-header">
-          <h3>待办事项</h3>
-          <el-button text type="primary" @click="goToTodos">查看全部</el-button>
+          <h3>待办中心</h3>
+          <el-button text type="primary" @click="goToTodos">查看更多</el-button>
+        </div>
+        <div class="todo-tabs">
+          <el-radio-group v-model="currentTab" size="small" @change="handleTabChange">
+            <el-radio-button v-for="tab in TODO_TABS" :key="tab.key" :value="tab.key">
+              {{ tab.label }}
+            </el-radio-button>
+          </el-radio-group>
         </div>
         <div v-if="loading" class="preview-loading">
           <el-skeleton :rows="3" animated />
         </div>
         <div v-else-if="todos.length === 0" class="preview-empty">
-          暂无待办事项
+          暂无待办
         </div>
         <div v-else class="preview-list">
           <TodoCard
             v-for="item in todos"
             :key="item.id"
             :todo="item"
-            @click="handleTodoClick(item)"
+            @go="handleGo(item)"
+            @close="handleClose(item)"
           />
         </div>
       </section>
@@ -136,7 +165,7 @@ onMounted(() => {
       <section class="preview-section" data-testid="message-preview">
         <div class="section-header">
           <h3>消息通知</h3>
-          <el-button text type="primary" @click="goToMessages">查看全部</el-button>
+          <el-button text type="primary" @click="goToMessages">查看更多</el-button>
         </div>
         <div v-if="loading" class="preview-loading">
           <el-skeleton :rows="3" animated />
@@ -230,11 +259,18 @@ onMounted(() => {
   }
 }
 
+.todo-tabs {
+  margin-bottom: 12px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+  gap: 8px;
 
   h3 {
     font-size: 16px;

@@ -55,6 +55,9 @@ export interface UserInfo {
   avatar?: string
   deptId: ID
   deptName: string
+  mainDeptName?: string
+  deptNames?: string[]
+  roleNames?: string[]
   permCodes: string[]
   dataScopeText?: string
   pwdResetRequired?: boolean

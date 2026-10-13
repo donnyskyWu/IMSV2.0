@@ -16,6 +16,7 @@ import { messageApi, type MessageItem } from '@/api/workbench'
 import { useUnreadStore } from '@/stores/unread'
 import { useAuthStore } from '@/stores/auth'
 import { isRouteAccessible } from '@/utils/route-accessible'
+import { isRegisteredMenuless } from '@/utils/menuless-route'
 import { ApiError } from '@/api/request'
 
 const props = defineProps<{
@@ -59,7 +60,7 @@ async function handleMessageClick(message: MessageItem) {
   }
 
   if (message.route) {
-    if (!isRouteAccessible(message.route, authStore.menus)) {
+    if (!isRouteAccessible(message.route, authStore.menus, isRegisteredMenuless(message.route))) {
       ElMessage.warning('暂无权限访问')
       return
     }

@@ -82,6 +82,33 @@ function bearerToken(authorization: string | undefined): string {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''
 }
 
+function sampleTodo(
+  id: string,
+  type: string,
+  title: string,
+  status: string,
+  isOverdue: boolean,
+) {
+  return {
+    id,
+    type,
+    title,
+    content: null,
+    sourceModule: '账号',
+    sourceType: null,
+    sourceId: null,
+    route: '/ims/auth/org',
+    status,
+    dueTime: null,
+    isOverdue,
+    overdueDays: isOverdue ? 1 : 0,
+    createTime: null,
+    doneTime: null,
+    doneBy: null,
+    doneByName: null,
+  }
+}
+
 function menusFor(token: string) {
   if (token === 'r10-token') return [menu('/ims/workbench', '个人工作台')]
   return [
@@ -133,6 +160,7 @@ async function installWorkbenchMocks(page: Page) {
           avatar: null,
           deptNames: ['信息部'],
           mainDeptName: '信息部',
+          roleNames: ['系统管理员', '审计员'],
           positionLabel: null,
           pwdResetRequired: token === 'reset-token',
         },
@@ -231,7 +259,18 @@ test.describe('B3 个人工作台', () => {
       await expect(header).toBeVisible()
       const title = header.locator('.page-title')
       const titleText = await title.textContent()
-      expect(titleText).toMatch(/(早上好|中午好|下午好|晚上好)/)
+      expect(titleText).toMatch(/(凌晨好|早上好|中午好|下午好|晚上好)/)
+      await expect(header).toContainText('主部门：信息部')
+      await expect(header).toContainText('系统管理员')
+      await expect(header).toContainText('审计员')
+      const todoPreview = page.getByTestId('todo-preview')
+      await expect(todoPreview).toContainText('暂无待办')
+      for (const label of ['全部待办', '审批待办', '审核待办', '归还待办', '告警待办']) {
+        const tab = todoPreview.getByText(label)
+        await tab.scrollIntoViewIfNeeded()
+        await expect(tab).toBeVisible()
+      }
+      await expect(todoPreview.getByRole('button', { name: '查看更多' })).toBeVisible()
       const statCards = page.locator('[data-testid^="stat-"]')
       await expect(statCards).toHaveCount(2)
       await expect(page.getByTestId('stat-todo')).toBeVisible()
@@ -256,6 +295,14 @@ test.describe('B3 个人工作台', () => {
       await page.goBack()
       await page.getByTestId('stat-message').click()
       await expect(page).toHaveURL(/\/ims\/workbench\/messages/)
+      await page.goBack()
+      const todoPreview = page.getByTestId('todo-preview')
+      const approvalTab = todoPreview.getByText('审批待办')
+      await approvalTab.scrollIntoViewIfNeeded()
+      await approvalTab.click()
+      await todoPreview.getByRole('button', { name: '查看更多' }).click()
+      await expect(page).toHaveURL(/\/ims\/workbench\/todos\?tab=APPROVAL/)
+      await expect(page.locator('.el-select')).toContainText('待处理')
     })
   })
 
@@ -265,11 +312,44 @@ test.describe('B3 个人工作台', () => {
       await page.goto('/ims/workbench/todos')
       await expect(page).toHaveURL(/\/ims\/workbench\/todos/)
       const tabs = page.locator('.el-radio-group .el-radio-button')
-      await expect(tabs.first()).toContainText('全部')
+      await expect(tabs.first()).toContainText('全部待办')
+      await expect(page.getByText('审批待办').first()).toBeVisible()
       const statusSelect = page.locator('.el-select')
-      await expect(statusSelect).toBeVisible()
+      await expect(statusSelect).toContainText('待处理')
+      await statusSelect.click()
+      await expect(page.getByRole('option', { name: '已过期' })).toBeVisible()
+      await expect(page.getByRole('option', { name: '已处理' })).toBeVisible()
       const table = page.locator('.el-table')
       await expect(table).toBeVisible()
+      await expect(table).toContainText('暂无待办')
+    })
+
+    test('E2E-B3-TD-01: 已处理与已过期可查看，已过期仍可去处理', async ({ page }) => {
+      await page.route('**/admin-api/ims/todo/my/page**', async (route) => {
+        await route.fulfill(jsonBody(ok({
+          total: 2,
+          pageNo: 1,
+          pageSize: 20,
+          list: [
+            sampleTodo('1', 'ALERT', '已过期告警', 'PENDING', true),
+            sampleTodo('2', 'CONFIRM', '已处理确认', 'DONE', false),
+          ],
+        })))
+      })
+      await loginAs(page, 'test_admin')
+      await page.goto('/ims/workbench/todos')
+      const overdue = page.locator('.el-table__row').filter({ hasText: '已过期告警' })
+      await expect(overdue.getByRole('button', { name: '查看' })).toBeVisible()
+      await expect(overdue.getByRole('button', { name: '去处理' })).toBeVisible()
+      await expect(overdue).toContainText('已过期')
+      const done = page.locator('.el-table__row').filter({ hasText: '已处理确认' })
+      await expect(done.getByRole('button', { name: '查看' })).toBeVisible()
+      await expect(done.getByRole('button', { name: '去处理' })).toHaveCount(0)
+      await expect(done).toContainText('已处理')
+      await done.getByRole('button', { name: '查看' }).click()
+      const drawer = page.locator('.detail-drawer')
+      await expect(drawer).toBeVisible()
+      await expect(drawer).toContainText('已处理')
     })
 
     test('E2E-B3-TD-02: 逾期待办红底高亮', async ({ page }) => {
@@ -282,13 +362,77 @@ test.describe('B3 个人工作台', () => {
       }
     })
 
-    test('E2E-B3-TD-03: 去处理跳转成功（路由可达）', async ({ page }) => {
+    test('E2E-B3-TD-03: 去处理先确认仍待处理再跳转', async ({ page }) => {
+      let detailCalls = 0
+      await page.route('**/admin-api/ims/todo/my/**', async (route) => {
+        const url = new URL(route.request().url())
+        if (url.pathname.endsWith('/todo/my/page')) {
+          await route.fulfill(jsonBody(ok({
+            total: 1,
+            pageNo: 1,
+            pageSize: 20,
+            list: [sampleTodo('42', 'APPROVAL', '领用审批', 'PENDING', false)],
+          })))
+          return
+        }
+        if (url.pathname.endsWith('/todo/my/get')) {
+          detailCalls += 1
+          await route.fulfill(jsonBody(ok(sampleTodo('42', 'APPROVAL', '领用审批', 'PENDING', false))))
+          return
+        }
+        if (url.pathname.endsWith('/todo/my/count')) {
+          await route.fulfill(jsonBody(ok({ total: 1, byType: { APPROVAL: 1 }, overdue: 0 })))
+          return
+        }
+        await route.fallback()
+      })
       await loginAs(page, 'test_admin')
       await page.goto('/ims/workbench/todos')
-      const goButton = page.locator('.el-table__row').first().getByRole('button', { name: '去处理' })
-      if (await goButton.isVisible()) {
-        await goButton.click()
-      }
+      await page.getByRole('button', { name: '去处理' }).click()
+      await expect(page).toHaveURL(/\/ims\/auth\/org/)
+      expect(detailCalls).toBeGreaterThan(0)
+    })
+
+    test('E2E-B3-TD-03: 1504 时归还待办由本人关闭，审批待办只提示', async ({ page }) => {
+      const closed: string[] = []
+      await page.route('**/admin-api/ims/todo/my/**', async (route) => {
+        const request = route.request()
+        const url = new URL(request.url())
+        if (url.pathname.endsWith('/todo/my/close') && request.method() === 'PUT') {
+          const body = request.postDataJSON() as { id?: number }
+          closed.push(String(body?.id))
+          await route.fulfill(jsonBody(ok(null)))
+          return
+        }
+        if (url.pathname.endsWith('/todo/my/page')) {
+          await route.fulfill(jsonBody(ok({
+            total: 2,
+            pageNo: 1,
+            pageSize: 20,
+            list: [
+              sampleTodo('7', 'RETURN', '归还设备', 'PENDING', false),
+              sampleTodo('8', 'APPROVAL', '审批单据', 'PENDING', false),
+            ],
+          })))
+          return
+        }
+        if (url.pathname.endsWith('/todo/my/get')) {
+          await route.fulfill(jsonBody({ code: 1504, msg: '待办不存在', data: null }))
+          return
+        }
+        if (url.pathname.endsWith('/todo/my/count')) {
+          await route.fulfill(jsonBody(ok({ total: 2, byType: { RETURN: 1, APPROVAL: 1 }, overdue: 0 })))
+          return
+        }
+        await route.fallback()
+      })
+      await loginAs(page, 'test_admin')
+      await page.goto('/ims/workbench/todos')
+      await page.locator('.el-table__row').filter({ hasText: '归还设备' }).getByRole('button', { name: '去处理' }).click()
+      await expect(page.locator('.el-message').filter({ hasText: '单据已被处理或删除' })).toBeVisible()
+      await expect.poll(() => closed).toContain('7')
+      await page.locator('.el-table__row').filter({ hasText: '审批单据' }).getByRole('button', { name: '去处理' }).click()
+      await expect.poll(() => closed.slice()).toEqual(['7'])
     })
 
     test('E2E-B3-TD-04: 待办已处理后列表刷新', async ({ page }) => {
@@ -347,6 +491,9 @@ test.describe('B3 个人工作台', () => {
     test('E2E-B3-MS-03: 全部已读返回 updated', async ({ page }) => {
       await loginAs(page, 'test_admin')
       await page.goto('/ims/workbench/messages')
+      if ((page.viewportSize()?.width ?? 1440) <= 390) {
+        await page.locator('.page-header .el-dropdown').click()
+      }
       await page.getByRole('button', { name: '全部已读' }).click()
       await expect(page.locator('.el-message').filter({ hasText: '已读' })).toBeVisible()
     })
