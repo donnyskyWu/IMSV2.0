@@ -6,7 +6,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import StatusTag from '@/components/list/StatusTag.vue'
 import Pagination from '@/components/list/Pagination.vue'
 import EmptyState from '@/components/list/EmptyState.vue'
 import DetailDrawer from '@/components/form/DetailDrawer.vue'
@@ -72,19 +71,19 @@ const statCards = computed(() => {
 
 async function loadMetrics() {
   try {
-    const res = await request.get('/admin-api/ims/auth/org/sync-metrics')
+    const res = await orgSyncApi.getMetrics()
     if (res.data.code === 0) {
       metrics.value = res.data.data
     }
-  } catch (e) {
-    console.error('Failed to load metrics', e)
+  } catch {
+    console.error('Failed to load metrics')
   }
 }
 
 async function loadEvents() {
   loading.value = true
   try {
-    const params: Record<string, any> = {
+    const params: Record<string, string | number> = {
       pageNo: eventPageNo.value,
       pageSize: eventPageSize.value,
     }
@@ -92,7 +91,7 @@ async function loadEvents() {
     if (eventSearchForm.value.status) params.statuses = eventSearchForm.value.status
     if (eventSearchForm.value.eventType) params.eventTypes = eventSearchForm.value.eventType
 
-    const res = await request.get('/admin-api/ims/auth/org/events', { params })
+    const res = await orgSyncApi.getEvents(params)
     if (res.data.code === 0) {
       events.value = res.data.data.list
       eventTotal.value = res.data.data.total
@@ -102,7 +101,7 @@ async function loadEvents() {
     } else {
       emptyMode.value = 'error'
     }
-  } catch (e) {
+  } catch {
     emptyMode.value = 'error'
   } finally {
     loading.value = false
@@ -111,12 +110,12 @@ async function loadEvents() {
 
 async function loadDiffSummary() {
   try {
-    const res = await request.get('/admin-api/ims/auth/org/diffs/summary')
+    const res = await orgSyncApi.getDiffSummary()
     if (res.data.code === 0) {
       diffSummary.value = res.data.data
     }
-  } catch (e) {
-    console.error('Failed to load diff summary', e)
+  } catch {
+    console.error('Failed to load diff summary')
   }
 }
 
@@ -139,7 +138,7 @@ function handleEventReset() {
 
 async function handleViewEvent(event: SyncEvent) {
   try {
-    const res = await request.get(`/admin-api/ims/auth/org/events/${event.id}`)
+    const res = await orgSyncApi.getEventDetail(event.id)
     if (res.data.code === 0) {
       detailEvent.value = res.data.data
       detailTab.value = 'base'
@@ -147,14 +146,14 @@ async function handleViewEvent(event: SyncEvent) {
     } else {
       toast.error(res.data.msg || '加载失败')
     }
-  } catch (e) {
+  } catch {
     toast.error('加载失败')
   }
 }
 
 async function handleRetryEvent(event: SyncEvent) {
   try {
-    const res = await request.post(`/admin-api/ims/auth/org/events/${event.id}/retry`)
+    const res = await orgSyncApi.retryEvent(event.id)
     if (res.data.code === 0) {
       toast.success('重试成功')
       loadEvents()
@@ -164,14 +163,14 @@ async function handleRetryEvent(event: SyncEvent) {
     } else {
       toast.error(res.data.msg || '重试失败')
     }
-  } catch (e) {
+  } catch {
     toast.error('重试失败')
   }
 }
 
 async function handleReconcile() {
   try {
-    const res = await request.post('/admin-api/ims/system/org-sync/reconcile')
+    const res = await orgSyncApi.triggerReconcile()
     if (res.data.code === 0) {
       toast.success('对账任务已启动')
       loadMetrics()
@@ -180,7 +179,7 @@ async function handleReconcile() {
     } else {
       toast.error(res.data.msg || '对账失败')
     }
-  } catch (e) {
+  } catch {
     toast.error('对账失败')
   }
 }
@@ -201,19 +200,17 @@ async function handleReplayPreview() {
     return
   }
   try {
-    const res = await request.get('/admin-api/ims/auth/org/events/replay-preview', {
-      params: {
-        startTime: replayForm.value.startTime,
-        endTime: replayForm.value.endTime,
-        statuses: replayForm.value.statuses.join(','),
-      },
+    const res = await orgSyncApi.getReplayPreview({
+      startTime: String(replayForm.value.startTime),
+      endTime: String(replayForm.value.endTime),
+      statuses: replayForm.value.statuses.join(','),
     })
     if (res.data.code === 0) {
       replayPreviewCount.value = res.data.data.count
     } else {
       toast.error(res.data.msg || '预览失败')
     }
-  } catch (e) {
+  } catch {
     toast.error('预览失败')
   }
 }
@@ -224,9 +221,9 @@ async function handleReplay() {
     return
   }
   try {
-    const res = await request.post('/admin-api/ims/auth/org/events/replay', {
-      startTime: replayForm.value.startTime,
-      endTime: replayForm.value.endTime,
+    const res = await orgSyncApi.replay({
+      startTime: String(replayForm.value.startTime),
+      endTime: String(replayForm.value.endTime),
       statuses: replayForm.value.statuses,
     })
     if (res.data.code === 0) {
@@ -236,7 +233,7 @@ async function handleReplay() {
     } else {
       toast.error(res.data.msg || '重放失败')
     }
-  } catch (e) {
+  } catch {
     toast.error('重放失败')
   }
 }
@@ -603,6 +600,7 @@ watch(eventPageSize, () => {
 
   &.warning {
     border-color: var(--yellow);
+
     .stat-value {
       color: var(--yellow);
     }
@@ -610,6 +608,7 @@ watch(eventPageSize, () => {
 
   &.danger {
     border-color: var(--red);
+
     .stat-value {
       color: var(--red);
     }

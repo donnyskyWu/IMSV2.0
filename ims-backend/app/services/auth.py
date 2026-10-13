@@ -31,7 +31,7 @@ from app.db.session import get_db_session
 settings = get_settings()
 
 # 租户停用 / 过期时登录和刷新都用这一句，避免两处文案或条件不一致。
-TENANT_UNAVAILABLE_MSG = "所属组织已停用"
+TENANT_UNAVAILABLE_MSG = "所属组织已停用，请联系管理员"
 
 # 8～32 位，同时含字母和数字，允许特殊字符，不允许空白（工作包 Q7）。
 _PASSWORD_RULE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$")
@@ -145,6 +145,8 @@ class AuthService:
     TOKEN_BLACKLIST_PREFIX = "ims:token_blacklist:"
     SSO_STATE_PREFIX = "ims:sso_state:"
     PERM_CACHE_PREFIX = "ims:perm:"
+    PERM_VER_USER_PREFIX = "ims:perm_ver:u:"
+    PERM_VER_TENANT_PREFIX = "ims:perm_ver:t:"
 
     # Session limits
     MAX_SESSIONS = 3
@@ -874,6 +876,32 @@ class AuthService:
             ))
             session.flush()
         return user.id
+
+    @classmethod
+    def bump_user_perm_version(cls, user_id: int) -> int:
+        """Increment user permission version in Redis. Returns new version."""
+        key = f"{cls.PERM_VER_USER_PREFIX}{user_id}"
+        return Cache.incr(key)
+
+    @classmethod
+    def get_user_perm_version(cls, user_id: int) -> int:
+        """Get user permission version from Redis. Returns 0 if not set."""
+        key = f"{cls.PERM_VER_USER_PREFIX}{user_id}"
+        val = Cache.get(key)
+        return int(val) if val else 0
+
+    @classmethod
+    def bump_tenant_perm_version(cls, tenant_id: int) -> int:
+        """Increment tenant permission version in Redis. Returns new version."""
+        key = f"{cls.PERM_VER_TENANT_PREFIX}{tenant_id}"
+        return Cache.incr(key)
+
+    @classmethod
+    def get_tenant_perm_version(cls, tenant_id: int) -> int:
+        """Get tenant permission version from Redis. Returns 0 if not set."""
+        key = f"{cls.PERM_VER_TENANT_PREFIX}{tenant_id}"
+        val = Cache.get(key)
+        return int(val) if val else 0
 
     async def _write_login_log(
         self,

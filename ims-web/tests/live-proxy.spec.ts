@@ -547,11 +547,8 @@ test.describe('E2E-B1 组织同步与用户删除', () => {
 
     const events = await callApi(page, 'GET', '/admin-api/ims/auth/org/events?pageNo=1&pageSize=10', token || '')
     expect(events.status).toBe(200)
-    if (events.body.code === 0) {
-      expect(events.body.data).toBeDefined()
-    } else if (events.body.code === 1008) {
-      expect(events.body).toBeDefined()
-    }
+    expect(events.body.code).toBe(0)
+    expect(events.body.data).toBeDefined()
   })
 
   test('E2E-B1-ORG-METRICS 可查询同步指标', async ({ page }) => {
@@ -571,10 +568,7 @@ test.describe('E2E-B1 组织同步与用户删除', () => {
 
     const metrics = await callApi(page, 'GET', '/admin-api/ims/auth/org/sync-metrics', token || '')
     expect(metrics.status).toBe(200)
-    if (metrics.body.code === 0) {
-      expect(metrics.body.data).toBeDefined()
-    } else if (metrics.body.code === 1008) {
-      expect(metrics.body).toBeDefined()
-    }
+    expect(metrics.body.code).toBe(0)
+    expect(metrics.body.data).toBeDefined()
   })
 })

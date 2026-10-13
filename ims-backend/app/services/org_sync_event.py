@@ -235,8 +235,75 @@ class OrgSyncEventService:
             logger.warning("Unknown biz_type=%s for event_id=%s", biz_type, event.event_id)
 
     async def _apply_hire(self, event: Any) -> None:
-        """Handle HIRE event - create user if not exists."""
-        pass
+        """Handle HIRE event - create user if not exists.
+        
+        Creates local user and mapping if no mapping exists for the dingtalk_user_id.
+        Similar to instant sync (LG-07) but triggered by event callback.
+        """
+        from app.db.ids import assign_pk
+        from app.domains.sys.models import User, UserMapping
+
+        if not event.subject_user_id:
+            payload = self._parse_payload(event)
+            if not payload:
+                return
+            dingtalk_user_id = payload.get("dingtalk_user_id")
+            if not dingtalk_user_id:
+                return
+        else:
+            return
+
+        session = get_db_session()
+        now = get_now()
+
+        existing = session.query(UserMapping).filter(
+            UserMapping.dingtalk_user_id == event.payload,
+            UserMapping.deleted == 0,
+        ).first()
+        if existing:
+            logger.info("HIRE event skipped: mapping already exists for dingtalk_user_id=%s", event.payload)
+            return
+
+        payload = self._parse_payload(event)
+        if not payload:
+            logger.warning("HIRE event has no parseable payload event_id=%s", event.event_id)
+            return
+
+        dingtalk_user_id = payload.get("dingtalk_user_id") or payload.get("userid")
+        name = payload.get("name", dingtalk_user_id)
+        username = (dingtalk_user_id or "")[:50]
+
+        user = User(
+            tenant_id=event.tenant_id,
+            username=username,
+            nickname=name,
+            status="ACTIVE",
+            source="DINGTALK",
+            password_hash=None,
+        )
+        assign_pk(session, user)
+        session.add(user)
+        session.flush()
+
+        mapping = UserMapping(
+            tenant_id=event.tenant_id,
+            user_id=user.id,
+            dingtalk_user_id=dingtalk_user_id,
+            last_sync_time=now,
+        )
+        assign_pk(session, mapping)
+        session.add(mapping)
+        session.flush()
+
+        event.subject_user_id = user.id
+        event.subject_name = name
+
+        logger.info(
+            "HIRE event processed: created user_id=%s username=%s dingtalk_user_id=%s",
+            user.id,
+            username,
+            dingtalk_user_id,
+        )
 
     async def _apply_resign(self, event: Any) -> None:
         """Handle RESIGN event - mark user as resigned and drop sessions."""
@@ -257,7 +324,6 @@ class OrgSyncEventService:
 
         if user.status != "RESIGNED":
             user.status = "RESIGNED"
-            user.token_version = (user.token_version or 0) + 1
             UserService()._drop_sessions(user.id)
             USER_EVENTS.append({"type": "user.resigned", "user_id": user.id})
 
@@ -271,24 +337,316 @@ class OrgSyncEventService:
         session.flush()
 
     async def _apply_user_update(self, event: Any) -> None:
-        """Handle USER_UPDATE event."""
-        pass
+        """Handle USER_UPDATE event.
+        
+        Updates user info. If main dept or position changes, the biz_type
+        should have been converted to TRANSFER during processing.
+        """
+        from app.domains.sys.models import User, UserMapping
+
+        if not event.subject_user_id:
+            return
+
+        session = get_db_session()
+        now = get_now()
+
+        user = session.query(User).filter(
+            User.id == event.subject_user_id,
+            User.deleted == 0,
+        ).first()
+
+        if user is None:
+            logger.warning("USER_UPDATE: user not found user_id=%s", event.subject_user_id)
+            return
+
+        payload = self._parse_payload(event)
+        if payload:
+            if "name" in payload and payload["name"]:
+                user.nickname = payload["name"]
+            if "mobile" in payload and payload["mobile"]:
+                from app.services.user import UserService
+                user.mobile_enc = UserService()._encrypt_mobile(payload["mobile"])
+                user.mobile_hash = UserService()._hash_mobile(payload["mobile"])
+            if "email" in payload and payload["email"]:
+                user.email = payload["email"]
+            if "job_number" in payload and payload["job_number"]:
+                user.emp_no = payload["job_number"]
+
+        mapping = session.query(UserMapping).filter(
+            UserMapping.user_id == user.id,
+            UserMapping.deleted == 0,
+        ).first()
+        if mapping:
+            mapping.last_sync_time = now
+
+        session.flush()
+        logger.info("USER_UPDATE event processed: user_id=%s", event.subject_user_id)
 
     async def _apply_transfer(self, event: Any) -> None:
-        """Handle TRANSFER event - department change."""
-        pass
+        """Handle TRANSFER event - department change.
+        
+        Updates user's department assignments based on DingTalk data.
+        """
+        from app.db.ids import assign_pk
+        from app.domains.sys.models import Dept, User, UserDept, UserMapping
+
+        if not event.subject_user_id:
+            return
+
+        session = get_db_session()
+        now = get_now()
+
+        user = session.query(User).filter(
+            User.id == event.subject_user_id,
+            User.deleted == 0,
+        ).first()
+
+        if user is None:
+            logger.warning("TRANSFER: user not found user_id=%s", event.subject_user_id)
+            return
+
+        payload = self._parse_payload(event)
+        if not payload:
+            return
+
+        dept_dingtalk_ids = payload.get("dept_dingtalk_ids", [])
+        if not dept_dingtalk_ids:
+            return
+
+        depts = session.query(Dept).filter(
+            Dept.dingtalk_dept_id.in_(dept_dingtalk_ids),
+            Dept.tenant_id == event.tenant_id,
+            Dept.deleted == 0,
+        ).all()
+
+        dept_map = {d.dingtalk_dept_id: d for d in depts}
+        wanted_dept_ids = [dept_map[did].id for did in dept_dingtalk_ids if did in dept_map]
+
+        if not wanted_dept_ids:
+            logger.warning("TRANSFER: no matching depts for dingtalk_ids=%s", dept_dingtalk_ids)
+            return
+
+        session.query(UserDept).filter(
+            UserDept.user_id == user.id,
+            UserDept.source == "DINGTALK",
+        ).delete()
+
+        for index, dept_id in enumerate(wanted_dept_ids):
+            link = UserDept(
+                tenant_id=event.tenant_id,
+                user_id=user.id,
+                dept_id=dept_id,
+                is_main=index == 0,
+                source="DINGTALK",
+            )
+            assign_pk(session, link)
+            session.add(link)
+
+        user.main_dept_id = wanted_dept_ids[0]
+
+        mapping = session.query(UserMapping).filter(
+            UserMapping.user_id == user.id,
+            UserMapping.deleted == 0,
+        ).first()
+        if mapping:
+            mapping.last_sync_time = now
+
+        session.flush()
+        logger.info("TRANSFER event processed: user_id=%s new_depts=%s", user.id, wanted_dept_ids)
 
     async def _apply_dept_create(self, event: Any) -> None:
-        """Handle DEPT_CREATE event."""
-        pass
+        """Handle DEPT_CREATE event - create a new department.
+        
+        Creates department with DingTalk source if it doesn't exist.
+        """
+        from app.db.ids import assign_pk
+        from app.domains.sys.models import Dept
+
+        session = get_db_session()
+        now = get_now()
+
+        payload = self._parse_payload(event)
+        if not payload:
+            logger.warning("DEPT_CREATE: no payload event_id=%s", event.event_id)
+            return
+
+        dingtalk_dept_id = payload.get("dingtalk_dept_id") or payload.get("dept_id")
+        if not dingtalk_dept_id:
+            logger.warning("DEPT_CREATE: no dingtalk_dept_id in payload")
+            return
+
+        existing = session.query(Dept).filter(
+            Dept.dingtalk_dept_id == dingtalk_dept_id,
+            Dept.tenant_id == event.tenant_id,
+            Dept.deleted == 0,
+        ).first()
+        if existing:
+            logger.info("DEPT_CREATE skipped: dept already exists dingtalk_dept_id=%s", dingtalk_dept_id)
+            existing.last_sync_at = now
+            session.flush()
+            return
+
+        parent_dingtalk_id = payload.get("parent_dingtalk_id") or payload.get("parent_id")
+        parent = None
+        parent_id = 0
+        parent_path = "/"
+
+        if parent_dingtalk_id:
+            parent = session.query(Dept).filter(
+                Dept.dingtalk_dept_id == parent_dingtalk_id,
+                Dept.tenant_id == event.tenant_id,
+                Dept.deleted == 0,
+            ).first()
+            if parent:
+                parent_id = parent.id
+                parent_path = parent.path
+
+        dept = Dept(
+            tenant_id=event.tenant_id,
+            parent_id=parent_id,
+            name=payload.get("name", f"dept_{dingtalk_dept_id}"),
+            path="/",
+            source="DINGTALK",
+            status="ENABLED",
+            dingtalk_dept_id=dingtalk_dept_id,
+            last_sync_at=now,
+        )
+        assign_pk(session, dept)
+        session.add(dept)
+        session.flush()
+        dept.path = f"{parent_path}{dept.id}/"
+        session.flush()
+
+        event.dept_id = dept.id
+        logger.info("DEPT_CREATE event processed: dept_id=%s name=%s", dept.id, dept.name)
 
     async def _apply_dept_update(self, event: Any) -> None:
-        """Handle DEPT_UPDATE event."""
-        pass
+        """Handle DEPT_UPDATE event - update department info.
+        
+        Updates department name or parent based on DingTalk data.
+        Records ChangeLog for overwrites.
+        """
+        from app.db.ids import assign_pk
+        from app.domains.sys.models import ChangeLog, Dept
+
+        if not event.dept_id:
+            payload = self._parse_payload(event)
+            if payload:
+                dingtalk_dept_id = payload.get("dingtalk_dept_id") or payload.get("dept_id")
+                if dingtalk_dept_id:
+                    session = get_db_session()
+                    dept = session.query(Dept).filter(
+                        Dept.dingtalk_dept_id == dingtalk_dept_id,
+                        Dept.tenant_id == event.tenant_id,
+                        Dept.deleted == 0,
+                    ).first()
+                    if dept:
+                        event.dept_id = dept.id
+            if not event.dept_id:
+                logger.warning("DEPT_UPDATE: no dept_id in event or payload")
+                return
+
+        session = get_db_session()
+        now = get_now()
+
+        dept = session.query(Dept).filter(
+            Dept.id == event.dept_id,
+            Dept.deleted == 0,
+        ).first()
+
+        if dept is None:
+            logger.warning("DEPT_UPDATE: dept not found dept_id=%s", event.dept_id)
+            return
+
+        payload = self._parse_payload(event)
+        if not payload:
+            return
+
+        if "name" in payload and payload["name"] and dept.name != payload["name"]:
+            old_name = dept.name
+            dept.name = payload["name"]
+            log = ChangeLog(
+                tenant_id=event.tenant_id,
+                biz_type="dept",
+                biz_id=str(dept.id),
+                field="name",
+                before_value=old_name,
+                after_value=payload["name"],
+                reason="DINGTALK_OVERRIDE",
+            )
+            assign_pk(session, log)
+            session.add(log)
+
+        parent_dingtalk_id = payload.get("parent_dingtalk_id") or payload.get("parent_id")
+        if parent_dingtalk_id:
+            new_parent = session.query(Dept).filter(
+                Dept.dingtalk_dept_id == parent_dingtalk_id,
+                Dept.tenant_id == event.tenant_id,
+                Dept.deleted == 0,
+            ).first()
+            if new_parent and dept.parent_id != new_parent.id:
+                old_parent_id = dept.parent_id
+                dept.parent_id = new_parent.id
+                dept.path = f"{new_parent.path}{dept.id}/"
+                log = ChangeLog(
+                    tenant_id=event.tenant_id,
+                    biz_type="dept",
+                    biz_id=str(dept.id),
+                    field="parent_id",
+                    before_value=str(old_parent_id),
+                    after_value=str(new_parent.id),
+                    reason="DINGTALK_OVERRIDE",
+                )
+                assign_pk(session, log)
+                session.add(log)
+
+        dept.last_sync_at = now
+        session.flush()
+        logger.info("DEPT_UPDATE event processed: dept_id=%s", dept.id)
 
     async def _apply_dept_delete(self, event: Any) -> None:
-        """Handle DEPT_DELETE event."""
-        pass
+        """Handle DEPT_DELETE event - soft delete department.
+        
+        Soft deletes department (deleted = dept.id).
+        Members are handled separately by USER_UPDATE/TRANSFER events.
+        """
+        from app.domains.sys.models import Dept
+
+        if not event.dept_id:
+            payload = self._parse_payload(event)
+            if payload:
+                dingtalk_dept_id = payload.get("dingtalk_dept_id") or payload.get("dept_id")
+                if dingtalk_dept_id:
+                    session = get_db_session()
+                    dept = session.query(Dept).filter(
+                        Dept.dingtalk_dept_id == dingtalk_dept_id,
+                        Dept.tenant_id == event.tenant_id,
+                        Dept.deleted == 0,
+                    ).first()
+                    if dept:
+                        event.dept_id = dept.id
+            if not event.dept_id:
+                logger.warning("DEPT_DELETE: no dept_id in event or payload")
+                return
+
+        session = get_db_session()
+        now = get_now()
+
+        dept = session.query(Dept).filter(
+            Dept.id == event.dept_id,
+            Dept.deleted == 0,
+        ).first()
+
+        if dept is None:
+            logger.info("DEPT_DELETE: dept already deleted or not found dept_id=%s", event.dept_id)
+            return
+
+        dept.status = "DISABLED"
+        dept.deleted = dept.id
+        dept.last_sync_at = now
+        session.flush()
+
+        logger.info("DEPT_DELETE event processed: dept_id=%s soft deleted", dept.id)
 
     @transactional
     async def retry_event(self, event_id: int, operator_id: Optional[int] = None) -> dict[str, Any]:
@@ -575,3 +933,17 @@ class OrgSyncEventService:
             "processedTime": event.processed_time.isoformat() + "+08:00" if event.processed_time else None,
             "delaySeconds": event.delay_seconds,
         }
+
+    def _parse_payload(self, event: Any) -> Optional[dict[str, Any]]:
+        """Parse JSON payload from event."""
+        import json
+
+        if not event.payload:
+            return None
+        try:
+            result = json.loads(event.payload)
+            if isinstance(result, dict):
+                return result
+            return None
+        except (json.JSONDecodeError, TypeError):
+            return None

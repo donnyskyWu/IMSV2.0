@@ -523,6 +523,7 @@ class UserService:
 
         # Soft delete user
         user.deleted = user.id
+        self._drop_sessions(user.id)
 
         session.flush()
 
@@ -581,7 +582,6 @@ class UserService:
         if self._is_last_active_r1(session, user.id):
             raise BizError(1001, msg="最后一个在职管理员不能冻结")
         user.status = "FROZEN"
-        user.token_version = (user.token_version or 0) + 1
         self._drop_sessions(user.id)
         session.flush()
 
@@ -593,7 +593,6 @@ class UserService:
         if self._is_last_active_r1(session, user.id):
             raise BizError(1001, msg="最后一个在职管理员不能离职")
         user.status = "RESIGNED"
-        user.token_version = (user.token_version or 0) + 1
         self._drop_sessions(user.id)
         USER_EVENTS.append({"type": "user.resigned", "user_id": user.id})
         session.flush()
