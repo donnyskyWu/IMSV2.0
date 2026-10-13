@@ -13,42 +13,9 @@ import DetailDrawer from '@/components/form/DetailDrawer.vue'
 import { toast } from '@/utils/toast'
 import { useResponsive } from '@/utils/responsive'
 import { fmtDateTime } from '@/utils/format'
-import { request } from '@/api/request'
+import { orgSyncApi } from '@/api/orgSync'
+import type { SyncMetrics, SyncEvent, DiffSummary } from '@/api/orgSync'
 import type { EmptyType } from '@/types'
-
-interface SyncMetrics {
-  userTotal: number
-  yesterdayEventCount: number
-  pendingEventCount: number
-  deadEventCount: number
-  avgDelayMinutes: number
-  p95DelayMinutes: number
-  successRate24h: number
-  dingtalkUnavailable: boolean
-  reconcileFailedTwice: boolean
-}
-
-interface SyncEvent {
-  id: string
-  eventId: string
-  eventType: string | null
-  bizType: string | null
-  subjectName: string | null
-  status: string
-  retryCount: number
-  eventTime: string | null
-  processedTime: string | null
-  lastError: string | null
-  attempts?: any[]
-}
-
-interface DiffSummary {
-  overrideCount: number
-  pendingAssignCount: number
-  localOrphanCount: number
-  sameNameCount: number
-  unboundCount: number
-}
 
 const { isMobile } = useResponsive()
 
