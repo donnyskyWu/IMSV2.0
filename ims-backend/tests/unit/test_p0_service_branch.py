@@ -705,12 +705,15 @@ class TestAuthServiceDingTalk:
         assert "state=" in result
 
     @pytest.mark.asyncio
-    async def test_dingtalk_callback_consumes_state(self, db_session, test_context):
+    async def test_dingtalk_callback_consumes_state(self, db_session, test_context, monkeypatch):
         """UT-D02-02: Test DingTalk callback consumes state atomically."""
+        import app.services.auth as auth_mod
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.services.auth import AuthService
 
+        monkeypatch.setattr(auth_mod.settings.dingtalk, "app_key", "ding-key")
+        monkeypatch.setattr(auth_mod.settings.dingtalk, "mode", "mock")
         service = AuthService()
         state = "test-state-123"
 
