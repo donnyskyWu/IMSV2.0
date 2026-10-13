@@ -53,7 +53,7 @@ class TestB2RefreshRegression:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "freeze_after_login")
+        _add_user(db_session, "freeze_after_login")
         db_session.flush()
         service = AuthService()
 
@@ -80,7 +80,7 @@ class TestB2RefreshRegression:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "resign_after_login")
+        _add_user(db_session, "resign_after_login")
         db_session.flush()
         service = AuthService()
 
@@ -143,7 +143,7 @@ class TestB2RefreshRegression:
         from app.core.errors import BizError
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "logout_after_rotate")
+        _add_user(db_session, "logout_after_rotate")
         db_session.flush()
         service = AuthService()
 
@@ -175,7 +175,7 @@ class TestB2RefreshRegression:
 
         settings = get_settings()
         full_ttl = settings.jwt.refresh_token_ttl
-        person = _add_user(db_session, "seven_day_user")
+        _add_user(db_session, "seven_day_user")
         db_session.flush()
         service = AuthService()
 
@@ -209,7 +209,7 @@ class TestB2SessionMissingAndBlacklistReturns1216:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "session_missing_frozen")
+        _add_user(db_session, "session_missing_frozen")
         db_session.flush()
         service = AuthService()
 
@@ -236,7 +236,7 @@ class TestB2SessionMissingAndBlacklistReturns1216:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "blacklist_resigned")
+        _add_user(db_session, "blacklist_resigned")
         db_session.flush()
         service = AuthService()
 
@@ -267,7 +267,7 @@ class TestB2VerifyTokenReturns1216:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "verify_missing_frozen")
+        _add_user(db_session, "verify_missing_frozen")
         db_session.flush()
         service = AuthService()
 
@@ -295,7 +295,7 @@ class TestB2VerifyTokenReturns1216:
         from app.domains.sys.models import User
         from app.services.auth import AuthService
 
-        person = _add_user(db_session, "verify_blacklist_resigned")
+        _add_user(db_session, "verify_blacklist_resigned")
         db_session.flush()
         service = AuthService()
 
