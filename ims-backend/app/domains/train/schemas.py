@@ -15,7 +15,6 @@ from pydantic import Field, field_validator
 
 from app.core.serialization import BaseSchema
 
-
 # ============== Category Schemas ==============
 
 class CateTreeNode(BaseSchema):
@@ -211,8 +210,8 @@ class TaskCreateRequest(BaseSchema):
     def validate_deadline(cls, v: str) -> str:
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except ValueError:
-            raise ValueError("Invalid datetime format")
+        except ValueError as e:
+            raise ValueError("Invalid datetime format") from e
         return v
 
 

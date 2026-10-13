@@ -9,8 +9,8 @@ Per Q-D6, Q-D7:
 - Zero questions → 1108
 """
 
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from app.core.errors import BizError
 
@@ -50,8 +50,9 @@ class TestAIGenerateValidation:
     @pytest.mark.asyncio
     async def test_empty_material_ids_rejected(self):
         """Empty material IDs rejected by schema."""
-        from app.domains.train.schemas import AIGenerateRequest
         from pydantic import ValidationError
+
+        from app.domains.train.schemas import AIGenerateRequest
 
         with pytest.raises(ValidationError):
             AIGenerateRequest(
@@ -62,8 +63,9 @@ class TestAIGenerateValidation:
     @pytest.mark.asyncio
     async def test_question_count_limits(self):
         """Question count must be 1-50."""
-        from app.domains.train.schemas import AIGenerateRequest
         from pydantic import ValidationError
+
+        from app.domains.train.schemas import AIGenerateRequest
 
         with pytest.raises(ValidationError):
             AIGenerateRequest(
@@ -86,8 +88,9 @@ class TestAIGenerateValidation:
     @pytest.mark.asyncio
     async def test_difficulty_enum(self):
         """Difficulty must be EASY/MEDIUM/HARD."""
-        from app.domains.train.schemas import AIGenerateRequest
         from pydantic import ValidationError
+
+        from app.domains.train.schemas import AIGenerateRequest
 
         with pytest.raises(ValidationError):
             AIGenerateRequest(

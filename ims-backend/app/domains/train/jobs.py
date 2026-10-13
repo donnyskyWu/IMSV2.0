@@ -19,16 +19,14 @@ LibreOffice/ffprobe: timeout + isolation
 import asyncio
 import json
 import logging
-import subprocess
-from datetime import datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.clock import get_now
-from app.core.errors import BizError
 from app.db.session import get_db_session
 
 logger = logging.getLogger(__name__)
@@ -408,7 +406,6 @@ class TrainStatJob:
             {"upserted_count": int}
         """
         from app.domains.train.models import TrainStatDaily, TrainTask, TrainTaskRecord
-        from app.domains.sys.models import User
 
         now = get_now()
         if stat_date is None:
@@ -424,7 +421,7 @@ class TrainStatJob:
                     func.case((TrainTaskRecord.confirm_status == "CONFIRMED", 1), else_=0)
                 ).label("finished"),
                 func.sum(
-                    func.case((TrainTaskRecord.is_overdue == True, 1), else_=0)
+                    func.case((TrainTaskRecord.is_overdue, 1), else_=0)
                 ).label("overdue"),
                 func.sum(TrainTaskRecord.effective_seconds).label("total_seconds"),
             )
@@ -566,13 +563,13 @@ class TrainOnboardingHandler:
         Returns:
             {"assigned_task_count": int}
         """
+        from app.domains.sys.models import User
         from app.domains.train.models import (
             TrainMaterial,
             TrainMaterialCate,
             TrainTask,
             TrainTaskRecord,
         )
-        from app.domains.sys.models import User
 
         user = self.session.query(User).filter(
             User.id == user_id,

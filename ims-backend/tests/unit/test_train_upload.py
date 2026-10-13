@@ -32,21 +32,21 @@ def make_mock_file(
     mock = MagicMock()
     mock.filename = filename
     mock.content_type = content_type
-    
+
     buffer = io.BytesIO(content)
     mock.read = lambda n=None: buffer.read(n) if n else buffer.read()
     mock.seek = lambda pos, whence=0: buffer.seek(pos, whence)
     mock.file = buffer
-    
+
     async def async_read(n=None):
         return buffer.read(n) if n else buffer.read()
-    
+
     async def async_seek(pos, whence=0):
         return buffer.seek(pos, whence)
-    
+
     mock.read = MagicMock(side_effect=async_read)
     mock.seek = MagicMock(side_effect=async_seek)
-    
+
     return mock
 
 
@@ -104,7 +104,7 @@ class TestGenerateStoragePath:
     def test_path_format(self):
         """Path follows expected format."""
         path = generate_storage_path("TRAIN_DOC", 123, "pdf")
-        
+
         assert path.startswith("train/train_doc/123/")
         assert path.endswith(".pdf")
         parts = path.split("/")
@@ -114,7 +114,7 @@ class TestGenerateStoragePath:
         """Different scenes produce different paths."""
         doc_path = generate_storage_path("TRAIN_DOC", 1, "pdf")
         video_path = generate_storage_path("TRAIN_VIDEO", 1, "mp4")
-        
+
         assert "train_doc" in doc_path
         assert "train_video" in video_path
 
@@ -122,7 +122,7 @@ class TestGenerateStoragePath:
         """Multiple calls produce unique paths."""
         path1 = generate_storage_path("TRAIN_DOC", 1, "pdf")
         path2 = generate_storage_path("TRAIN_DOC", 1, "pdf")
-        
+
         assert path1 != path2
 
 
@@ -132,12 +132,12 @@ class TestExtensions:
     def test_doc_extensions(self):
         """Document extensions include expected types."""
         expected = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"}
-        assert TRAIN_DOC_EXTENSIONS == expected
+        assert expected == TRAIN_DOC_EXTENSIONS
 
     def test_video_extensions(self):
         """Video extensions include expected types."""
         expected = {"mp4", "mov"}
-        assert TRAIN_VIDEO_EXTENSIONS == expected
+        assert expected == TRAIN_VIDEO_EXTENSIONS
 
     def test_doc_max_size(self):
         """Document max size is 100MB."""
@@ -156,7 +156,7 @@ class TestValidateTrainUploadExtension:
         """UT-B21-UPLOAD-08: Valid PDF passes."""
         content = b"%PDF-1.4 valid pdf content"
         mock_file = make_mock_file("test.pdf", content, "application/pdf")
-        
+
         await validate_train_upload(mock_file, "TRAIN_DOC")
 
     @pytest.mark.asyncio
@@ -164,7 +164,7 @@ class TestValidateTrainUploadExtension:
         """UT-B21-UPLOAD-01: .exe rejected."""
         content = b"MZ executable content"
         mock_file = make_mock_file("test.exe", content)
-        
+
         with pytest.raises(BizError) as exc:
             await validate_train_upload(mock_file, "TRAIN_DOC")
         assert exc.value.code == 5005
@@ -175,7 +175,7 @@ class TestValidateTrainUploadExtension:
         """UT-B21-UPLOAD-02: .js rejected."""
         content = b"console.log('hello')"
         mock_file = make_mock_file("script.js", content, "application/javascript")
-        
+
         with pytest.raises(BizError) as exc:
             await validate_train_upload(mock_file, "TRAIN_DOC")
         assert exc.value.code == 5005
@@ -185,7 +185,7 @@ class TestValidateTrainUploadExtension:
         """Unknown scene rejected."""
         content = b"%PDF-1.4"
         mock_file = make_mock_file("test.pdf", content)
-        
+
         with pytest.raises(BizError) as exc:
             await validate_train_upload(mock_file, "UNKNOWN")
         assert exc.value.code == 5005

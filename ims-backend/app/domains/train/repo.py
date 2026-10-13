@@ -6,14 +6,12 @@ Handles database operations with explicit scope filtering.
 Does NOT use __scope_fields__ for complex conditions.
 """
 
-import json
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.context import ctx
 from app.db.session import get_db_session
 from app.domains.train.models import (
     TrainDeptAlert,
@@ -25,7 +23,7 @@ from app.domains.train.models import (
     TrainTask,
     TrainTaskRecord,
 )
-from app.domains.train.scope import apply_record_scope_filter, apply_task_scope_filter
+from app.domains.train.scope import apply_task_scope_filter
 
 
 class TrainCateRepo:
@@ -176,10 +174,7 @@ class TrainMaterialRepo:
             )
         )
 
-        if max_no:
-            seq = int(max_no[-4:]) + 1
-        else:
-            seq = 1
+        seq = int(max_no[-4:]) + 1 if max_no else 1
 
         return f"{prefix}{seq:04d}"
 
@@ -284,10 +279,7 @@ class TrainTaskRepo:
             )
         )
 
-        if max_no:
-            seq = int(max_no[-4:]) + 1
-        else:
-            seq = 1
+        seq = int(max_no[-4:]) + 1 if max_no else 1
 
         return f"{prefix}{seq:04d}"
 

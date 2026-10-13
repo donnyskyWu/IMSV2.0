@@ -22,7 +22,6 @@ from typing import Optional
 from sqlalchemy import (
     BigInteger,
     Boolean,
-    Date,
     DateTime,
     Index,
     Integer,
@@ -40,17 +39,17 @@ from app.db.base import AuditBase
 class TrainMaterialCate(AuditBase):
     """
     Training material category (FP-B21-MT-01/02).
-    
+
     Table: ims_train_material_cate
-    
+
     Rules:
     - Top-level nodes link to position via position_code
     - parent_id=0 for position nodes
     - Unique: (tenant_id, parent_id, cate_name, deleted)
     """
-    
+
     __tablename__ = "ims_train_material_cate"
-    
+
     parent_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0, comment="父分类ID，岗位节点为0"
     )
@@ -63,7 +62,7 @@ class TrainMaterialCate(AuditBase):
     sort: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, comment="排序"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "parent_id", "cate_name", "deleted",
@@ -77,9 +76,9 @@ class TrainMaterialCate(AuditBase):
 class TrainMaterial(AuditBase):
     """
     Training material (FP-B21-MT-03~10).
-    
+
     Table: ims_train_material
-    
+
     Rules:
     - material_no format: MT+YYYYMMDD+seq
     - material_type: DOC/VIDEO/LINK
@@ -87,9 +86,9 @@ class TrainMaterial(AuditBase):
     - convert_status: PENDING/DONE/FAILED (for DOC only)
     - link_url only http:// or https://
     """
-    
+
     __tablename__ = "ims_train_material"
-    
+
     material_no: Mapped[str] = mapped_column(
         String(20), nullable=False, comment="编号 MT+日期+流水"
     )
@@ -132,7 +131,7 @@ class TrainMaterial(AuditBase):
     uploader_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, nullable=True, comment="上传人"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "material_no", "deleted",
@@ -146,17 +145,17 @@ class TrainMaterial(AuditBase):
 class TrainMaterialVersion(AuditBase):
     """
     Material version snapshot (FP-B21-MT-06/07).
-    
+
     Table: ims_train_material_version
-    
+
     Rules:
     - Explicit tenant_id column
     - Unique: (tenant_id, material_id, version, deleted)
     - Soft delete then re-insert for version replacement
     """
-    
+
     __tablename__ = "ims_train_material_version"
-    
+
     material_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="资料ID"
     )
@@ -187,7 +186,7 @@ class TrainMaterialVersion(AuditBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, comment="版本创建时间"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "material_id", "version", "deleted",
@@ -200,9 +199,9 @@ class TrainMaterialVersion(AuditBase):
 class TrainTask(AuditBase):
     """
     Learning task (FP-B21-TK-01~11).
-    
+
     Table: ims_train_task
-    
+
     Rules:
     - task_no format: TT+YYYYMMDD+seq
     - assign_scope: BY_USER/BY_POSITION
@@ -211,9 +210,9 @@ class TrainTask(AuditBase):
     - source: MANUAL/ONBOARDING
     - deleted_at written together with soft_delete
     """
-    
+
     __tablename__ = "ims_train_task"
-    
+
     task_no: Mapped[str] = mapped_column(
         String(20), nullable=False, comment="编号 TT+日期+流水"
     )
@@ -259,7 +258,7 @@ class TrainTask(AuditBase):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True, comment="删除时间(soft_delete同写)"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "task_no", "deleted",
@@ -277,17 +276,17 @@ class TrainTask(AuditBase):
 class TrainTaskRecord(AuditBase):
     """
     Learning record (FP-B21-TK-08, FP-B21-ST-*).
-    
+
     Table: ims_train_task_record
-    
+
     Rules:
     - Unique: (tenant_id, task_id, user_id, deleted)
     - Soft delete then re-insert for assignment replacement
     - user_dept_id for data scope filtering
     """
-    
+
     __tablename__ = "ims_train_task_record"
-    
+
     task_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="任务ID"
     )
@@ -337,7 +336,7 @@ class TrainTaskRecord(AuditBase):
     user_dept_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, nullable=True, comment="学员主部门(数据范围)"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "task_id", "user_id", "deleted",
@@ -353,17 +352,17 @@ class TrainTaskRecord(AuditBase):
 class TrainStudyLog(AuditBase):
     """
     Study log / heartbeat (FP-B21-ST-03~05).
-    
+
     Table: ims_train_study_log
-    
+
     Rules:
     - Explicit tenant_id column
     - Unique: (tenant_id, record_id, material_id, stat_date, deleted)
     - watched_intervals: JSON array [[start, end], ...]
     """
-    
+
     __tablename__ = "ims_train_study_log"
-    
+
     record_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="学习记录ID"
     )
@@ -385,7 +384,7 @@ class TrainStudyLog(AuditBase):
     last_position: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True, comment="视频位置秒/文档页码"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "record_id", "material_id", "stat_date", "deleted",
@@ -399,16 +398,16 @@ class TrainStudyLog(AuditBase):
 class TrainStatDaily(AuditBase):
     """
     Daily statistics summary (FP-B21-SS-02/06).
-    
+
     Table: ims_train_stat_daily
-    
+
     Rules:
     - Unique: (tenant_id, stat_date, dept_id)
     - Upsert pattern for daily job
     """
-    
+
     __tablename__ = "ims_train_stat_daily"
-    
+
     stat_date: Mapped[str] = mapped_column(
         String(10), nullable=False, comment="统计日期YYYY-MM-DD"
     )
@@ -433,7 +432,7 @@ class TrainStatDaily(AuditBase):
     avg_duration_minutes: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(8, 2), nullable=True, comment="人均时长"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "stat_date", "dept_id",
@@ -447,16 +446,16 @@ class TrainStatDaily(AuditBase):
 class TrainDeptAlert(AuditBase):
     """
     Low completion rate alert record (FP-B21-SS-06).
-    
+
     Table: ims_train_dept_alert
-    
+
     Rules:
     - Unique: (tenant_id, dept_id, week_start)
     - Prevents duplicate weekly alerts
     """
-    
+
     __tablename__ = "ims_train_dept_alert"
-    
+
     dept_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="部门"
     )
@@ -466,7 +465,7 @@ class TrainDeptAlert(AuditBase):
     notified_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, comment="推送时间"
     )
-    
+
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "dept_id", "week_start",

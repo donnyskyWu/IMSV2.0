@@ -8,7 +8,6 @@ Per Q-D11, Q-D12, E2E-B21-27:
 - Coverage >= 95% for completion
 """
 
-import pytest
 
 from app.domains.train.video import (
     calculate_coverage,

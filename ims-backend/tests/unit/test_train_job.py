@@ -8,11 +8,12 @@ Per 培训管理-实现理解.md §11:
 - LibreOffice/ffprobe: timeout + isolation
 """
 
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch
 
-from app.core.clock import get_now, set_clock, reset_clock
+import pytest
+
+from app.core.clock import reset_clock, set_clock
 
 
 class TestTrainTaskJobFinishExpired:
@@ -21,9 +22,9 @@ class TestTrainTaskJobFinishExpired:
     @pytest.mark.asyncio
     async def test_finishes_expired_tasks(self, db_session, test_context):
         """Tasks past deadline are marked FINISHED."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
-        from app.core.context import ctx
 
         past = datetime.now() - timedelta(days=1)
         task = TrainTask(
@@ -48,9 +49,9 @@ class TestTrainTaskJobFinishExpired:
     @pytest.mark.asyncio
     async def test_does_not_finish_future_tasks(self, db_session, test_context):
         """Tasks with future deadline not affected."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
-        from app.core.context import ctx
 
         future = datetime.now() + timedelta(days=7)
         task = TrainTask(
@@ -74,9 +75,9 @@ class TestTrainTaskJobFinishExpired:
     @pytest.mark.asyncio
     async def test_idempotent_on_already_finished(self, db_session, test_context):
         """Already finished tasks not re-processed."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
-        from app.core.context import ctx
 
         past = datetime.now() - timedelta(days=1)
         task = TrainTask(
@@ -103,9 +104,9 @@ class TestTrainReminderJobDue:
     @pytest.mark.asyncio
     async def test_reminds_within_24h(self, db_session, test_context):
         """UT-B21-JOB-02: Records with deadline in 24h get reminded."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainReminderJob
         from app.domains.train.models import TrainTask, TrainTaskRecord
-        from app.core.context import ctx
 
         deadline = datetime.now() + timedelta(hours=12)
         task = TrainTask(
@@ -139,9 +140,9 @@ class TestTrainReminderJobDue:
     @pytest.mark.asyncio
     async def test_idempotent_already_reminded(self, db_session, test_context):
         """UT-B21-JOB-04: Already reminded records not re-reminded."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainReminderJob
         from app.domains.train.models import TrainTask, TrainTaskRecord
-        from app.core.context import ctx
 
         deadline = datetime.now() + timedelta(hours=12)
         task = TrainTask(
@@ -178,9 +179,9 @@ class TestTrainReminderJobOverdue:
     @pytest.mark.asyncio
     async def test_reminds_overdue(self, db_session, test_context):
         """UT-B21-JOB-03: Overdue records get reminded."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainReminderJob
         from app.domains.train.models import TrainTask, TrainTaskRecord
-        from app.core.context import ctx
 
         past = datetime.now() - timedelta(days=2)
         task = TrainTask(
@@ -219,9 +220,9 @@ class TestTrainStatJobDailySummary:
     @pytest.mark.asyncio
     async def test_generates_summary(self, db_session, test_context):
         """Daily summary is generated correctly."""
-        from app.domains.train.jobs import TrainStatJob
-        from app.domains.train.models import TrainTask, TrainTaskRecord, TrainStatDaily
         from app.core.context import ctx
+        from app.domains.train.jobs import TrainStatJob
+        from app.domains.train.models import TrainTask, TrainTaskRecord
 
         now = datetime.now()
         task = TrainTask(
@@ -259,10 +260,11 @@ class TestTrainStatJobLowRateAlert:
     @pytest.mark.asyncio
     async def test_alerts_low_rate_depts(self, db_session, test_context):
         """Departments below threshold get alerted."""
-        from app.domains.train.jobs import TrainStatJob
-        from app.domains.train.models import TrainStatDaily, TrainDeptAlert
-        from app.core.context import ctx
         from decimal import Decimal
+
+        from app.core.context import ctx
+        from app.domains.train.jobs import TrainStatJob
+        from app.domains.train.models import TrainStatDaily
 
         now = datetime.now()
         week_start = now - timedelta(days=now.weekday() + 7)
@@ -288,10 +290,10 @@ class TestTrainStatJobLowRateAlert:
     @pytest.mark.asyncio
     async def test_idempotent_already_alerted(self, db_session, test_context):
         """Already alerted departments not re-alerted."""
-        from app.domains.train.jobs import TrainStatJob
-        from app.domains.train.models import TrainStatDaily, TrainDeptAlert
+
         from app.core.context import ctx
-        from decimal import Decimal
+        from app.domains.train.jobs import TrainStatJob
+        from app.domains.train.models import TrainDeptAlert
 
         now = datetime.now()
         week_start = (now - timedelta(days=now.weekday() + 7)).strftime("%Y-%m-%d")
@@ -306,7 +308,7 @@ class TestTrainStatJobLowRateAlert:
         db_session.flush()
 
         job = TrainStatJob(db_session)
-        result = await job.low_rate_alert(ctx.tenant_id, threshold=85.0)
+        await job.low_rate_alert(ctx.tenant_id, threshold=85.0)
 
         alerts = db_session.query(TrainDeptAlert).filter(
             TrainDeptAlert.dept_id == 99,
@@ -322,9 +324,9 @@ class TestTrainMaterialJobConvert:
     @pytest.mark.asyncio
     async def test_timeout_handling(self, db_session, test_context):
         """UT-B21-CONVERT-01: Timeout marks as FAILED."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainMaterialJob
         from app.domains.train.models import TrainMaterial
-        from app.core.context import ctx
 
         material = TrainMaterial(
             tenant_id=ctx.tenant_id,
@@ -355,9 +357,9 @@ class TestTrainMaterialJobConvert:
     @pytest.mark.asyncio
     async def test_success_sets_done(self, db_session, test_context):
         """UT-B21-CONVERT-02: Success marks as DONE."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainMaterialJob
         from app.domains.train.models import TrainMaterial
-        from app.core.context import ctx
 
         material = TrainMaterial(
             tenant_id=ctx.tenant_id,
@@ -391,9 +393,9 @@ class TestTrainMaterialJobFfprobe:
     @pytest.mark.asyncio
     async def test_timeout_returns_error(self, db_session, test_context):
         """UT-B21-FFPROBE-02: Timeout returns error."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainMaterialJob
         from app.domains.train.models import TrainMaterial
-        from app.core.context import ctx
 
         material = TrainMaterial(
             tenant_id=ctx.tenant_id,
@@ -421,9 +423,9 @@ class TestTrainMaterialJobFfprobe:
     @pytest.mark.asyncio
     async def test_success_sets_duration(self, db_session, test_context):
         """UT-B21-FFPROBE-01: Success sets duration."""
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainMaterialJob
         from app.domains.train.models import TrainMaterial
-        from app.core.context import ctx
 
         material = TrainMaterial(
             tenant_id=ctx.tenant_id,
@@ -455,9 +457,9 @@ class TestClockUsage:
 
     def test_jobs_use_get_now(self):
         """Jobs use get_now from app.core.clock."""
-        from app.domains.train.jobs import TrainTaskJob, TrainReminderJob, TrainStatJob
-
         import inspect
+
+        from app.domains.train.jobs import TrainReminderJob, TrainStatJob, TrainTaskJob
         source_task = inspect.getsource(TrainTaskJob.finish_expired_tasks)
         source_due = inspect.getsource(TrainReminderJob.remind_due)
         source_stat = inspect.getsource(TrainStatJob.daily_summary)
@@ -469,10 +471,9 @@ class TestClockUsage:
     @pytest.mark.asyncio
     async def test_set_clock_affects_job(self, db_session, test_context):
         """set_clock injection affects job behavior."""
-        from app.core.clock import set_clock, reset_clock
+        from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
-        from app.core.context import ctx
 
         deadline = datetime(2026, 10, 15, 12, 0, 0)
         task = TrainTask(
@@ -507,9 +508,8 @@ class TestWeekBoundary:
     @pytest.mark.asyncio
     async def test_monday_boundary(self, db_session, test_context):
         """UT-B21-JOB-01: Monday 00:00 boundary handled correctly."""
-        from app.core.clock import set_clock, reset_clock
-        from app.domains.train.jobs import TrainStatJob
         from app.core.context import ctx
+        from app.domains.train.jobs import TrainStatJob
 
         set_clock(lambda: datetime(2026, 10, 12, 0, 0, 0))
 

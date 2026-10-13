@@ -23,7 +23,6 @@ from fastapi import UploadFile
 
 from app.core.errors import BizError
 
-
 TRAIN_DOC_EXTENSIONS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"}
 TRAIN_VIDEO_EXTENSIONS = {"mp4", "mov"}
 
@@ -55,27 +54,24 @@ def _check_file_signature(header: bytes, ext: str) -> bool:
     signatures = FILE_SIGNATURES.get(ext, [])
     if not signatures:
         return True
-    
-    for sig in signatures:
-        if sig in header[:32]:
-            return True
-    return False
+
+    return any(sig in header[:32] for sig in signatures)
 
 
 async def validate_train_upload(file: UploadFile, scene: str) -> None:
     """
     Validate training material upload.
-    
+
     Args:
         file: Uploaded file
         scene: TRAIN_DOC or TRAIN_VIDEO
-    
+
     Raises:
         BizError(5005): Validation failed
     """
     filename = file.filename or ""
     ext = _get_extension(filename)
-    
+
     if scene == "TRAIN_DOC":
         allowed_exts = TRAIN_DOC_EXTENSIONS
         max_size = TRAIN_DOC_MAX_SIZE
@@ -84,29 +80,26 @@ async def validate_train_upload(file: UploadFile, scene: str) -> None:
         max_size = TRAIN_VIDEO_MAX_SIZE
     else:
         raise BizError(5005, msg=f"未知的上传场景: {scene}")
-    
+
     if ext not in allowed_exts:
         raise BizError(5005, msg=f"不支持的文件类型: .{ext}")
-    
+
     header = await file.read(64)
     await file.seek(0)
-    
+
     if not _check_file_signature(header, ext):
         raise BizError(5005, msg="文件内容与扩展名不符")
-    
+
     content_type = file.content_type or ""
-    if scene == "TRAIN_DOC":
-        valid_mime_prefixes = ("application/", "")
-    else:
-        valid_mime_prefixes = ("video/", "")
-    
+    valid_mime_prefixes = ("application/", "") if scene == "TRAIN_DOC" else ("video/", "")
+
     if content_type and not content_type.startswith(valid_mime_prefixes):
         raise BizError(5005, msg=f"不支持的MIME类型: {content_type}")
-    
+
     await file.seek(0, 2)
     file_size = file.file.tell()
     await file.seek(0)
-    
+
     if file_size > max_size:
         max_mb = max_size // (1024 * 1024)
         raise BizError(5005, msg=f"文件超过大小限制: {max_mb}MB")
@@ -115,15 +108,15 @@ async def validate_train_upload(file: UploadFile, scene: str) -> None:
 def validate_link_url(url: Optional[str]) -> None:
     """
     Validate link URL for LINK type materials.
-    
+
     Only http:// or https:// allowed.
-    
+
     Raises:
         BizError(1001): Invalid URL
     """
     if not url:
         raise BizError(1001, msg="外链地址不能为空")
-    
+
     if not url.startswith(("http://", "https://")):
         raise BizError(1001, msg="外链地址必须以 http:// 或 https:// 开头")
 
@@ -131,7 +124,7 @@ def validate_link_url(url: Optional[str]) -> None:
 def generate_storage_path(scene: str, tenant_id: int, ext: str) -> str:
     """
     Generate server-side storage path.
-    
+
     Path format: train/{scene}/{tenant_id}/{yyyyMM}/{uuid}.{ext}
     Client-provided paths are NOT accepted (prevent path traversal).
     """

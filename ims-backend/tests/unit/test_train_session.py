@@ -9,8 +9,9 @@ Per review feedback:
 - 1002 for session invalid
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestDropSessions:
@@ -25,8 +26,9 @@ class TestDropSessions:
 
     def test_drop_sessions_signature(self):
         """_drop_sessions takes single user_id parameter."""
-        from app.services.user import UserService
         import inspect
+
+        from app.services.user import UserService
 
         service = UserService()
         sig = inspect.signature(service._drop_sessions)
@@ -118,7 +120,7 @@ class TestPermVersionKeys:
 
     def test_key_format_consistency(self):
         """Keys follow ims:perm_ver:{type}:{id} pattern."""
-        from app.domains.train.scope import get_user_perm_key, get_tenant_perm_key
+        from app.domains.train.scope import get_tenant_perm_key, get_user_perm_key
 
         user_key = get_user_perm_key(100)
         tenant_key = get_tenant_perm_key(100)

@@ -15,8 +15,8 @@ P0 Services (90% branch coverage required):
 """
 
 import json
-from datetime import datetime, timedelta
-from typing import Any, Optional
+from datetime import datetime
+from typing import Optional
 
 from app.core.clock import get_now
 from app.core.context import ctx
@@ -486,7 +486,7 @@ class TrainTaskService:
     async def create_task_by_user(self, req: TaskCreateRequest) -> TaskDetail:
         """
         Create task with BY_USER assignment (FP-B21-TK-02).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -572,7 +572,7 @@ class TrainTaskService:
     async def create_task_by_position(self, req: TaskCreateRequest) -> TaskDetail:
         """
         Create task with BY_POSITION assignment (FP-B21-TK-04).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -767,7 +767,7 @@ class TrainTaskService:
     ) -> list[dict]:
         """
         Preview users for position assignment (FP-B21-TK-03).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -951,9 +951,9 @@ class TrainStudyService:
     ) -> dict:
         """
         Report video progress (heartbeat) (FP-B21-ST-03).
-        
+
         P0 function - 90% branch coverage required.
-        
+
         Per Q-D11, Q-D12:
         - Single increment <= actual interval AND <= 20s
         - Interval deduplication
@@ -1044,7 +1044,7 @@ class TrainStudyService:
     ) -> dict:
         """
         Report document progress (FP-B21-ST-04).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -1113,7 +1113,7 @@ class TrainStudyService:
     ) -> dict:
         """
         Report link progress (FP-B21-ST-05).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -1170,7 +1170,7 @@ class TrainStudyService:
     async def confirm_duration(self, task_id: str) -> dict:
         """
         Confirm completion for DURATION type (FP-B21-ST-06).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -1229,7 +1229,7 @@ class TrainStudyService:
     async def submit_quiz(self, task_id: str, answers: list) -> dict:
         """
         Submit quiz (FP-B21-ST-08).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -1297,9 +1297,8 @@ class TrainStudyService:
             if q.get("type") == "SINGLE":
                 if answer == q.get("answer_index"):
                     correct += 1
-            elif q.get("type") == "TRUE_FALSE":
-                if answer == q.get("answer_boolean"):
-                    correct += 1
+            elif q.get("type") == "TRUE_FALSE" and answer == q.get("answer_boolean"):
+                correct += 1
 
         return int(correct / len(quiz) * 100)
 
@@ -1318,7 +1317,7 @@ class TrainStatService:
     ) -> dict:
         """
         Get finish rate overview (FP-B21-SS-01).
-        
+
         P0 function - 90% branch coverage required.
         """
         tenant_id = ctx.tenant_id
@@ -1347,7 +1346,7 @@ class TrainStatService:
                 func.case((TrainTaskRecord.confirm_status == "CONFIRMED", 1), else_=0)
             ).label("finished"),
             func.sum(
-                func.case((TrainTaskRecord.is_overdue == True, 1), else_=0)
+                func.case((TrainTaskRecord.is_overdue, 1), else_=0)
             ).label("overdue"),
         ).where(
             TrainTaskRecord.tenant_id == tenant_id,

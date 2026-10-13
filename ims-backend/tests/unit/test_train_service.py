@@ -12,13 +12,12 @@ P0 services require 90% branch coverage:
 - TrainStatService.get_finish_rate
 """
 
-import json
+from unittest.mock import MagicMock
+
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from app.core.errors import BizError
-from app.domains.train.schemas import QuizQuestion, TaskCreateRequest
+from app.domains.train.schemas import QuizQuestion
 
 
 class TestTrainMaterialServiceCreateMaterial:
@@ -27,9 +26,9 @@ class TestTrainMaterialServiceCreateMaterial:
     @pytest.mark.asyncio
     async def test_link_material_valid_url(self, db_session, test_context):
         """LINK material with valid URL passes."""
-        from app.domains.train.service import TrainMaterialService
-        from app.domains.train.models import TrainMaterialCate
         from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
 
         cate = TrainMaterialCate(
             tenant_id=ctx.tenant_id,
@@ -60,9 +59,9 @@ class TestTrainMaterialServiceCreateMaterial:
     @pytest.mark.asyncio
     async def test_link_material_invalid_url(self, db_session, test_context):
         """LINK material with invalid URL fails with 1001."""
-        from app.domains.train.service import TrainMaterialService
-        from app.domains.train.models import TrainMaterialCate
         from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
 
         cate = TrainMaterialCate(
             tenant_id=ctx.tenant_id,
@@ -91,9 +90,9 @@ class TestTrainMaterialServiceCreateMaterial:
     @pytest.mark.asyncio
     async def test_doc_material_without_file(self, db_session, test_context):
         """DOC material without file fails with 1001."""
-        from app.domains.train.service import TrainMaterialService
-        from app.domains.train.models import TrainMaterialCate
         from app.core.context import ctx
+        from app.domains.train.models import TrainMaterialCate
+        from app.domains.train.service import TrainMaterialService
 
         cate = TrainMaterialCate(
             tenant_id=ctx.tenant_id,
@@ -268,7 +267,6 @@ class TestTrainStudyServiceCalculateProgress:
     def test_calculate_empty_materials(self):
         """Empty materials return 0."""
         from app.domains.train.service import TrainStudyService
-        from unittest.mock import MagicMock
 
         service = TrainStudyService()
         task = MagicMock()
@@ -279,7 +277,6 @@ class TestTrainStudyServiceCalculateProgress:
     def test_calculate_all_complete(self):
         """All complete materials return 100."""
         from app.domains.train.service import TrainStudyService
-        from unittest.mock import MagicMock
 
         service = TrainStudyService()
         task = MagicMock()
@@ -291,7 +288,6 @@ class TestTrainStudyServiceCalculateProgress:
     def test_calculate_partial_progress(self):
         """Partial progress calculated correctly."""
         from app.domains.train.service import TrainStudyService
-        from unittest.mock import MagicMock
 
         service = TrainStudyService()
         task = MagicMock()
@@ -303,7 +299,6 @@ class TestTrainStudyServiceCalculateProgress:
     def test_calculate_missing_progress(self):
         """Missing material progress counts as 0."""
         from app.domains.train.service import TrainStudyService
-        from unittest.mock import MagicMock
 
         service = TrainStudyService()
         task = MagicMock()
