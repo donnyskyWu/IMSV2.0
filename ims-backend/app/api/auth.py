@@ -100,6 +100,26 @@ class DingTalkSSORequest(BaseSchema):
     redirect: Optional[str] = "/"
 
 
+class SetPasswordRequest(BaseSchema):
+    """Set password request (PC-03)."""
+    new_password: str = Field(..., min_length=1, max_length=128)
+
+
+class SessionItem(BaseSchema):
+    """Session item (PC-04)."""
+    sid: str
+    deviceName: str
+    ip: str
+    loginTime: Optional[str] = None
+    lastActiveTime: Optional[str] = None
+    current: bool = False
+
+
+class SessionListResponse(BaseSchema):
+    """Session list response (PC-04)."""
+    list: list[SessionItem]
+
+
 # ============== Endpoints ==============
 
 @router.post("/login", response_model=CommonResult[LoginResponse], summary="账号密码登录")
@@ -224,6 +244,90 @@ async def change_password(body: ChangePasswordRequest) -> CommonResult:
 
 
 change_password.__login_only__ = True
+
+
+@router.post(
+    "/password/set",
+    response_model=CommonResult,
+    summary="设置密码",
+)
+async def set_password(body: SetPasswordRequest) -> CommonResult:
+    """
+    Set password for user without password (PC-03).
+
+    无密码用户设置密码。成功后清除须改密标记，其他会话失效，当前会话保留。
+    已有密码用户调用返回 1001。
+    静默忽略请求中的 roleIds、tenantId、status、deptId 等字段。
+    """
+    from app.core.context import ctx
+    from app.core.errors import BizError
+    from app.services.auth import AuthService
+
+    current = ctx.current_or_none
+    if current is None or not current.user_id:
+        raise BizError(1002)
+    await AuthService().set_password(
+        user_id=current.user_id,
+        new_password=body.new_password,
+        keep_session_id=current.session_id,
+    )
+    return CommonResult.success()
+
+
+set_password.__login_only__ = True
+
+
+@router.get(
+    "/session/my",
+    response_model=CommonResult[SessionListResponse],
+    summary="我的会话列表",
+)
+async def get_my_sessions() -> CommonResult[SessionListResponse]:
+    """
+    Get current user's session list (PC-04).
+
+    返回当前用户的所有有效会话，包含设备名、IP、登录时间、最后活跃时间、是否当前会话。
+    """
+    from app.core.context import ctx
+    from app.core.errors import BizError
+    from app.services.auth import AuthService
+
+    current = ctx.current_or_none
+    if current is None or not current.user_id:
+        raise BizError(1002)
+    sessions = await AuthService().get_my_sessions(current.user_id)
+    return CommonResult.success(data={"list": sessions})
+
+
+get_my_sessions.__login_only__ = True
+
+
+@router.delete(
+    "/session/my",
+    response_model=CommonResult,
+    summary="下线指定会话",
+)
+async def delete_my_session(
+    sid: str,
+) -> CommonResult:
+    """
+    Delete one of current user's sessions (PC-04).
+
+    下线指定会话。sid 为空返回 1001，会话不存在或属于其他用户返回 1504。
+    删除当前会话等同退出登录。
+    """
+    from app.core.context import ctx
+    from app.core.errors import BizError
+    from app.services.auth import AuthService
+
+    current = ctx.current_or_none
+    if current is None or not current.user_id:
+        raise BizError(1002)
+    await AuthService().delete_my_session(current.user_id, sid)
+    return CommonResult.success()
+
+
+delete_my_session.__login_only__ = True
 
 
 @router.get("/sso/dingtalk/redirect", summary="钉钉SSO跳转")

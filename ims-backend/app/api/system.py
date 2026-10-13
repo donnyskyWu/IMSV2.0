@@ -559,3 +559,1084 @@ async def get_role_simple_list() -> CommonResult[list[RoleSimpleItem]]:
     service = RoleService()
     items = await service.get_role_simple_list()
     return CommonResult.success(data=items)
+
+
+# ============== B2 System Management Endpoints ==============
+
+# ---------- User Management (U-05 to U-16) ----------
+
+class UserDetailResponse(BaseSchema):
+    """User detail response."""
+    id: str
+    username: str
+    nickname: str
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    status: str
+    main_dept_id: Optional[str] = None
+    main_dept_name: Optional[str] = None
+    dept_ids: list[str] = []
+    dept_names: list[str] = []
+    role_ids: list[str] = []
+    role_names: list[str] = []
+    position_code: Optional[str] = None
+    emp_no: Optional[str] = None
+    source: str
+    pwd_reset_required: bool = False
+    last_login_time: Optional[str] = None
+
+
+class UserUpdateRequest(BaseSchema):
+    """Update user request."""
+    nickname: Optional[str] = None
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+    emp_no: Optional[str] = None
+
+
+class UserRolesUpdateRequest(BaseSchema):
+    """Update user roles request."""
+    role_ids: list[str]
+
+
+@router.get(
+    "/user/get",
+    response_model=CommonResult[UserDetailResponse],
+    summary="获取用户详情",
+    dependencies=[Depends(require_permission("ims:system:user:query"))],
+)
+async def get_user_detail(
+    id: str = Query(..., description="用户ID"),
+) -> CommonResult[UserDetailResponse]:
+    """Get user detail by ID (U-06)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    result = await service.get_user_detail(id)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/user/update",
+    response_model=CommonResult[UserDetailResponse],
+    summary="更新用户信息",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def update_user(
+    id: str = Query(..., description="用户ID"),
+    request: UserUpdateRequest = None,
+) -> CommonResult[UserDetailResponse]:
+    """Update user basic info (U-06)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    result = await service.update_user(id, request)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/user/update-roles",
+    response_model=CommonResult,
+    summary="更新用户角色",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def update_user_roles(
+    id: str = Query(..., description="用户ID"),
+    request: UserRolesUpdateRequest = None,
+) -> CommonResult:
+    """Update user's role assignments (U-08)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    await service.update_user_roles(id, request.role_ids)
+    return CommonResult.success()
+
+
+@router.put(
+    "/user/update-status",
+    response_model=CommonResult,
+    summary="更新用户状态",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def update_user_status(
+    id: str = Query(..., description="用户ID"),
+    status: str = Query(..., description="状态: ACTIVE/FROZEN"),
+) -> CommonResult:
+    """Update user status - freeze or reactivate (U-09)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    await service.update_user_status(id, status)
+    return CommonResult.success()
+
+
+@router.put(
+    "/user/resign",
+    response_model=CommonResult,
+    summary="设为离职",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def resign_user(
+    id: str = Query(..., description="用户ID"),
+) -> CommonResult:
+    """Mark user as resigned (U-10)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    await service.resign_user(id)
+    return CommonResult.success()
+
+
+class ResetPasswordResponse(BaseSchema):
+    """Reset password response."""
+    new_password: str
+
+
+@router.put(
+    "/user/reset-password",
+    response_model=CommonResult[ResetPasswordResponse],
+    summary="重置用户密码",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def reset_user_password(
+    id: str = Query(..., description="用户ID"),
+) -> CommonResult[ResetPasswordResponse]:
+    """Reset user password to a random value (U-11)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    result = await service.reset_password(id)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/user/unlock",
+    response_model=CommonResult,
+    summary="解锁用户",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def unlock_user(
+    id: str = Query(..., description="用户ID"),
+) -> CommonResult:
+    """Unlock a locked user account (U-12)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    await service.unlock_user(id)
+    return CommonResult.success()
+
+
+@router.put(
+    "/user/kick",
+    response_model=CommonResult,
+    summary="强制下线",
+    dependencies=[Depends(require_permission("ims:system:user:update"))],
+)
+async def kick_user(
+    id: str = Query(..., description="用户ID"),
+) -> CommonResult:
+    """Kick user's all sessions offline (U-13)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    await service.kick_user(id)
+    return CommonResult.success()
+
+
+@router.post(
+    "/user/export",
+    response_model=CommonResult,
+    summary="导出用户",
+    dependencies=[Depends(require_permission("ims:system:user:export"))],
+)
+async def export_users() -> CommonResult:
+    """Create user export task (U-15)."""
+    from app.services.system_user import SystemUserService
+    
+    service = SystemUserService()
+    result = await service.export_users()
+    return CommonResult.success(data=result)
+
+
+# ---------- Role Management (R-01 to R-12) ----------
+
+class RoleListItem(BaseSchema):
+    """Role list item."""
+    id: str
+    role_key: str
+    name: str
+    source: str
+    status: str
+    data_scope: Optional[str] = None
+    position_code: Optional[str] = None
+    is_standard: bool = False
+    sort: int = 0
+    remark: Optional[str] = None
+    member_count: int = 0
+
+
+class RoleDetailResponse(BaseSchema):
+    """Role detail response."""
+    id: str
+    role_key: str
+    name: str
+    source: str
+    status: str
+    data_scope: Optional[str] = None
+    position_code: Optional[str] = None
+    is_standard: bool = False
+    sort: int = 0
+    remark: Optional[str] = None
+    menu_ids: list[str] = []
+    member_count: int = 0
+
+
+class RoleCreateRequest(BaseSchema):
+    """Create role request."""
+    role_key: str
+    name: str
+    data_scope: Optional[str] = None
+    sort: int = 0
+    remark: Optional[str] = None
+
+
+class RoleUpdateRequest(BaseSchema):
+    """Update role request."""
+    name: Optional[str] = None
+    sort: Optional[int] = None
+    remark: Optional[str] = None
+
+
+class RoleMenusUpdateRequest(BaseSchema):
+    """Update role menus request."""
+    menu_ids: list[str]
+
+
+class RolePermDetailRequest(BaseSchema):
+    """Update role permission detail request."""
+    perm_code: str
+    r: bool = True
+    w: bool = False
+    d: bool = False
+
+
+class RoleMembersRequest(BaseSchema):
+    """Add/remove role members request."""
+    user_ids: list[str]
+
+
+@router.get(
+    "/role/page",
+    response_model=CommonResult[PageResult[RoleListItem]],
+    summary="角色分页列表",
+    dependencies=[Depends(require_permission("ims:system:role:query"))],
+)
+async def get_role_page(
+    keyword: Optional[str] = Query(None, description="角色名称关键词"),
+    status: Optional[str] = Query(None, description="状态"),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+) -> CommonResult[PageResult[RoleListItem]]:
+    """Get paginated role list (R-01)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    page_param = PageParam(page_no=page_no, page_size=page_size)
+    result = await service.get_role_page(page_param, keyword, status)
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/role",
+    response_model=CommonResult[RoleDetailResponse],
+    summary="创建角色",
+    dependencies=[Depends(require_permission("ims:system:role:create"))],
+)
+async def create_role(request: RoleCreateRequest) -> CommonResult[RoleDetailResponse]:
+    """Create a new role (R-02)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    result = await service.create_role(request)
+    return CommonResult.success(data=result)
+
+
+@router.get(
+    "/role/get",
+    response_model=CommonResult[RoleDetailResponse],
+    summary="获取角色详情",
+    dependencies=[Depends(require_permission("ims:system:role:query"))],
+)
+async def get_role_detail(
+    id: str = Query(..., description="角色ID"),
+) -> CommonResult[RoleDetailResponse]:
+    """Get role detail (R-03)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    result = await service.get_role_detail(id)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/role/update",
+    response_model=CommonResult[RoleDetailResponse],
+    summary="更新角色",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def update_role(
+    id: str = Query(..., description="角色ID"),
+    request: RoleUpdateRequest = None,
+) -> CommonResult[RoleDetailResponse]:
+    """Update role basic info (R-03)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    result = await service.update_role(id, request)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/role/update-status",
+    response_model=CommonResult,
+    summary="更新角色状态",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def update_role_status(
+    id: str = Query(..., description="角色ID"),
+    status: str = Query(..., description="状态: ENABLED/DISABLED"),
+) -> CommonResult:
+    """Update role status (R-03)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.update_role_status(id, status)
+    return CommonResult.success()
+
+
+@router.put(
+    "/role/{id}/menus",
+    response_model=CommonResult,
+    summary="配置角色菜单",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def update_role_menus(
+    id: str,
+    request: RoleMenusUpdateRequest,
+) -> CommonResult:
+    """Update role menu assignments (R-04)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.update_role_menus(id, request.menu_ids)
+    return CommonResult.success()
+
+
+@router.put(
+    "/role/{id}/perm-detail",
+    response_model=CommonResult,
+    summary="配置角色功能点权限",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def update_role_perm_detail(
+    id: str,
+    request: RolePermDetailRequest,
+) -> CommonResult:
+    """Update role permission detail R/W/D (R-04)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    result = await service.update_role_perm_detail(id, request.perm_code, request.r, request.w, request.d)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/role/{id}/data-scope",
+    response_model=CommonResult,
+    summary="配置角色数据范围",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def update_role_data_scope(
+    id: str,
+    data_scope: str = Query(..., description="数据范围: ALL/DEPT/SELF"),
+) -> CommonResult:
+    """Update role data scope (R-05)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.update_role_data_scope(id, data_scope)
+    return CommonResult.success()
+
+
+@router.put(
+    "/role/{id}/dingtalk-position",
+    response_model=CommonResult,
+    summary="绑定钉钉岗位",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def update_role_dingtalk_position(
+    id: str,
+    position_code: str = Query(None, description="岗位编码"),
+) -> CommonResult:
+    """Update role DingTalk position binding (R-06)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.update_role_dingtalk_position(id, position_code)
+    return CommonResult.success()
+
+
+@router.get(
+    "/role/{id}/members",
+    response_model=CommonResult[PageResult[UserSimpleItem]],
+    summary="获取角色成员",
+    dependencies=[Depends(require_permission("ims:system:role:query"))],
+)
+async def get_role_members(
+    id: str,
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+) -> CommonResult[PageResult[UserSimpleItem]]:
+    """Get role members (R-09)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    page_param = PageParam(page_no=page_no, page_size=page_size)
+    result = await service.get_role_members(id, page_param)
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/role/{id}/members",
+    response_model=CommonResult,
+    summary="添加角色成员",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def add_role_members(
+    id: str,
+    request: RoleMembersRequest,
+) -> CommonResult:
+    """Add members to role (R-09)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.add_role_members(id, request.user_ids)
+    return CommonResult.success()
+
+
+@router.delete(
+    "/role/{id}/members",
+    response_model=CommonResult,
+    summary="移除角色成员",
+    dependencies=[Depends(require_permission("ims:system:role:update"))],
+)
+async def remove_role_members(
+    id: str,
+    request: RoleMembersRequest,
+) -> CommonResult:
+    """Remove members from role (R-09)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.remove_role_members(id, request.user_ids)
+    return CommonResult.success()
+
+
+@router.delete(
+    "/role/delete",
+    response_model=CommonResult,
+    summary="删除角色",
+    dependencies=[Depends(require_permission("ims:system:role:delete"))],
+)
+async def delete_role(
+    id: str = Query(..., description="角色ID"),
+) -> CommonResult:
+    """Delete role (R-10)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    await service.delete_role(id)
+    return CommonResult.success()
+
+
+@router.post(
+    "/role/export",
+    response_model=CommonResult,
+    summary="导出角色",
+    dependencies=[Depends(require_permission("ims:system:role:export"))],
+)
+async def export_roles() -> CommonResult:
+    """Create role export task (R-12)."""
+    from app.services.system_role import SystemRoleService
+    
+    service = SystemRoleService()
+    result = await service.export_roles()
+    return CommonResult.success(data=result)
+
+
+# ---------- Menu Management (M-01 to M-04) ----------
+
+class MenuTreeNode(BaseSchema):
+    """Menu tree node."""
+    id: str
+    parent_id: Optional[str] = None
+    type: str
+    name: str
+    perm_code: Optional[str] = None
+    path: Optional[str] = None
+    component: Optional[str] = None
+    icon: Optional[str] = None
+    sort: int = 0
+    visible: bool = True
+    status: str
+    children: list["MenuTreeNode"] = []
+
+
+class MenuCreateRequest(BaseSchema):
+    """Create menu request."""
+    parent_id: Optional[str] = None
+    type: str
+    name: str
+    perm_code: Optional[str] = None
+    path: Optional[str] = None
+    component: Optional[str] = None
+    icon: Optional[str] = None
+    sort: int = 0
+    visible: bool = True
+
+
+class MenuUpdateRequest(BaseSchema):
+    """Update menu request."""
+    name: Optional[str] = None
+    path: Optional[str] = None
+    component: Optional[str] = None
+    icon: Optional[str] = None
+    sort: Optional[int] = None
+    visible: Optional[bool] = None
+
+
+@router.get(
+    "/menu/tree",
+    response_model=CommonResult[list[MenuTreeNode]],
+    summary="获取菜单树",
+    dependencies=[Depends(require_permission("ims:system:menu:query"))],
+)
+async def get_menu_tree(
+    keyword: Optional[str] = Query(None, description="菜单名称关键词"),
+) -> CommonResult[list[MenuTreeNode]]:
+    """Get full menu tree (M-01). Platform tenant only."""
+    from app.services.system_menu import SystemMenuService
+    
+    service = SystemMenuService()
+    result = await service.get_menu_tree(keyword)
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/menu/create",
+    response_model=CommonResult,
+    summary="创建菜单",
+    dependencies=[Depends(require_permission("ims:system:menu:create"))],
+)
+async def create_menu(request: MenuCreateRequest) -> CommonResult:
+    """Create a new menu (M-02). Platform tenant only."""
+    from app.services.system_menu import SystemMenuService
+    
+    service = SystemMenuService()
+    result = await service.create_menu(request)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/menu/update",
+    response_model=CommonResult,
+    summary="更新菜单",
+    dependencies=[Depends(require_permission("ims:system:menu:update"))],
+)
+async def update_menu(
+    id: str = Query(..., description="菜单ID"),
+    request: MenuUpdateRequest = None,
+) -> CommonResult:
+    """Update menu (M-02). Platform tenant only."""
+    from app.services.system_menu import SystemMenuService
+    
+    service = SystemMenuService()
+    result = await service.update_menu(id, request)
+    return CommonResult.success(data=result)
+
+
+@router.delete(
+    "/menu/delete",
+    response_model=CommonResult,
+    summary="删除菜单",
+    dependencies=[Depends(require_permission("ims:system:menu:delete"))],
+)
+async def delete_menu(
+    id: str = Query(..., description="菜单ID"),
+) -> CommonResult:
+    """Delete menu (M-04). Platform tenant only."""
+    from app.services.system_menu import SystemMenuService
+    
+    service = SystemMenuService()
+    await service.delete_menu(id)
+    return CommonResult.success()
+
+
+# ---------- Log Management (L-01 to L-04) ----------
+
+class OperateLogListItem(BaseSchema):
+    """Operation log list item."""
+    id: str
+    module: str
+    operation: str
+    operator_name: Optional[str] = None
+    result: str
+    ip: Optional[str] = None
+    duration_ms: Optional[int] = None
+    create_time: Optional[str] = None
+
+
+class OperateLogDetailResponse(BaseSchema):
+    """Operation log detail response."""
+    id: str
+    module: str
+    operation: str
+    object_type: Optional[str] = None
+    object_id: Optional[str] = None
+    operator_name: Optional[str] = None
+    result: str
+    error_code: Optional[int] = None
+    ip: Optional[str] = None
+    duration_ms: Optional[int] = None
+    request_path: Optional[str] = None
+    request_method: Optional[str] = None
+    request_params: Optional[str] = None
+    create_time: Optional[str] = None
+
+
+class LoginLogListItem(BaseSchema):
+    """Login log list item."""
+    id: str
+    username: str
+    user_id: Optional[str] = None
+    login_method: str
+    result: str
+    ip: Optional[str] = None
+    device: Optional[str] = None
+    create_time: Optional[str] = None
+
+
+@router.get(
+    "/operate-log/page",
+    response_model=CommonResult[PageResult[OperateLogListItem]],
+    summary="操作日志分页列表",
+    dependencies=[Depends(require_permission("ims:system:log:query"))],
+)
+async def get_operate_log_page(
+    module: Optional[str] = Query(None, description="模块"),
+    operation: Optional[str] = Query(None, description="操作"),
+    operator_name: Optional[str] = Query(None, description="操作人"),
+    start_time: Optional[str] = Query(None, description="开始时间"),
+    end_time: Optional[str] = Query(None, description="结束时间"),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+) -> CommonResult[PageResult[OperateLogListItem]]:
+    """Get paginated operation log list (L-01)."""
+    from app.services.system_log import SystemLogService
+    
+    service = SystemLogService()
+    page_param = PageParam(page_no=page_no, page_size=page_size)
+    result = await service.get_operate_log_page(page_param, module, operation, operator_name, start_time, end_time)
+    return CommonResult.success(data=result)
+
+
+@router.get(
+    "/operate-log/get",
+    response_model=CommonResult[OperateLogDetailResponse],
+    summary="获取操作日志详情",
+    dependencies=[Depends(require_permission("ims:system:log:query"))],
+)
+async def get_operate_log_detail(
+    id: str = Query(..., description="日志ID"),
+) -> CommonResult[OperateLogDetailResponse]:
+    """Get operation log detail (L-02)."""
+    from app.services.system_log import SystemLogService
+    
+    service = SystemLogService()
+    result = await service.get_operate_log_detail(id)
+    return CommonResult.success(data=result)
+
+
+@router.get(
+    "/login-log/page",
+    response_model=CommonResult[PageResult[LoginLogListItem]],
+    summary="登录日志分页列表",
+    dependencies=[Depends(require_permission("ims:system:log:query"))],
+)
+async def get_login_log_page(
+    username: Optional[str] = Query(None, description="用户名"),
+    result: Optional[str] = Query(None, description="结果"),
+    start_time: Optional[str] = Query(None, description="开始时间"),
+    end_time: Optional[str] = Query(None, description="结束时间"),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+) -> CommonResult[PageResult[LoginLogListItem]]:
+    """Get paginated login log list (L-03)."""
+    from app.services.system_log import SystemLogService
+    
+    service = SystemLogService()
+    page_param = PageParam(page_no=page_no, page_size=page_size)
+    log_result = await service.get_login_log_page(page_param, username, result, start_time, end_time)
+    return CommonResult.success(data=log_result)
+
+
+@router.post(
+    "/operate-log/export",
+    response_model=CommonResult,
+    summary="导出操作日志",
+    dependencies=[Depends(require_permission("ims:system:log:export"))],
+)
+async def export_operate_logs() -> CommonResult:
+    """Create operation log export task (L-04)."""
+    from app.services.system_log import SystemLogService
+    
+    service = SystemLogService()
+    result = await service.export_operate_logs()
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/login-log/export",
+    response_model=CommonResult,
+    summary="导出登录日志",
+    dependencies=[Depends(require_permission("ims:system:log:export"))],
+)
+async def export_login_logs() -> CommonResult:
+    """Create login log export task (L-04)."""
+    from app.services.system_log import SystemLogService
+    
+    service = SystemLogService()
+    result = await service.export_login_logs()
+    return CommonResult.success(data=result)
+
+
+# ---------- Parameter Management (P-01 to P-03) ----------
+
+class ParamListItem(BaseSchema):
+    """Parameter list item."""
+    id: str
+    param_key: str
+    name: str
+    group: str
+    value_type: str
+    value: Optional[str] = None
+    default_value: Optional[str] = None
+    min_value: Optional[str] = None
+    max_value: Optional[str] = None
+    options: Optional[str] = None
+    is_builtin: bool = True
+    remark: Optional[str] = None
+
+
+@router.get(
+    "/param/list",
+    response_model=CommonResult[list[ParamListItem]],
+    summary="获取参数列表",
+    dependencies=[Depends(require_permission("ims:system:param:query"))],
+)
+async def get_param_list(
+    group: Optional[str] = Query(None, description="参数分组"),
+) -> CommonResult[list[ParamListItem]]:
+    """Get parameter list (P-01)."""
+    from app.services.system_param import SystemParamService
+    
+    service = SystemParamService()
+    result = await service.get_param_list(group)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/param/update",
+    response_model=CommonResult,
+    summary="更新参数",
+    dependencies=[Depends(require_permission("ims:system:param:update"))],
+)
+async def update_param(
+    param_key: str = Query(..., description="参数键"),
+    value: str = Query(..., description="参数值"),
+) -> CommonResult:
+    """Update parameter value (P-02)."""
+    from app.services.system_param import SystemParamService
+    
+    service = SystemParamService()
+    result = await service.update_param(param_key, value)
+    return CommonResult.success(data=result)
+
+
+# ---------- Calendar Management (Q4) ----------
+
+class CalendarDayItem(BaseSchema):
+    """Calendar day item."""
+    id: str
+    day: str
+    kind: str
+
+
+@router.get(
+    "/calendar/list",
+    response_model=CommonResult[list[CalendarDayItem]],
+    summary="获取工作日历",
+    dependencies=[Depends(require_permission("ims:system:calendar:query"))],
+)
+async def get_calendar_list(
+    year: int = Query(..., description="年份"),
+    month: Optional[int] = Query(None, description="月份"),
+) -> CommonResult[list[CalendarDayItem]]:
+    """Get calendar list (Q4)."""
+    from app.services.system_calendar import SystemCalendarService
+    
+    service = SystemCalendarService()
+    result = await service.get_calendar_list(year, month)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/calendar/update",
+    response_model=CommonResult,
+    summary="更新工作日历",
+    dependencies=[Depends(require_permission("ims:system:calendar:update"))],
+)
+async def update_calendar(
+    day: str = Query(..., description="日期 YYYY-MM-DD"),
+    kind: str = Query(..., description="类型: HOLIDAY/WORKDAY/NORMAL"),
+) -> CommonResult:
+    """Update calendar day (Q4)."""
+    from app.services.system_calendar import SystemCalendarService
+    
+    service = SystemCalendarService()
+    result = await service.update_calendar(day, kind)
+    return CommonResult.success(data=result)
+
+
+# ---------- Notification Management (N-01 to N-02) ----------
+
+class NotifyRecordListItem(BaseSchema):
+    """Notification record list item."""
+    id: str
+    event_type: str
+    status: str
+    synced_at: Optional[str] = None
+    create_time: Optional[str] = None
+
+
+@router.get(
+    "/notify-record/page",
+    response_model=CommonResult[PageResult[NotifyRecordListItem]],
+    summary="通知记录分页列表",
+    dependencies=[Depends(require_permission("ims:system:notify:query"))],
+)
+async def get_notify_record_page(
+    status: Optional[str] = Query(None, description="状态"),
+    event_type: Optional[str] = Query(None, description="事件类型"),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+) -> CommonResult[PageResult[NotifyRecordListItem]]:
+    """Get paginated notification record list (N-01)."""
+    from app.services.system_notify import SystemNotifyService
+    
+    service = SystemNotifyService()
+    page_param = PageParam(page_no=page_no, page_size=page_size)
+    result = await service.get_notify_record_page(page_param, status, event_type)
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/notify-record/resend",
+    response_model=CommonResult,
+    summary="重发通知",
+    dependencies=[Depends(require_permission("ims:system:notify:update"))],
+)
+async def resend_notification(
+    id: str = Query(..., description="记录ID"),
+) -> CommonResult:
+    """Resend a failed notification (N-02)."""
+    from app.services.system_notify import SystemNotifyService
+    
+    service = SystemNotifyService()
+    result = await service.resend_notification(id)
+    return CommonResult.success(data=result)
+
+
+# ---------- Tenant Management (T-01 to T-04) ----------
+
+class TenantListItem(BaseSchema):
+    """Tenant list item."""
+    id: str
+    name: str
+    package_id: Optional[str] = None
+    status: str
+    expire_time: Optional[str] = None
+
+
+class TenantCreateRequest(BaseSchema):
+    """Create tenant request."""
+    name: str
+    package_id: Optional[str] = None
+    admin_username: str
+    expire_time: Optional[str] = None
+
+
+class TenantUpdateRequest(BaseSchema):
+    """Update tenant request."""
+    name: Optional[str] = None
+    package_id: Optional[str] = None
+    status: Optional[str] = None
+    expire_time: Optional[str] = None
+
+
+class TenantCreateResponse(BaseSchema):
+    """Create tenant response."""
+    tenant_id: str
+    admin_password: str
+
+
+class PackageSimpleItem(BaseSchema):
+    """Simple package item."""
+    id: str
+    name: str
+
+
+class PackageListItem(BaseSchema):
+    """Package list item."""
+    id: str
+    name: str
+    status: str
+    menu_count: int = 0
+
+
+class PackageCreateRequest(BaseSchema):
+    """Create package request."""
+    name: str
+
+
+class PackageUpdateRequest(BaseSchema):
+    """Update package request."""
+    name: Optional[str] = None
+    menu_ids: Optional[list[str]] = None
+
+
+@router.get(
+    "/tenant/page",
+    response_model=CommonResult[PageResult[TenantListItem]],
+    summary="租户分页列表",
+    dependencies=[Depends(require_permission("ims:system:tenant:query"))],
+)
+async def get_tenant_page(
+    keyword: Optional[str] = Query(None, description="租户名称关键词"),
+    status: Optional[str] = Query(None, description="状态"),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
+) -> CommonResult[PageResult[TenantListItem]]:
+    """Get paginated tenant list (T-01). Platform-only."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    page_param = PageParam(page_no=page_no, page_size=page_size)
+    result = await service.get_tenant_page(page_param, keyword, status)
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/tenant/create",
+    response_model=CommonResult[TenantCreateResponse],
+    summary="创建租户",
+    dependencies=[Depends(require_permission("ims:system:tenant:create"))],
+)
+async def create_tenant(request: TenantCreateRequest) -> CommonResult[TenantCreateResponse]:
+    """Create a new tenant (T-02). Platform-only."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    result = await service.create_tenant(request)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/tenant/{id}",
+    response_model=CommonResult,
+    summary="更新租户",
+    dependencies=[Depends(require_permission("ims:system:tenant:update"))],
+)
+async def update_tenant(
+    id: str,
+    request: TenantUpdateRequest,
+) -> CommonResult:
+    """Update tenant (T-03). Platform-only."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    result = await service.update_tenant(id, request)
+    return CommonResult.success(data=result)
+
+
+@router.get(
+    "/tenant-package/simple-list",
+    response_model=CommonResult[list[PackageSimpleItem]],
+    summary="套餐选择器列表",
+    dependencies=[Depends(require_permission("ims:system:tenant:query"))],
+)
+async def get_package_simple_list() -> CommonResult[list[PackageSimpleItem]]:
+    """Get simple package list for selectors (T-03)."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    result = await service.get_package_simple_list()
+    return CommonResult.success(data=result)
+
+
+@router.get(
+    "/tenant-package/list",
+    response_model=CommonResult[list[PackageListItem]],
+    summary="套餐列表",
+    dependencies=[Depends(require_permission("ims:system:tenant:query"))],
+)
+async def get_package_list() -> CommonResult[list[PackageListItem]]:
+    """Get full package list (T-04). Platform-only."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    result = await service.get_package_list()
+    return CommonResult.success(data=result)
+
+
+@router.post(
+    "/tenant-package/create",
+    response_model=CommonResult,
+    summary="创建套餐",
+    dependencies=[Depends(require_permission("ims:system:tenant:create"))],
+)
+async def create_package(request: PackageCreateRequest) -> CommonResult:
+    """Create a new package (T-04). Platform-only."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    result = await service.create_package(request)
+    return CommonResult.success(data=result)
+
+
+@router.put(
+    "/tenant-package/update",
+    response_model=CommonResult,
+    summary="更新套餐",
+    dependencies=[Depends(require_permission("ims:system:tenant:update"))],
+)
+async def update_package(
+    id: str = Query(..., description="套餐ID"),
+    request: PackageUpdateRequest = None,
+) -> CommonResult:
+    """Update package (T-04). Platform-only."""
+    from app.services.system_tenant import SystemTenantService
+    
+    service = SystemTenantService()
+    result = await service.update_package(id, request)
+    return CommonResult.success(data=result)
