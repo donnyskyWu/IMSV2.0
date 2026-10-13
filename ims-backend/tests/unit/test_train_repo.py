@@ -309,15 +309,15 @@ class TestTrainMaterialVersionRepo:
         assert result == []
 
 
-class TestTrainDeptAlertRepo:
-    """Tests for TrainDeptAlertRepo."""
+class TestTrainAlertRepo:
+    """Tests for TrainAlertRepo."""
 
     def test_has_alert_false(self, db_session, test_context):
         """Has alert returns false when not found."""
         from app.core.context import ctx
-        from app.domains.train.repo import TrainDeptAlertRepo
+        from app.domains.train.repo import TrainAlertRepo
 
-        repo = TrainDeptAlertRepo(db_session)
+        repo = TrainAlertRepo(db_session)
         result = repo.has_alert(ctx.tenant_id, 1, "2026-10-07")
 
         assert result is False
