@@ -7,11 +7,16 @@ Covers:
 - UT-B03-02: Frozen/resigned cannot login
 - UT-B03-03-08: User department relationships
 - UT-B03-13-14: DingTalk mapping uniqueness
+- UT-B1-USER-DELETE: Logged-in user deletion blocked with 1001
 """
 
+from datetime import datetime
+
+import pytest
 
 from app.core.errors import BizError
 from app.domains.sys.models import User, UserDept
+from tests.support import rows
 
 
 class TestUserStatus:
@@ -233,3 +238,57 @@ class TestUserTokenVersion:
 
         db_session.refresh(user)
         assert user.token_version == 1
+
+
+class TestUserDeletion:
+    """Tests for user deletion rules (FP-B1-LG-07, FP-B03-01)."""
+
+    @pytest.mark.asyncio
+    async def test_delete_logged_in_user_raises_1001(self, db_session, admin_context):
+        """UT-B1-USER-DELETE: Deleting a logged-in user raises BizError 1001."""
+        from app.services.user import UserService
+
+        user = rows.user(
+            db_session,
+            "logged_in_user",
+            last_login_time=datetime(2026, 10, 13, 9, 0, 0),
+        )
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_user(str(user.id))
+
+        assert exc.value.code == 1001
+        assert "已登录过的用户不能删除" in exc.value.msg
+        assert "冻结或离职" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_delete_never_logged_in_user_succeeds(self, db_session, admin_context):
+        """Deleting a never-logged-in user succeeds."""
+        from app.services.user import UserService
+
+        user = rows.user(db_session, "never_logged_in_user")
+        assert user.last_login_time is None
+        user_id = user.id
+
+        service = UserService()
+        await service.delete_user(str(user_id))
+
+        db_session.expire_all()
+        deleted_user = db_session.query(User).filter(User.id == user_id).first()
+        assert deleted_user.deleted == user_id
+
+    @pytest.mark.asyncio
+    async def test_delete_resigned_user_raises_1502(self, db_session, admin_context):
+        """Deleting a RESIGNED user raises BizError 1502."""
+        from app.services.user import UserService
+
+        user = rows.user(db_session, "resigned_user", status="RESIGNED")
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_user(str(user.id))
+
+        assert exc.value.code == 1502

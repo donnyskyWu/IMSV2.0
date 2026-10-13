@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
 
 const proxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'
+const webPort = process.env.E2E_WEB_PORT || '3000'
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../ims-backend')
 
 function loadSeedAccount(): void {
@@ -60,7 +61,7 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   timeout: 60_000,
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: `http://127.0.0.1:${webPort}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -75,7 +76,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://127.0.0.1:3000',
+    url: `http://127.0.0.1:${webPort}`,
     // CI 先单独起 Vite 并请求 / 与 /login。这里复用那次进程，避免再冷启动一次。
     reuseExistingServer: !!process.env.CI,
     timeout: 60_000,
