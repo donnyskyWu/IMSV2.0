@@ -111,11 +111,8 @@ def create_app() -> FastAPI:
     @app.exception_handler(BizError)
     async def biz_error_handler(request: Request, exc: BizError) -> JSONResponse:
         """Handle business exceptions."""
-        # HTTP 401 for auth-related errors:
-        # - 1002: session invalid
-        # - 1003: token expired
-        # - 1216: frozen/resigned (cannot login or refresh)
-        status_code = 401 if exc.code in (1002, 1003, 1216) else 200
+        # HTTP 401 for auth-related errors (1002, 1003)
+        status_code = 401 if exc.code in (1002, 1003) else 200
 
         return JSONResponse(
             status_code=status_code,

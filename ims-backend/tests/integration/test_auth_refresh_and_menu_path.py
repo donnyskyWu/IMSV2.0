@@ -339,7 +339,8 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     # Clear the main session's cache so the next query will reload
     db_session.expire_all()
     frozen_resp = _refresh(app_client, frozen_tokens["refreshToken"])
-    assert frozen_resp.status_code == 401, f"Expected 401 but got {frozen_resp.status_code}: {frozen_resp.json()}"
+    # 1216 returns HTTP 200, same as login endpoint (1002/1003 return 401)
+    assert frozen_resp.status_code == 200, f"Expected 200 but got {frozen_resp.status_code}: {frozen_resp.json()}"
     assert frozen_resp.json()["code"] == 1216
 
     resigned_user = _add_user(db_session, "refresh_resigned")
@@ -351,7 +352,7 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     update_session2.close()
     db_session.expire_all()
     resigned_resp = _refresh(app_client, resigned_tokens["refreshToken"])
-    assert resigned_resp.status_code == 401, f"Expected 401 but got {resigned_resp.status_code}: {resigned_resp.json()}"
+    assert resigned_resp.status_code == 200, f"Expected 200 but got {resigned_resp.status_code}: {resigned_resp.json()}"
     assert resigned_resp.json()["code"] == 1216
 
 
