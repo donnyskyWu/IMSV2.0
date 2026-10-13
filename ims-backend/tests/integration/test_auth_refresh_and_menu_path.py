@@ -277,7 +277,10 @@ def test_logout_and_change_password_reject_old_refresh(
 def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     app_client, db_session, real_redis, test_context,
 ):
-    """会话对不上、被拉黑、用户不存在或已冻结时，刷新返回 1002。"""
+    """会话对不上、被拉黑、用户不存在或已冻结时，刷新返回 1002 或 1216。
+
+    冻结/离职返回 1216（差异 c/d），其余返回 1002。
+    """
     from app.core.cache import Cache
     from app.domains.sys.models import User
     from app.services.auth import AuthService
@@ -287,8 +290,9 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     def _open(username: str) -> tuple[dict, str]:
         person = _add_user(db_session, username)
         tokens = _login(app_client, person.username)
-        session_id = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{tokens['refreshToken']}")
-        assert session_id
+        index_val = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{tokens['refreshToken']}")
+        assert index_val
+        session_id = str(index_val).split(":")[0]
         return tokens, session_id
 
     mismatch, mismatch_sid = _open("refresh_mismatch")
@@ -328,7 +332,7 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     db_session.flush()
     frozen_resp = _refresh(app_client, frozen_tokens["refreshToken"])
     assert frozen_resp.status_code == 401
-    assert frozen_resp.json()["code"] == 1002
+    assert frozen_resp.json()["code"] == 1216
 
     resigned_user = _add_user(db_session, "refresh_resigned")
     resigned_tokens = _login(app_client, resigned_user.username)
@@ -337,7 +341,7 @@ def test_refresh_rejects_blocked_missing_and_frozen_sessions(
     db_session.flush()
     resigned_resp = _refresh(app_client, resigned_tokens["refreshToken"])
     assert resigned_resp.status_code == 401
-    assert resigned_resp.json()["code"] == 1002
+    assert resigned_resp.json()["code"] == 1216
 
 
 def test_logout_without_refresh_index_and_revoke_missing_session(
@@ -441,19 +445,22 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     assert new_refresh != near_tokens["refreshToken"]
     # 新 access 的 iat 跟着注入时钟走，会落到真实时间的未来。PyJWT 默认用墙钟，
     # 所以会话 id 从 Redis 的刷新索引读，不解码 JWT。TTL 要立刻读。
-    session_id = real_redis.get(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
-    assert session_id
+    # 索引值格式为 session_id:user_id，需要解析出 session_id。
+    index_val = real_redis.get(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
+    assert index_val
+    session_id = (index_val.decode() if isinstance(index_val, bytes) else str(index_val)).split(":")[0]
     refresh_ttl = real_redis.ttl(f"{service.REFRESH_INDEX_PREFIX}{new_refresh}")
     session_ttl = real_redis.ttl(f"{service.SESSION_PREFIX}{session_id}")
-    assert refresh_ttl in (0, 1)
-    assert session_ttl in (0, 1)
+    assert refresh_ttl in (0, 1), f"refresh_ttl={refresh_ttl}"
+    assert session_ttl in (0, 1), f"session_ttl={session_ttl}"
     assert refresh_ttl != full_ttl
     assert session_ttl != full_ttl
     stored = Cache.get_json(f"{service.SESSION_PREFIX}{session_id}")
     assert stored["expires_at"] == (start + timedelta(seconds=full_ttl)).isoformat()
 
     # 旧数据没有 expires_at 时，用登录时间 + 7 天，同样不续期。
-    legacy_sid = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{legacy_tokens['refreshToken']}")
+    legacy_index = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{legacy_tokens['refreshToken']}")
+    legacy_sid = str(legacy_index).split(":")[0]
     legacy_key = f"{service.SESSION_PREFIX}{legacy_sid}"
     legacy_data = Cache.get_json(legacy_key)
     legacy_data.pop("expires_at", None)
@@ -469,7 +476,8 @@ def test_refresh_absolute_seven_day_boundary_and_remaining_ttl(
     assert legacy_ttl != full_ttl
 
     # 没有登录时间也没有到期时间：按已过期拒绝。
-    blank_sid = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{blank_tokens['refreshToken']}")
+    blank_index = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{blank_tokens['refreshToken']}")
+    blank_sid = str(blank_index).split(":")[0]
     blank_key = f"{service.SESSION_PREFIX}{blank_sid}"
     blank_data = Cache.get_json(blank_key)
     blank_data.pop("expires_at", None)

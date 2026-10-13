@@ -516,7 +516,7 @@ def test_real_lock_freeze_and_password_change(tmp_path):
             )
             tenant_body = tenant.json()
             assert tenant_body["code"] == 1008
-            assert tenant_body["msg"] == "所属组织已停用"
+            assert tenant_body["msg"] == "所属组织已停用，请联系管理员"
 
             first = client.post(
                 "/admin-api/ims/auth/login",
