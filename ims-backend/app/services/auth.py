@@ -322,9 +322,10 @@ class AuthService:
             ttl=settings.jwt.refresh_token_ttl,
         )
         # 反向索引，刷新时不必扫描全部会话。TTL 与会话同时到期。
+        # 值包含 user_id，会话失效时查用户状态区分 1002 和 1216。
         Cache.set(
             f"{self.REFRESH_INDEX_PREFIX}{refresh_token}",
-            session_id,
+            f"{session_id}:{user.id}",
             ttl=settings.jwt.refresh_token_ttl,
         )
 
@@ -398,6 +399,11 @@ class AuthService:
         # Check if session is still valid
         session_data = Cache.get_json(f"{self.SESSION_PREFIX}{session_id}")
         if not session_data:
+            # 会话缺失时查用户状态，冻结/离职返回 1216
+            from app.domains.sys.models import User
+            user = get_db_session().query(User).filter(User.id == user_id, User.deleted == 0).first()
+            if user and user.status in ("FROZEN", "RESIGNED"):
+                raise BizError(1216)
             raise BizError(1002)
         # 会话从登录起绝对 7 天，到点后访问令牌也失效（不靠 Redis 滑动续期）。
         if session_remaining_seconds(session_data) <= 0:
@@ -405,6 +411,11 @@ class AuthService:
 
         # Check blacklist
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
+            # 黑名单时查用户状态，冻结/离职返回 1216
+            from app.domains.sys.models import User
+            user = get_db_session().query(User).filter(User.id == user_id, User.deleted == 0).first()
+            if user and user.status in ("FROZEN", "RESIGNED"):
+                raise BizError(1216)
             raise BizError(1002)
 
         # 须改密标记以库里的当前值为准。用户行不存在时不在这里改 1002，
@@ -521,6 +532,7 @@ class AuthService:
     async def _issue_rotated_tokens(
         self,
         session_id: str,
+        user_id: int | None,
         refresh_token: str,
         used_key: str,
     ) -> dict[str, Any]:
@@ -530,8 +542,20 @@ class AuthService:
         session_key = f"{self.SESSION_PREFIX}{session_id}"
         session_data = Cache.get_json(session_key)
         if not isinstance(session_data, dict) or session_data.get("refresh_token") != refresh_token:
+            # 会话缺失分支：用 user_id 查用户状态，冻结/离职返回 1216
+            if user_id:
+                db = get_db_session()
+                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
+                if user and user.status in ("FROZEN", "RESIGNED"):
+                    raise BizError(1216)
             raise BizError(1002)
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
+            # 黑名单分支：用 user_id 查用户状态，冻结/离职返回 1216
+            if user_id:
+                db = get_db_session()
+                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
+                if user and user.status in ("FROZEN", "RESIGNED"):
+                    raise BizError(1216)
             raise BizError(1002)
 
         db = get_db_session()
@@ -539,8 +563,10 @@ class AuthService:
             User.id == int(session_data["user_id"]),
             User.deleted == 0,
         ).first()
-        if user is None or user.status in ("FROZEN", "RESIGNED"):
+        if user is None:
             raise BizError(1002)
+        if user.status in ("FROZEN", "RESIGNED"):
+            raise BizError(1216)
         # 停用或过期租户不能靠刷新续命，与登录共用同一校验。
         # 调用方 refresh() 已经 GETDEL 领走旧令牌。这里返回 1008 时旧 refresh 不会退回，必须重新登录。
         reject_unavailable_tenant(user.tenant_id)
@@ -566,14 +592,15 @@ class AuthService:
         )
         session_data["refresh_token"] = new_refresh
         Cache.set_json(session_key, session_data, ttl=remaining)
+        # 反向索引值包含 user_id，会话失效时查用户状态区分 1002 和 1216。
         Cache.set(
             f"{self.REFRESH_INDEX_PREFIX}{new_refresh}",
-            session_id,
+            f"{session_id}:{user.id}",
             ttl=remaining,
         )
         # 新令牌落库之后才标记旧令牌。重放旧令牌时凭这个标记吊销整段会话。
         # 已轮换标记的 TTL 同样用剩余时长，不重新给满 7 天。
-        Cache.set(used_key, session_id, ttl=remaining)
+        Cache.set(used_key, f"{session_id}:{user.id}", ttl=remaining)
         return {
             "access_token": access_token,
             "refresh_token": new_refresh,
@@ -606,7 +633,8 @@ class AuthService:
         # 先领走旧 refresh，再进 _issue_rotated_tokens 校验租户。
         # 租户停用或过期返回 1008 时，旧令牌已经消耗，调用方必须重新登录。
         # status: ok / concurrent / reuse / missing（GETDEL 为空且不是重放）
-        session_id, status = Cache.claim_refresh(lock_key, index_key, used_key, lock_ttl=10)
+        # user_id 用于会话失效时查用户状态，区分 1002 和 1216。
+        session_id, user_id, status = Cache.claim_refresh(lock_key, index_key, used_key, lock_ttl=10)
         try:
             if status == "concurrent":
                 raise BizError(1002)
@@ -616,7 +644,7 @@ class AuthService:
             if status != "ok":
                 # GETDEL 为空：令牌不存在、已过期，或登出/改密时索引已被删掉。
                 raise BizError(1002)
-            return await self._issue_rotated_tokens(session_id, refresh_token, used_key)
+            return await self._issue_rotated_tokens(session_id, user_id, refresh_token, used_key)
         finally:
             # 并发失败者没有拿到锁，不能把赢家的锁删掉。
             if status != "concurrent":
