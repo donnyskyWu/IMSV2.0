@@ -15,6 +15,7 @@ from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import Field
 
 from app.api.deps import require_permission
 from app.core.clock import get_now
@@ -35,7 +36,8 @@ class SyncMetricsResponse(BaseSchema):
     dead_event_count: int
     avg_delay_minutes: float
     p95_delay_minutes: float
-    success_rate_24h: float
+    # to_camel 会把末尾 h 收成 H（successRate24H），契约键是 successRate24h。
+    success_rate_24h: float = Field(alias="successRate24h")
     dingtalk_unavailable: bool
     reconcile_failed_twice: bool
 

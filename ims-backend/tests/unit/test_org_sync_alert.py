@@ -552,3 +552,34 @@ class TestAlertDelivery:
         assert metrics["successRate24h"] == 0.5
         assert metrics["dingtalkUnavailable"] is True
         assert metrics["reconcileFailedTwice"] is True
+
+    def test_sync_metrics_http_keeps_success_rate_24h_key(self, db_session, client):
+        """接口返回 successRate24h。别名收成 successRate24H 时响应校验失败，对外是 5007。"""
+        import bcrypt
+
+        password_hash = bcrypt.hashpw(b"Test1234", bcrypt.gensalt(rounds=4)).decode()
+        person = rows.user(db_session, "metrics_admin", password_hash=password_hash)
+        role = rows.role(db_session, "metrics-r", "指标角色")
+        item = rows.menu(db_session, "组织同步查询", "ims:system:org-sync:query")
+        rows.bind_menu(db_session, role.id, item.id)
+        rows.bind_role(db_session, person.id, role.id)
+
+        login = client.post(
+            "/admin-api/ims/auth/login",
+            json={"username": "metrics_admin", "password": "Test1234"},
+        )
+        assert login.status_code == 200
+        login_body = login.json()
+        assert login_body["code"] == 0, login_body
+        token = login_body["data"]["accessToken"]
+
+        response = client.get(
+            "/admin-api/ims/auth/org/sync-metrics",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0, body
+        assert body["data"]["successRate24h"] == 1.0
+        assert "successRate24H" not in body["data"]
+        assert body["data"]["userTotal"] == 1

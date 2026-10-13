@@ -1,7 +1,7 @@
 /**
  * Organization sync API types and endpoints (FP-B1-ORG-01~11)
  */
-import { request } from './request'
+import { request, type CommonResult } from './request'
 
 export interface SyncMetrics {
   userTotal: number
@@ -141,24 +141,27 @@ export interface ReplayRequest {
 }
 
 export const orgSyncApi = {
-  getMetrics: () => request.get<SyncMetrics>('/admin-api/ims/auth/org/sync-metrics'),
+  getMetrics: () => request.get<CommonResult<SyncMetrics>>('/admin-api/ims/auth/org/sync-metrics'),
 
-  getDiffSummary: () => request.get<DiffSummary>('/admin-api/ims/auth/org/diffs/summary'),
+  getDiffSummary: () => request.get<CommonResult<DiffSummary>>('/admin-api/ims/auth/org/diffs/summary'),
 
   getEvents: (params: EventListParams) =>
-    request.get('/admin-api/ims/auth/org/events', { params }),
+    request.get<CommonResult<{ total: number; list: SyncEvent[]; pageNo: number; pageSize: number }>>(
+      '/admin-api/ims/auth/org/events',
+      { params },
+    ),
 
   getEventDetail: (id: string) =>
-    request.get<SyncEvent>(`/admin-api/ims/auth/org/events/${id}`),
+    request.get<CommonResult<SyncEvent>>(`/admin-api/ims/auth/org/events/${id}`),
 
   retryEvent: (id: string) =>
-    request.post(`/admin-api/ims/auth/org/events/${id}/retry`),
+    request.post<CommonResult<unknown>>(`/admin-api/ims/auth/org/events/${id}/retry`),
 
   getReplayPreview: (params: { startTime: string; endTime: string; statuses: string }) =>
-    request.get<{ count: number }>('/admin-api/ims/auth/org/events/replay-preview', { params }),
+    request.get<CommonResult<{ count: number }>>('/admin-api/ims/auth/org/events/replay-preview', { params }),
 
   replay: (data: ReplayRequest) =>
-    request.post('/admin-api/ims/auth/org/events/replay', data),
+    request.post<CommonResult<{ count: number }>>('/admin-api/ims/auth/org/events/replay', data),
 
   getReconcileBatches: (params: {
     startTime?: string
@@ -182,5 +185,5 @@ export const orgSyncApi = {
 
   exportEvents: () => request.post('/admin-api/ims/auth/org/events/export'),
 
-  triggerReconcile: () => request.post('/admin-api/ims/system/org-sync/reconcile'),
+  triggerReconcile: () => request.post<CommonResult<unknown>>('/admin-api/ims/system/org-sync/reconcile'),
 }

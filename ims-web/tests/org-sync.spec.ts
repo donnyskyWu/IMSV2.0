@@ -152,7 +152,9 @@ async function installOrgSyncMocks(page: Page) {
   })
 
   await page.route('**/admin-api/ims/auth/org/events*', async (route) => {
-    if (route.request().url().includes('/events/') && !route.request().url().includes('/events?')) {
+    const path = new URL(route.request().url()).pathname
+    if (!path.endsWith('/events')) {
+      await route.fallback()
       return
     }
     await route.fulfill(json(ok({
@@ -351,7 +353,7 @@ test.describe('组织架构同步页', () => {
     await page.getByRole('button', { name: '登录' }).click()
 
     await expect(page).toHaveURL(/\/ims\/auth\/org/)
-    await expect(page.getByText('钉钉服务暂不可用')).toBeVisible()
-    await expect(page.getByText('组织对账已连续 2 次失败')).toBeVisible()
+    await expect(page.getByText('钉钉服务不可用，最近 10 分钟内有超时记录')).toBeVisible()
+    await expect(page.getByText('对账连续两次失败，请检查钉钉连接状态')).toBeVisible()
   })
 })

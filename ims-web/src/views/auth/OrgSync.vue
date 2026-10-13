@@ -4,7 +4,6 @@
  * 依据: 01-功能点清单.md, 00-工作包.md
  */
 import { ref, computed, onMounted, watch } from 'vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import Pagination from '@/components/list/Pagination.vue'
 import EmptyState from '@/components/list/EmptyState.vue'
@@ -72,8 +71,8 @@ const statCards = computed(() => {
 async function loadMetrics() {
   try {
     const res = await orgSyncApi.getMetrics()
-    if (res.data.code === 0) {
-      metrics.value = res.data.data
+    if (res.code === 0 && res.data) {
+      metrics.value = res.data
     }
   } catch {
     console.error('Failed to load metrics')
@@ -92,11 +91,11 @@ async function loadEvents() {
     if (eventSearchForm.value.eventType) params.eventTypes = eventSearchForm.value.eventType
 
     const res = await orgSyncApi.getEvents(params)
-    if (res.data.code === 0) {
-      events.value = res.data.data.list
-      eventTotal.value = res.data.data.total
+    if (res.code === 0 && res.data) {
+      events.value = res.data.list
+      eventTotal.value = res.data.total
       emptyMode.value = ''
-    } else if (res.data.code === 1008) {
+    } else if (res.code === 1008) {
       emptyMode.value = 'noPermission'
     } else {
       emptyMode.value = 'error'
@@ -111,8 +110,8 @@ async function loadEvents() {
 async function loadDiffSummary() {
   try {
     const res = await orgSyncApi.getDiffSummary()
-    if (res.data.code === 0) {
-      diffSummary.value = res.data.data
+    if (res.code === 0 && res.data) {
+      diffSummary.value = res.data
     }
   } catch {
     console.error('Failed to load diff summary')
@@ -139,12 +138,12 @@ function handleEventReset() {
 async function handleViewEvent(event: SyncEvent) {
   try {
     const res = await orgSyncApi.getEventDetail(event.id)
-    if (res.data.code === 0) {
-      detailEvent.value = res.data.data
+    if (res.code === 0 && res.data) {
+      detailEvent.value = res.data
       detailTab.value = 'base'
       detailOpen.value = true
     } else {
-      toast.error(res.data.msg || '加载失败')
+      toast.error(res.msg || '加载失败')
     }
   } catch {
     toast.error('加载失败')
@@ -154,14 +153,14 @@ async function handleViewEvent(event: SyncEvent) {
 async function handleRetryEvent(event: SyncEvent) {
   try {
     const res = await orgSyncApi.retryEvent(event.id)
-    if (res.data.code === 0) {
+    if (res.code === 0) {
       toast.success('重试成功')
       loadEvents()
-    } else if (res.data.code === 1286) {
+    } else if (res.code === 1286) {
       toast.warning('事件状态已变化，请刷新后重试')
       loadEvents()
     } else {
-      toast.error(res.data.msg || '重试失败')
+      toast.error(res.msg || '重试失败')
     }
   } catch {
     toast.error('重试失败')
@@ -171,13 +170,13 @@ async function handleRetryEvent(event: SyncEvent) {
 async function handleReconcile() {
   try {
     const res = await orgSyncApi.triggerReconcile()
-    if (res.data.code === 0) {
+    if (res.code === 0) {
       toast.success('对账任务已启动')
       loadMetrics()
-    } else if (res.data.code === 1001) {
+    } else if (res.code === 1001) {
       toast.warning('同步正在进行中')
     } else {
-      toast.error(res.data.msg || '对账失败')
+      toast.error(res.msg || '对账失败')
     }
   } catch {
     toast.error('对账失败')
@@ -205,10 +204,10 @@ async function handleReplayPreview() {
       endTime: String(replayForm.value.endTime),
       statuses: replayForm.value.statuses.join(','),
     })
-    if (res.data.code === 0) {
-      replayPreviewCount.value = res.data.data.count
+    if (res.code === 0 && res.data) {
+      replayPreviewCount.value = res.data.count
     } else {
-      toast.error(res.data.msg || '预览失败')
+      toast.error(res.msg || '预览失败')
     }
   } catch {
     toast.error('预览失败')
@@ -226,12 +225,12 @@ async function handleReplay() {
       endTime: String(replayForm.value.endTime),
       statuses: replayForm.value.statuses,
     })
-    if (res.data.code === 0) {
-      toast.success(`已重放 ${res.data.data.count} 条事件`)
+    if (res.code === 0 && res.data) {
+      toast.success(`已重放 ${res.data.count} 条事件`)
       replayOpen.value = false
       loadEvents()
     } else {
-      toast.error(res.data.msg || '重放失败')
+      toast.error(res.msg || '重放失败')
     }
   } catch {
     toast.error('重放失败')
@@ -304,8 +303,7 @@ watch(eventPageSize, () => {
 </script>
 
 <template>
-  <AppLayout>
-    <div class="org-sync-page">
+  <div class="org-sync-page">
       <PageHeader title="组织架构同步" data-testid="b1-page-title">
         <template #actions>
           <el-button @click="openReplayDrawer">重放失败事件</el-button>
@@ -560,8 +558,7 @@ watch(eventPageSize, () => {
           </el-button>
         </template>
       </el-drawer>
-    </div>
-  </AppLayout>
+  </div>
 </template>
 
 <style lang="scss" scoped>

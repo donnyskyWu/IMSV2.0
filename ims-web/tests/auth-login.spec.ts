@@ -589,13 +589,15 @@ test.describe('B1 账号登录与改密', () => {
     })
     await page.goto('/login')
     await submitLogin(page, 'test_r10', 'Test1234')
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('ims_access_token'))).toEqual(expect.any(String))
     const token = await page.evaluate(() => localStorage.getItem('ims_access_token'))
-    expect(token).toEqual(expect.any(String))
     expect(token).not.toBe('')
-    const response = await page.request.get('/admin-api/ims/auth/org/events', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    const body = (await response.json()) as { code?: number }
+    const body = await page.evaluate(async (accessToken) => {
+      const response = await fetch('/admin-api/ims/auth/org/events', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      return response.json() as Promise<{ code?: number }>
+    }, token)
     expect(body.code).toBe(1008)
   })
 })

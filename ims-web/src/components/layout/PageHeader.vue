@@ -20,6 +20,8 @@ const props = withDefaults(defineProps<Props>(), {
   showScope: true,
 })
 
+defineOptions({ inheritAttrs: false })
+
 const authStore = useAuthStore()
 const { isMobile } = useResponsive()
 
@@ -33,7 +35,7 @@ const showDataScope = computed(() => {
   <div class="page-header">
     <div class="header-main">
       <div class="title-area">
-        <h1 class="page-title">{{ title }}</h1>
+        <h1 class="page-title" v-bind="$attrs">{{ title }}</h1>
         <span v-if="subTitle" class="page-subtitle">{{ subTitle }}</span>
       </div>
 
