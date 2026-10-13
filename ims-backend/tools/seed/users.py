@@ -56,6 +56,18 @@ E2E_ACCOUNTS = [
         "dept": None,
         "status": "ACTIVE",
     },
+    # 昵称「钉钉甲」。登录名与钉钉 mock 身份同为 mock_dingtalk_user_001（登录接口用户名至少 4 位）。
+    # 无密码。main 上没有这个账号。只在 e2e 种子里创建，并写入钉钉映射。
+    {
+        "username": "mock_dingtalk_user_001",
+        "nickname": "钉钉甲",
+        "role_key": "e2e_live_ops",
+        "dept": "市场一部",
+        "status": "ACTIVE",
+        "passwordless": True,
+        "source": "DINGTALK",
+        "dingtalk_user_id": "mock_dingtalk_user_001",
+    },
 ]
 
 
@@ -110,6 +122,10 @@ def _seed_accounts(
                 count += _ensure_role(
                     session, existing, account, now, role_cls, user_role_cls,
                 )
+            # 钉钉甲每次种子都清掉密码，PC-02 才能重复跑「设置密码」。姓名和角色不动。
+            if account.get("passwordless"):
+                existing.password_hash = ""
+            _ensure_dingtalk_mapping(session, existing, account, now)
             continue
         if not _tenant_ready(session, tenant_cls, tenant_id):
             continue
@@ -120,9 +136,9 @@ def _seed_accounts(
             tenant_id=tenant_id,
             username=account["username"],
             nickname=account["nickname"],
-            password_hash=password_hash,
+            password_hash="" if account.get("passwordless") else password_hash,
             status=account["status"],
-            source="LOCAL",
+            source=account.get("source") or "LOCAL",
             main_dept_id=dept.id if dept is not None else None,
             pwd_reset_required=bool(account.get("pwd_reset_required", False)),
             creator=0,
@@ -142,7 +158,33 @@ def _seed_accounts(
                 create_time=now,
             ))
         count += _ensure_role(session, user, account, now, role_cls, user_role_cls)
+        _ensure_dingtalk_mapping(session, user, account, now)
     return count
+
+
+def _ensure_dingtalk_mapping(session, user, account, now) -> None:
+    """钉钉甲写入 ims_auth_user_mapping。已有映射则不改。"""
+    dingtalk_user_id = account.get("dingtalk_user_id")
+    if not dingtalk_user_id:
+        return
+    from app.domains.sys.models import UserMapping
+
+    existing = session.query(UserMapping).filter(
+        UserMapping.tenant_id == user.tenant_id,
+        UserMapping.dingtalk_user_id == dingtalk_user_id,
+        UserMapping.deleted == 0,
+    ).first()
+    if existing is not None:
+        return
+    session.add(UserMapping(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        dingtalk_user_id=dingtalk_user_id,
+        sync_status="SYNCED",
+        last_sync_time=now,
+        creator=0,
+        create_time=now,
+    ))
 
 
 def _ensure_role(session, user, account, now, role_cls, user_role_cls) -> int:

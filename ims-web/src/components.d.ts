@@ -77,6 +77,7 @@ declare module 'vue' {
     MoneyText: typeof import('./components/display/MoneyText.vue')['default']
     PageHeader: typeof import('./components/layout/PageHeader.vue')['default']
     Pagination: typeof import('./components/list/Pagination.vue')['default']
+    PasswordChangeForm: typeof import('./components/password/PasswordChangeForm.vue')['default']
     PercentText: typeof import('./components/display/PercentText.vue')['default']
     QueryBar: typeof import('./components/list/QueryBar.vue')['default']
     RemoteSelect: typeof import('./components/selector/RemoteSelect.vue')['default']

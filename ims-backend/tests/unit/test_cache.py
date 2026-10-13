@@ -487,27 +487,31 @@ def test_claim_refresh_memory_statuses():
     original = cache_module._redis_client
     cache_module._redis_client = None
     try:
-        missing_sid, missing_status = cache_module.Cache.claim_refresh(
+        # missing: 索引值格式 session_id:user_id，返回 (session_id, user_id, status)
+        missing_sid, missing_uid, missing_status = cache_module.Cache.claim_refresh(
             "lock-m", "index-m", "used-m", 10,
         )
-        assert (missing_sid, missing_status) == ("", "missing")
+        assert (missing_sid, missing_uid, missing_status) == ("", None, "missing")
 
-        cache_module.Cache.set("index-ok", "sid-1", ttl=30)
-        sid, status = cache_module.Cache.claim_refresh("lock-ok", "index-ok", "used-ok", 10)
-        assert (sid, status) == ("sid-1", "ok")
+        # ok: 索引值格式 session_id:user_id
+        cache_module.Cache.set("index-ok", "sid-1:123", ttl=30)
+        sid, uid, status = cache_module.Cache.claim_refresh("lock-ok", "index-ok", "used-ok", 10)
+        assert (sid, uid, status) == ("sid-1", 123, "ok")
         assert cache_module.Cache.get("index-ok") is None
 
-        again_sid, again_status = cache_module.Cache.claim_refresh(
+        # concurrent: 锁已被占用
+        again_sid, again_uid, again_status = cache_module.Cache.claim_refresh(
             "lock-ok", "index-ok", "used-ok", 10,
         )
-        assert (again_sid, again_status) == ("", "concurrent")
+        assert (again_sid, again_uid, again_status) == ("", None, "concurrent")
         cache_module.Cache.delete("lock-ok")
 
-        cache_module.Cache.set("used-re", "sid-re", ttl=30)
-        reuse_sid, reuse_status = cache_module.Cache.claim_refresh(
+        # reuse: 令牌已被轮换过
+        cache_module.Cache.set("used-re", "sid-re:456", ttl=30)
+        reuse_sid, reuse_uid, reuse_status = cache_module.Cache.claim_refresh(
             "lock-re", "index-re", "used-re", 10,
         )
-        assert (reuse_sid, reuse_status) == ("sid-re", "reuse")
+        assert (reuse_sid, reuse_uid, reuse_status) == ("sid-re", 456, "reuse")
     finally:
         cache_module._redis_client = original
 
@@ -530,16 +534,24 @@ def test_claim_refresh_redis_error_and_bad_payload():
             return self.result
 
     try:
+        # Redis 异常 → missing
         cache_module._redis_client = Boom()
-        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("", "missing")
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("", None, "missing")
 
+        # 返回格式不对 → missing
         cache_module._redis_client = Odd("nope")
-        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("", "missing")
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("", None, "missing")
 
-        cache_module._redis_client = Odd([b"sid", b""])
-        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", "missing")
+        # 空 status → missing（值格式 session_id:user_id）
+        cache_module._redis_client = Odd([b"sid:123", b""])
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", 123, "missing")
 
+        # ok（值格式 session_id:user_id）
+        cache_module._redis_client = Odd([b"sid:456", b"ok"])
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", 456, "ok")
+
+        # ok（值无 user_id，兼容旧格式）
         cache_module._redis_client = Odd([b"sid", b"ok"])
-        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", "ok")
+        assert cache_module.Cache.claim_refresh("l", "i", "u", 10) == ("sid", None, "ok")
     finally:
         cache_module._redis_client = original

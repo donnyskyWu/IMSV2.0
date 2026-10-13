@@ -55,9 +55,14 @@ export interface UserInfo {
   avatar?: string
   deptId: ID
   deptName: string
+  deptNames?: string[]
   permCodes: string[]
   dataScopeText?: string
   pwdResetRequired?: boolean
+  mobileMasked?: string | null
+  roleNames?: string[]
+  hasPassword?: boolean
+  positionLabel?: string | null
 }
 
 // 字典项

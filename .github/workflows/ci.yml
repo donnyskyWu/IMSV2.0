@@ -77,6 +77,8 @@ jobs:
       IMS_DB_URL: mysql+pymysql://root:testpass@127.0.0.1:3306/ims_test?charset=utf8mb4
       IMS_REDIS_URL: redis://127.0.0.1:6379/0
       IMS_JWT_SECRET: test-jwt-secret-for-ci
+      IMS_DINGTALK_MODE: mock
+      IMS_DINGTALK_APP_KEY: e2e-ding-client
       VITE_API_PROXY_TARGET: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4

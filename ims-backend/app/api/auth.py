@@ -13,7 +13,7 @@ Also includes:
 - GET /sso/dingtalk/callback - DingTalk SSO callback (FP-D02-02)
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Request
 from pydantic import Field
@@ -56,6 +56,9 @@ class UserInfo(BaseSchema):
     dept_names: list[str] = []
     position_label: Optional[str] = None
     pwd_reset_required: bool = False
+    mobile_masked: Optional[str] = None
+    role_names: list[str] = []
+    has_password: bool = True
 
 
 class MenuItem(BaseSchema):
@@ -93,6 +96,26 @@ class ChangePasswordRequest(BaseSchema):
     """修改本人密码。长度交给服务层校验，以便返回规格文案。"""
     old_password: str = Field(..., min_length=1, max_length=128)
     new_password: str = Field(..., min_length=1, max_length=128)
+
+
+class SetPasswordRequest(BaseSchema):
+    """无密码用户设置密码。多出来的字段静默忽略。"""
+    new_password: str = Field(..., min_length=1, max_length=128)
+
+
+class SessionItem(BaseSchema):
+    """我的一条登录会话。"""
+    sid: str
+    device_name: str = ""
+    ip: str = ""
+    login_time: str = ""
+    last_active_time: str = ""
+    current: bool = False
+
+
+class SessionListResponse(BaseSchema):
+    """会话列表。JSON 字段名仍是 list。"""
+    items: list[SessionItem] = Field(default_factory=list, alias="list")
 
 
 class DingTalkSSORequest(BaseSchema):
@@ -244,6 +267,63 @@ async def change_password(body: ChangePasswordRequest) -> CommonResult:
 
 
 change_password.__login_only__ = True
+
+
+def _require_user() -> Any:
+    from app.core.context import ctx
+    from app.core.errors import BizError
+
+    current = ctx.current_or_none
+    if current is None or not current.user_id:
+        raise BizError(1002)
+    return current
+
+
+@router.post("/password/set", response_model=CommonResult, summary="设置本人密码")
+async def set_password(body: SetPasswordRequest) -> CommonResult:
+    """无密码用户设置密码。已有密码返回 1001。成功后其他会话失效，当前会话保留。"""
+    from app.services.auth import AuthService
+
+    current = _require_user()
+    await AuthService().set_own_password(
+        user_id=current.user_id,
+        new_password=body.new_password,
+        keep_session_id=current.session_id,
+    )
+    return CommonResult.success()
+
+
+set_password.__login_only__ = True
+
+
+@router.get(
+    "/session/my",
+    response_model=CommonResult[SessionListResponse],
+    summary="我的会话",
+)
+async def list_my_sessions() -> CommonResult[SessionListResponse]:
+    """当前用户的会话列表，最多 3 条。"""
+    from app.services.auth import AuthService
+
+    current = _require_user()
+    items = AuthService().list_my_sessions(current.user_id, current.session_id)
+    return CommonResult.success(data={"list": items})
+
+
+list_my_sessions.__login_only__ = True
+
+
+@router.delete("/session/my", response_model=CommonResult, summary="下线我的会话")
+async def delete_my_session(sid: str = "") -> CommonResult:
+    """下线指定会话。空 sid 返回 1001，不是自己的返回 1504。当前会话下线即退出。"""
+    from app.services.auth import AuthService
+
+    current = _require_user()
+    await AuthService().delete_my_session(current.user_id, sid, current.session_id)
+    return CommonResult.success()
+
+
+delete_my_session.__login_only__ = True
 
 
 def _dingtalk_callback_uri(request: Request) -> str:
