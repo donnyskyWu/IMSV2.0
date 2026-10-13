@@ -5,7 +5,7 @@
 迁移自旧 test_todo.py，改为调用真实服务。
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 
@@ -137,7 +137,7 @@ class TestTodoComplete:
 
     def test_complete_sets_done(self, db_session, todo_context):
         """UT-B3-TD-SVC-05: 完成待办设置状态为 DONE。"""
-        todo = todo_service.create(
+        _ = todo_service.create(
             db_session,
             todo_type=TodoType.CONFIRM,
             source_module="测试",

@@ -17,7 +17,6 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_login
