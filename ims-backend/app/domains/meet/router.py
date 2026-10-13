@@ -185,7 +185,8 @@ async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> C
     if not is_recorder:
         from app.core.errors import BizError
 
-        if PERM_EDIT not in (ctx.perm_codes or set()):
+        context = ctx.current_or_none
+        if context is None or PERM_EDIT not in (context.perm_codes or set()):
             raise BizError.no_permission()
 
     service = MeetingService()
@@ -216,7 +217,8 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     if not is_recorder:
         from app.core.errors import BizError
 
-        if PERM_ARCHIVE not in (ctx.perm_codes or set()):
+        context = ctx.current_or_none
+        if context is None or PERM_ARCHIVE not in (context.perm_codes or set()):
             raise BizError.no_permission()
 
     service = MeetingService()
@@ -246,7 +248,8 @@ async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonRes
     if not is_recorder:
         from app.core.errors import BizError
 
-        if PERM_APPENDIX not in (ctx.perm_codes or set()):
+        context = ctx.current_or_none
+        if context is None or PERM_APPENDIX not in (context.perm_codes or set()):
             raise BizError.no_permission()
 
     service = MeetingService()
