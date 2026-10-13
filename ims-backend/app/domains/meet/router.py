@@ -183,10 +183,10 @@ async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> C
     """
     is_recorder = await _is_recorder(minutes_id)
     if not is_recorder:
-        from app.core.exceptions import PermissionDeniedError
+        from app.core.errors import BizError
 
         if PERM_EDIT not in (ctx.perm_codes or set()):
-            raise PermissionDeniedError()
+            raise BizError.no_permission()
 
     service = MeetingService()
     result = await service.update_minutes(minutes_id, request)
@@ -214,10 +214,10 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     """
     is_recorder = await _is_recorder(minutes_id)
     if not is_recorder:
-        from app.core.exceptions import PermissionDeniedError
+        from app.core.errors import BizError
 
         if PERM_ARCHIVE not in (ctx.perm_codes or set()):
-            raise PermissionDeniedError()
+            raise BizError.no_permission()
 
     service = MeetingService()
     result = await service.archive_minutes(minutes_id)
@@ -244,10 +244,10 @@ async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonRes
     """
     is_recorder = await _is_recorder(minutes_id)
     if not is_recorder:
-        from app.core.exceptions import PermissionDeniedError
+        from app.core.errors import BizError
 
         if PERM_APPENDIX not in (ctx.perm_codes or set()):
-            raise PermissionDeniedError()
+            raise BizError.no_permission()
 
     service = MeetingService()
     result = await service.add_appendix(minutes_id, request)
