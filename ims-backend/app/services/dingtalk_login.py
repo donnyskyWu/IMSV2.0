@@ -310,9 +310,9 @@ class DingTalkLoginService:
         nickname = user_detail.get("name") or identity.name or identity.user_id
 
         retry_count = 0
-        max_retries = 10
+        max_suffix_retries = 19
 
-        while retry_count < max_retries:
+        while retry_count <= max_suffix_retries:
             try:
                 nested = session.begin_nested()
 
@@ -373,11 +373,19 @@ class DingTalkLoginService:
 
             except IntegrityError as exc:
                 nested.rollback()
-                logger.info(
-                    "IntegrityError during instant sync, checking for concurrent login dingtalk_user_id=%s error=%s",
-                    identity.user_id,
-                    str(exc)[:100],
-                )
+                error_str = str(exc).lower()
+                if "lock wait timeout" in error_str or "deadlock" in error_str:
+                    logger.warning(
+                        "Lock-wait timeout during instant sync (concurrent collision) dingtalk_user_id=%s error=%s",
+                        identity.user_id,
+                        str(exc)[:200],
+                    )
+                else:
+                    logger.info(
+                        "IntegrityError during instant sync, checking for concurrent login dingtalk_user_id=%s error=%s",
+                        identity.user_id,
+                        str(exc)[:100],
+                    )
 
                 existing_mapping = session.query(UserMapping).filter(
                     UserMapping.dingtalk_user_id == identity.user_id,
@@ -397,6 +405,13 @@ class DingTalkLoginService:
                         return existing_user
 
                 retry_count += 1
+                if retry_count > max_suffix_retries:
+                    logger.error(
+                        "Username suffix retries exhausted dingtalk_user_id=%s max_suffix=%s",
+                        identity.user_id,
+                        max_suffix_retries + 1,
+                    )
+                    raise BizError(1001, msg="用户名冲突次数超限，请联系管理员")
                 suffix = f"_{retry_count + 1}"
                 username = self._generate_username(identity.user_id, suffix)
                 logger.info(
@@ -405,7 +420,7 @@ class DingTalkLoginService:
                     retry_count,
                 )
 
-        raise BizError(1217)
+        raise BizError(1001, msg="用户名冲突次数超限，请联系管理员")
 
     def _generate_username(self, user_id: str, suffix: str = "") -> str:
         """Generate username from DingTalk userid with optional suffix."""

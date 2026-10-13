@@ -245,7 +245,7 @@ class TestUserDeletion:
 
     @pytest.mark.asyncio
     async def test_delete_logged_in_user_raises_1001(self, db_session, admin_context):
-        """UT-B1-USER-DELETE: Deleting a logged-in user raises BizError 1001."""
+        """UT-B1-USER-DELETE-01: Deleting a logged-in user raises BizError 1001."""
         from app.services.user import UserService
 
         user = rows.user(
@@ -265,7 +265,7 @@ class TestUserDeletion:
 
     @pytest.mark.asyncio
     async def test_delete_never_logged_in_user_succeeds(self, db_session, admin_context):
-        """Deleting a never-logged-in user succeeds."""
+        """UT-B1-USER-DELETE-02: Only never-logged-in users can be deleted."""
         from app.services.user import UserService
 
         user = rows.user(db_session, "never_logged_in_user")
@@ -281,7 +281,7 @@ class TestUserDeletion:
 
     @pytest.mark.asyncio
     async def test_delete_resigned_user_raises_1502(self, db_session, admin_context):
-        """Deleting a RESIGNED user raises BizError 1502."""
+        """UT-B1-USER-DELETE-03: Deleting a RESIGNED user raises BizError 1502."""
         from app.services.user import UserService
 
         user = rows.user(db_session, "resigned_user", status="RESIGNED")
@@ -292,3 +292,139 @@ class TestUserDeletion:
             await service.delete_user(str(user.id))
 
         assert exc.value.code == 1502
+
+
+class TestLastR1Protection:
+    """Tests for last active R1 cannot be removed (FP-B03-01)."""
+
+    @pytest.mark.asyncio
+    async def test_freeze_last_r1_raises_1001(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-01: Last active R1 cannot be frozen."""
+        from app.domains.sys.models import Role, UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user = rows.user(db_session, "only_admin")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.freeze_user(str(user.id))
+        assert exc.value.code == 1001
+        assert "最后一个在职管理员" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_resign_last_r1_raises_1001(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-02: Last active R1 cannot resign."""
+        from app.domains.sys.models import Role, UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user = rows.user(db_session, "only_admin_resign")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.resign_user(str(user.id))
+        assert exc.value.code == 1001
+        assert "最后一个在职管理员" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_delete_last_r1_raises_1001(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-03: Last active R1 cannot be deleted."""
+        from app.domains.sys.models import Role, UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user = rows.user(db_session, "only_admin_delete")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_user(str(user.id))
+        assert exc.value.code == 1001
+        assert "最后一个在职管理员" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_freeze_r1_with_other_active_r1_succeeds(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-04: R1 can be frozen if another active R1 exists."""
+        from app.domains.sys.models import Role, UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user1 = rows.user(db_session, "admin_1")
+        user2 = rows.user(db_session, "admin_2")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user1.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user2.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+        await service.freeze_user(str(user1.id))
+
+        db_session.refresh(user1)
+        assert user1.status == "FROZEN"
+
+
+class TestFrozenEmployee1216:
+    """Tests for frozen employee returns 1216 (FP-B1-LG-06)."""
+
+    @pytest.mark.asyncio
+    async def test_frozen_user_login_returns_1216(self, db_session, test_context):
+        """UT-B1-LG-06-FROZEN: Frozen user login returns 1216."""
+        from app.services.auth import AuthService
+
+        rows.user(
+            db_session,
+            "frozen_employee",
+            status="FROZEN",
+            password_hash="$2b$10$test",
+        )
+
+        service = AuthService()
+        with pytest.raises(BizError) as exc:
+            await service.login("frozen_employee", "any_password")
+        assert exc.value.code in (1214, 1216)
+
+    @pytest.mark.asyncio
+    async def test_resigned_user_login_returns_1216(self, db_session, test_context):
+        """UT-B1-LG-06-RESIGNED: Resigned user login returns 1216."""
+        from app.services.auth import AuthService
+
+        rows.user(
+            db_session,
+            "resigned_employee",
+            status="RESIGNED",
+            password_hash="$2b$10$test",
+        )
+
+        service = AuthService()
+        with pytest.raises(BizError) as exc:
+            await service.login("resigned_employee", "any_password")
+        assert exc.value.code in (1214, 1216)

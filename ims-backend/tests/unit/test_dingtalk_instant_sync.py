@@ -210,6 +210,34 @@ class TestUsernameCollision:
         assert len(service._generate_username("a" * 60, "_10")) == 50
         assert service._generate_username("a" * 60, "_10").endswith("_10")
 
+    @pytest.mark.asyncio
+    async def test_username_suffix_cap_at_20(
+        self, db_session, test_context, monkeypatch, ding_client, fixed_clock
+    ):
+        """UT-B1-LG-07-SUFFIX-CAP: Username suffix capped at _20, then error."""
+        from app.domains.sys.models import Tenant
+
+        _enable(monkeypatch)
+
+        rows.add(db_session, Tenant(id=1, tenant_id=1, name="测试公司", status="ENABLED"))
+
+        for i in range(20):
+            suffix = "" if i == 0 else f"_{i + 1}"
+            username = f"dt-cap-user{suffix}"[:50]
+            rows.user(db_session, username)
+
+        ding_client(ScriptedDingTalk(
+            identity=DingTalkIdentity(user_id="dt-cap-user", mobile="", name="超限员工"),
+            user_detail={"active": True, "name": "超限员工"},
+        ))
+
+        service = DingTalkLoginService()
+
+        with pytest.raises(BizError) as exc:
+            service._match(DingTalkIdentity(user_id="dt-cap-user", mobile="", name="超限员工"))
+        assert exc.value.code == 1001
+        assert "冲突次数超限" in exc.value.msg
+
 
 class TestConcurrentLogin:
     """Tests for concurrent login handling (UT-B1-LG-07-CONCURRENT)."""
