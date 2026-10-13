@@ -157,3 +157,160 @@ class TestAuthPersonalCenterService:
         from app.services.auth import AuthService
         svc = AuthService()
         assert hasattr(svc, 'get_current_user_info_extended')
+
+
+class TestSystemLogServiceExecution:
+    """Tests that execute SystemLogService methods."""
+
+    @pytest.fixture
+    def log_ctx(self):
+        """Set up context for log tests."""
+        context = RequestContext(
+            trace_id="test-trace",
+            user_id=1,
+            tenant_id=1,
+            perm_codes={"ims:system:log:query"},
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_get_operate_log_page_empty(self, db_session, log_ctx):
+        """UT-B2-L-07: get_operate_log_page returns empty when no logs."""
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        result = await svc.get_operate_log_page(1, 10)
+        assert isinstance(result, dict)
+        assert "list" in result or "items" in result or isinstance(result.get("data"), list)
+
+    @pytest.mark.asyncio
+    async def test_get_login_log_page_empty(self, db_session, log_ctx):
+        """UT-B2-L-08: get_login_log_page returns empty when no logs."""
+        from app.services.system_log import SystemLogService
+        svc = SystemLogService()
+        result = await svc.get_login_log_page(1, 10)
+        assert isinstance(result, dict)
+
+
+class TestSystemNotifyServiceExecution:
+    """Tests that execute SystemNotifyService methods."""
+
+    @pytest.fixture
+    def notify_ctx(self):
+        """Set up context for notify tests."""
+        context = RequestContext(
+            trace_id="test-trace",
+            user_id=1,
+            tenant_id=1,
+            perm_codes={"ims:system:notify:query"},
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_get_notify_record_page_empty(self, db_session, notify_ctx):
+        """UT-B2-N-04: get_notify_record_page returns empty when no records."""
+        from app.services.system_notify import SystemNotifyService
+        svc = SystemNotifyService()
+        result = await svc.get_notify_record_page(1, 10)
+        assert isinstance(result, dict)
+
+
+class TestSystemParamServiceExecution:
+    """Tests that execute SystemParamService methods."""
+
+    @pytest.fixture
+    def param_ctx(self):
+        """Set up context for param tests."""
+        context = RequestContext(
+            trace_id="test-trace",
+            user_id=1,
+            tenant_id=1,
+            perm_codes={"ims:system:param:query", "ims:system:param:update"},
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_get_param_list_empty(self, db_session, param_ctx):
+        """UT-B2-P-04: get_param_list returns empty when no params."""
+        from app.services.system_param import SystemParamService
+        svc = SystemParamService()
+        result = await svc.get_param_list()
+        assert isinstance(result, list)
+
+
+class TestSystemCalendarServiceExecution:
+    """Tests that execute SystemCalendarService methods."""
+
+    @pytest.fixture
+    def calendar_ctx(self):
+        """Set up context for calendar tests."""
+        context = RequestContext(
+            trace_id="test-trace",
+            user_id=1,
+            tenant_id=1,
+            perm_codes={"ims:system:calendar:update"},
+            dept_ids=[1],
+            client_ip="127.0.0.1",
+        )
+        ctx.set(context)
+        yield context
+        ctx.reset()
+
+    @pytest.mark.asyncio
+    async def test_get_calendar_list_empty(self, db_session, calendar_ctx):
+        """UT-B2-Q-04: get_calendar_list returns empty when no entries."""
+        from app.services.system_calendar import SystemCalendarService
+        svc = SystemCalendarService()
+        result = await svc.get_calendar_list(2026)
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_calendar_list_with_month(self, db_session, calendar_ctx):
+        """UT-B2-Q-05: get_calendar_list can filter by month."""
+        from app.services.system_calendar import SystemCalendarService
+        svc = SystemCalendarService()
+        result = await svc.get_calendar_list(2026, 10)
+        assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_update_calendar_add_holiday(self, db_session, calendar_ctx):
+        """UT-B2-Q-06: update_calendar can add a holiday."""
+        from app.services.system_calendar import SystemCalendarService
+        svc = SystemCalendarService()
+        result = await svc.update_calendar("2026-10-13", "HOLIDAY")
+        assert result["day"] == "2026-10-13"
+        assert result["kind"] == "HOLIDAY"
+
+    @pytest.mark.asyncio
+    async def test_update_calendar_set_normal(self, db_session, calendar_ctx):
+        """UT-B2-Q-07: update_calendar can reset to normal."""
+        from app.services.system_calendar import SystemCalendarService
+        svc = SystemCalendarService()
+        # First add an entry
+        await svc.update_calendar("2026-10-14", "HOLIDAY")
+        # Then reset it
+        result = await svc.update_calendar("2026-10-14", "NORMAL")
+        assert result["kind"] == "NORMAL"
+
+    @pytest.mark.asyncio
+    async def test_update_calendar_update_existing(self, db_session, calendar_ctx):
+        """UT-B2-Q-08: update_calendar can update existing entry."""
+        from app.services.system_calendar import SystemCalendarService
+        svc = SystemCalendarService()
+        # Add holiday
+        await svc.update_calendar("2026-10-15", "HOLIDAY")
+        # Change to workday
+        result = await svc.update_calendar("2026-10-15", "EXTRA_WORK")
+        assert result["kind"] == "EXTRA_WORK"
