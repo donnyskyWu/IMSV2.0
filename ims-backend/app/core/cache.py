@@ -48,14 +48,32 @@ def _claim_text(value: Any) -> str:
     return str(value)
 
 
-def _parse_claim(raw: Any) -> tuple[str, str]:
-    """解析 Lua 返回的 {session_id, status}。格式不对视为没领到。"""
+def _parse_claim(raw: Any) -> tuple[str, int | None, str]:
+    """解析 Lua 返回的 {value, status}。
+
+    - ok: value 是 session_id:user_id（索引值），解析出 user_id
+    - reuse: value 是 session_id（used_key 只存 sid），user_id 为 None
+    - concurrent/missing: value 为空
+    """
     if isinstance(raw, (list, tuple)) and len(raw) >= 2:
         status = _claim_text(raw[1])
         if not status:
             status = "missing"
-        return _claim_text(raw[0]), status
-    return "", "missing"
+        val = _claim_text(raw[0])
+        if val:
+            # ok 分支的索引值是 session_id:user_id，reuse 分支只有 session_id
+            parts = val.split(":", 1)
+            session_id = parts[0]
+            if status == "ok" and len(parts) > 1 and parts[1]:
+                try:
+                    user_id = int(parts[1])
+                except ValueError:
+                    user_id = None
+            else:
+                user_id = None
+            return session_id, user_id, status
+        return "", None, status
+    return "", None, "missing"
 
 
 def init_cache() -> None:
@@ -253,12 +271,13 @@ class Cache:
         index_key: str,
         used_key: str,
         lock_ttl: int,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, int | None, str]:
         """原子领取刷新令牌。
 
         Redis 走 CLAIM_REFRESH_LUA（SET NX + GETDEL）。
-        返回 (session_id, status)，status 为 ok / concurrent / reuse / missing。
+        返回 (session_id, user_id, status)，status 为 ok / concurrent / reuse / missing。
         missing 表示 GETDEL 为空，且没有已轮换记录。
+        索引值格式为 session_id:user_id。
         """
         if _redis_client is not None:
             try:
@@ -272,19 +291,23 @@ class Cache:
                 )
             except Exception as e:
                 logger.error(f"Redis claim refresh error: {e}")
-                return "", "missing"
+                return "", None, "missing"
             return _parse_claim(raw)
 
         # 内存后端只给单测兜底。并发正确性以真实 Redis 的 Lua 为准。
         if not Cache.setnx(lock_key, "1", lock_ttl):
-            return "", "concurrent"
-        session_id = Cache.getdel(index_key)
-        if session_id:
-            return str(session_id), "ok"
+            return "", None, "concurrent"
+        val = Cache.getdel(index_key)
+        if val:
+            parts = str(val).split(":", 1)
+            session_id = parts[0]
+            user_id = int(parts[1]) if len(parts) > 1 and parts[1] else None
+            return session_id, user_id, "ok"
         used = Cache.get(used_key)
         if used:
-            return str(used), "reuse"
-        return "", "missing"
+            # used_key 只存 session_id，reuse 分支不返回 user_id
+            return str(used), None, "reuse"
+        return "", None, "missing"
 
     @staticmethod
     def sadd(key: str, *members: str) -> int:

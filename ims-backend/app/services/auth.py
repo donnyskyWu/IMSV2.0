@@ -31,7 +31,8 @@ from app.db.session import get_db_session
 settings = get_settings()
 
 # 租户停用 / 过期时登录和刷新都用这一句，避免两处文案或条件不一致。
-TENANT_UNAVAILABLE_MSG = "所属组织已停用"
+# v1.6：修改为「所属组织已停用，请联系管理员」
+TENANT_UNAVAILABLE_MSG = "所属组织已停用，请联系管理员"
 
 # 8～32 位，同时含字母和数字，允许特殊字符，不允许空白（工作包 Q7）。
 _PASSWORD_RULE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$")
@@ -322,9 +323,10 @@ class AuthService:
             ttl=settings.jwt.refresh_token_ttl,
         )
         # 反向索引，刷新时不必扫描全部会话。TTL 与会话同时到期。
+        # 值包含 user_id，会话失效时查用户状态区分 1002 和 1216。
         Cache.set(
             f"{self.REFRESH_INDEX_PREFIX}{refresh_token}",
-            session_id,
+            f"{session_id}:{user.id}",
             ttl=settings.jwt.refresh_token_ttl,
         )
 
@@ -521,17 +523,32 @@ class AuthService:
     async def _issue_rotated_tokens(
         self,
         session_id: str,
+        user_id: int | None,
         refresh_token: str,
         used_key: str,
     ) -> dict[str, Any]:
-        """校验会话后签发新的 access 与 refresh，并把旧刷新令牌记成已轮换。"""
+        """校验会话后签发新的 access 与 refresh，并把旧刷新令牌记成已轮换。
+
+        user_id 参数来自 claim_refresh 解析的索引值，用于冻结/离职检查。
+        差异(c)：会话缺失和黑名单分支用 user_id 查用户状态，冻结/离职返回 1216，其余返回 1002。
+        """
         from app.domains.sys.models import User
 
         session_key = f"{self.SESSION_PREFIX}{session_id}"
         session_data = Cache.get_json(session_key)
         if not isinstance(session_data, dict) or session_data.get("refresh_token") != refresh_token:
+            if user_id:
+                db = get_db_session()
+                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
+                if user and user.status in ("FROZEN", "RESIGNED"):
+                    raise BizError(1216)
             raise BizError(1002)
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
+            if user_id:
+                db = get_db_session()
+                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
+                if user and user.status in ("FROZEN", "RESIGNED"):
+                    raise BizError(1216)
             raise BizError(1002)
 
         db = get_db_session()
@@ -539,8 +556,10 @@ class AuthService:
             User.id == int(session_data["user_id"]),
             User.deleted == 0,
         ).first()
-        if user is None or user.status in ("FROZEN", "RESIGNED"):
+        if user is None:
             raise BizError(1002)
+        if user.status in ("FROZEN", "RESIGNED"):
+            raise BizError(1216)
         # 停用或过期租户不能靠刷新续命，与登录共用同一校验。
         # 调用方 refresh() 已经 GETDEL 领走旧令牌。这里返回 1008 时旧 refresh 不会退回，必须重新登录。
         reject_unavailable_tenant(user.tenant_id)
@@ -566,9 +585,10 @@ class AuthService:
         )
         session_data["refresh_token"] = new_refresh
         Cache.set_json(session_key, session_data, ttl=remaining)
+        # 反向索引值包含 user_id，会话失效时查用户状态区分 1002 和 1216。
         Cache.set(
             f"{self.REFRESH_INDEX_PREFIX}{new_refresh}",
-            session_id,
+            f"{session_id}:{user.id}",
             ttl=remaining,
         )
         # 新令牌落库之后才标记旧令牌。重放旧令牌时凭这个标记吊销整段会话。
@@ -606,7 +626,8 @@ class AuthService:
         # 先领走旧 refresh，再进 _issue_rotated_tokens 校验租户。
         # 租户停用或过期返回 1008 时，旧令牌已经消耗，调用方必须重新登录。
         # status: ok / concurrent / reuse / missing（GETDEL 为空且不是重放）
-        session_id, status = Cache.claim_refresh(lock_key, index_key, used_key, lock_ttl=10)
+        # user_id 用于会话失效时查用户状态，区分 1002 和 1216。
+        session_id, user_id, status = Cache.claim_refresh(lock_key, index_key, used_key, lock_ttl=10)
         try:
             if status == "concurrent":
                 raise BizError(1002)
@@ -616,7 +637,7 @@ class AuthService:
             if status != "ok":
                 # GETDEL 为空：令牌不存在、已过期，或登出/改密时索引已被删掉。
                 raise BizError(1002)
-            return await self._issue_rotated_tokens(session_id, refresh_token, used_key)
+            return await self._issue_rotated_tokens(session_id, user_id, refresh_token, used_key)
         finally:
             # 并发失败者没有拿到锁，不能把赢家的锁删掉。
             if status != "concurrent":
@@ -936,6 +957,124 @@ class AuthService:
         from app.services.dingtalk_login import DingTalkLoginService
 
         return await DingTalkLoginService().build_redirect_url(redirect)
+
+    async def get_my_sessions(self, user_id: int) -> list[dict[str, Any]]:
+        """Get current user's session list (PC-04)."""
+        current_session_id = ctx.session_id if ctx.current_or_none else None
+
+        sessions_key = f"{self.USER_SESSIONS_PREFIX}{user_id}"
+        session_ids = list(Cache.smembers(sessions_key))
+
+        result = []
+        for sid in session_ids:
+            session_data = Cache.get_json(f"{self.SESSION_PREFIX}{sid}")
+            if not isinstance(session_data, dict):
+                continue
+
+            remaining = session_remaining_seconds(session_data)
+            if remaining <= 0:
+                continue
+
+            result.append({
+                "sid": sid,
+                "device_name": "未知设备",  # TODO: Parse from user agent
+                "ip": "",  # TODO: Store IP in session
+                "login_time": session_data.get("created_at"),
+                "last_active_time": session_data.get("created_at"),  # TODO: Track activity
+                "current": sid == current_session_id,
+            })
+
+        return result
+
+    async def delete_my_session(self, user_id: int, session_id: str) -> None:
+        """Delete one of current user's sessions (PC-04)."""
+        if not session_id:
+            raise BizError(1001, msg="会话ID不能为空")
+
+        session_key = f"{self.SESSION_PREFIX}{session_id}"
+        session_data = Cache.get_json(session_key)
+
+        # Session not found
+        if not isinstance(session_data, dict):
+            raise BizError(1504)
+
+        # Session belongs to another user
+        if session_data.get("user_id") != user_id:
+            raise BizError(1504)
+
+        # Delete session
+        self._forget_refresh_index(session_data)
+        Cache.delete(session_key)
+        Cache.srem(f"{self.USER_SESSIONS_PREFIX}{user_id}", session_id)
+        Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}", "1", ttl=3600)
+
+    async def set_password(
+        self, user_id: int, new_password: str, keep_session_id: str
+    ) -> None:
+        """Set password for user without password (PC-03)."""
+        from app.domains.sys.models import User
+
+        session = get_db_session()
+        user = session.query(User).filter(
+            User.id == user_id,
+            User.deleted == 0,
+        ).first()
+
+        if not user:
+            raise BizError(1002)
+
+        # Already has password
+        if user.password_hash:
+            raise BizError(1001, msg="已设置密码，请使用修改密码功能")
+
+        # Validate password
+        if re.search(r"\s", new_password):
+            raise BizError(1001, msg="密码不能包含空格")
+        if _PASSWORD_RULE.fullmatch(new_password) is None:
+            raise BizError(1001, msg="密码需 8～32 位，且同时包含字母和数字")
+
+        # Set password
+        user.password_hash = bcrypt.hashpw(
+            new_password.encode(), bcrypt.gensalt(rounds=10)
+        ).decode()
+        user.pwd_reset_required = False
+
+        # Invalidate other sessions (keep current)
+        await self.change_password(user_id, new_password, keep_session_id)
+
+    async def get_current_user_info_extended(self, user_id: int) -> dict[str, Any]:
+        """Get extended user info with mobileMasked and roleNames (PC-01)."""
+        from app.domains.sys.models import Role, User, UserRole
+
+        base_info = await self.get_current_user_info(user_id)
+
+        session = get_db_session()
+        user = session.query(User).filter(User.id == user_id).first()
+
+        # Add mobileMasked
+        mobile_masked = None
+        if user and user.mobile_enc:
+            # Mask: 138****1234
+            mobile = user.mobile_enc  # TODO: Decrypt first
+            if len(mobile) >= 11:
+                mobile_masked = mobile[:3] + "****" + mobile[-4:]
+
+        # Add roleNames
+        role_names = []
+        if user:
+            roles = session.query(Role).join(
+                UserRole, UserRole.role_id == Role.id
+            ).filter(
+                UserRole.user_id == user_id,
+                Role.status == "ENABLED",
+                Role.deleted == 0,
+            ).all()
+            role_names = [r.name for r in roles]
+
+        base_info["user"]["mobileMasked"] = mobile_masked
+        base_info["user"]["roleNames"] = role_names
+
+        return base_info
 
     async def handle_dingtalk_callback(
         self,

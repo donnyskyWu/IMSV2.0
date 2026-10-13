@@ -135,6 +135,12 @@ class ContextAccessor:
         ctx = _ctx_var.get()
         return ctx.tenant_id if ctx else None
 
+    @property
+    def session_id(self) -> str:
+        """Get session ID."""
+        ctx = _ctx_var.get()
+        return ctx.session_id if ctx else ""
+
     def require_user_id(self) -> int:
         """Get user ID, raise if not set."""
         uid = self.user_id
