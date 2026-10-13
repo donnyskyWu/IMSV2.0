@@ -12,10 +12,12 @@ import httpx
 
 from app.integrations.dingtalk.client import DingTalkClient
 
-# 扫码走新版 OAuth；H5 免登走企业内部应用 access_token + getuserinfo。
+# 扫码走新版 OAuth，再用 unionId 换企业内 userid。
+# H5 免登走企业内部应用 access_token + getuserinfo，返回的就是企业 userid。
 _QR_TOKEN_URL = "https://api.dingtalk.com/v1.0/oauth2/userAccessToken"
 _QR_ME_URL = "https://api.dingtalk.com/v1.0/contact/users/me"
 _APP_TOKEN_URL = "https://api.dingtalk.com/v1.0/oauth2/accessToken"
+_UNIONID_USER_URL = "https://oapi.dingtalk.com/topapi/user/getbyunionid"
 _H5_USERINFO_URL = "https://oapi.dingtalk.com/topapi/v2/user/getuserinfo"
 _USER_GET_URL = "https://oapi.dingtalk.com/topapi/v2/user/get"
 
@@ -47,11 +49,14 @@ class HttpxDingTalkLoginClient:
         app_secret: str,
         mode: str = "mock",
         timeout_seconds: float = 10.0,
+        transport: Optional[httpx.AsyncBaseTransport] = None,
     ) -> None:
         self.app_key = app_key
         self.app_secret = app_secret
         self.mode = mode
         self.timeout = timeout_seconds
+        # 单测注入传输层，避免访问钉钉。生产不传。
+        self._transport = transport
 
     async def exchange(self, auth_code: str, channel: str) -> DingTalkIdentity:
         """channel 为 DINGTALK_QR 或 DINGTALK_H5。"""
@@ -86,26 +91,48 @@ class HttpxDingTalkLoginClient:
             _QR_ME_URL,
             headers={"x-acs-dingtalk-access-token": access_token},
         )
-        user_id = str(profile.get("unionId") or profile.get("openId") or "")
-        if not user_id:
+        # unionId / openId 都不是企业内 userid，不能拿去对 dingtalk_user_id。
+        union_id = str(profile.get("unionId") or "").strip()
+        if not union_id:
             raise DingTalkLoginError(1006)
+        user_id = await self._userid_by_unionid(union_id)
         mobile = profile.get("mobile")
         return DingTalkIdentity(
             user_id=user_id,
             mobile=str(mobile) if mobile else None,
-            union_id=str(profile.get("unionId") or "") or None,
+            union_id=union_id,
             name=str(profile.get("nick") or ""),
         )
 
-    async def _exchange_h5(self, auth_code: str) -> DingTalkIdentity:
+    async def _userid_by_unionid(self, union_id: str) -> str:
+        """用企业 access_token 把 unionId 换成企业内 userid。失败是 1006。"""
+        access_token = await self._app_access_token()
+        body = await self._json(
+            "POST",
+            _UNIONID_USER_URL,
+            params={"access_token": access_token},
+            json={"unionid": union_id},
+        )
+        self._raise_if_errcode(body)
+        result = body.get("result") or {}
+        user_id = str(result.get("userid") or "").strip()
+        if not user_id:
+            raise DingTalkLoginError(1006)
+        return user_id
+
+    async def _app_access_token(self) -> str:
         token_body = await self._json(
             "POST",
             _APP_TOKEN_URL,
             json={"appKey": self.app_key, "appSecret": self.app_secret},
         )
-        access_token = str(token_body.get("accessToken") or "")
+        access_token = str(token_body.get("accessToken") or "").strip()
         if not access_token:
             raise DingTalkLoginError(1006)
+        return access_token
+
+    async def _exchange_h5(self, auth_code: str) -> DingTalkIdentity:
+        access_token = await self._app_access_token()
         info = await self._json(
             "POST",
             _H5_USERINFO_URL,
@@ -144,7 +171,10 @@ class HttpxDingTalkLoginClient:
 
     async def _json(self, method: str, url: str, **kwargs: object) -> dict:
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self._transport,
+            ) as client:
                 response = await client.request(method, url, **kwargs)
         except httpx.TimeoutException as exc:
             raise DingTalkLoginError(5003) from exc

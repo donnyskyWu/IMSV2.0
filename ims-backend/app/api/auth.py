@@ -328,7 +328,13 @@ async def dingtalk_sso_callback(request: Request):
     from app.services.dingtalk_login import DingTalkLoginService, sso_error_location
 
     params = request.query_params
-    auth_code = params.get("authCode") or params.get("auth_code") or ""
+    # 钉钉新版回跳用 authCode；标准 OAuth 回跳用 code。三者都认。
+    auth_code = (
+        params.get("authCode")
+        or params.get("auth_code")
+        or params.get("code")
+        or ""
+    )
     try:
         target = await DingTalkLoginService().handle_callback(
             auth_code,

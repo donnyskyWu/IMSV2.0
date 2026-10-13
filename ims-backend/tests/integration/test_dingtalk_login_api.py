@@ -148,6 +148,19 @@ def test_dingtalk_login_http_on_real_db(tmp_path):
             assert replay.status_code == 302
             assert "ssoError=1002" in replay.headers["location"]
 
+            oauth_state = client.get(
+                "/admin-api/ims/auth/sso/dingtalk/authorize-params",
+                params={"redirect": "/ims/home"},
+            ).json()["data"]["state"]
+            oauth_code = client.get(
+                "/admin-api/ims/auth/sso/dingtalk/callback",
+                params={"code": "ok", "state": oauth_state},
+                follow_redirects=False,
+            )
+            assert oauth_code.status_code == 302
+            assert oauth_code.headers["location"].startswith("/sso-callback#")
+            assert "accessToken=" in oauth_code.headers["location"]
+
             h5 = client.post(
                 "/admin-api/ims/auth/sso/dingtalk/h5-login",
                 json={"authCode": "ok"},
