@@ -13,8 +13,8 @@ Covers:
 - UT-B2-U-13: Kick user (force logout)
 """
 
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.core.context import RequestContext, ctx
 
@@ -116,9 +116,9 @@ class TestUserLifecycleWithDb:
     @pytest.fixture
     def setup_user(self, db_session, admin_ctx):
         """Create a test user."""
-        from app.domains.sys.models import User, Role, UserRole
+        from app.domains.sys.models import Role, User, UserRole
         from tests.support.rows import add
-        
+
         user = add(db_session, User(
             tenant_id=1,
             username="testuser",
@@ -127,7 +127,7 @@ class TestUserLifecycleWithDb:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         r1 = add(db_session, Role(
             tenant_id=1,
             role_key="R1",
@@ -136,36 +136,36 @@ class TestUserLifecycleWithDb:
             source="MANUAL",
             data_scope="ALL",
         ))
-        
+
         add(db_session, UserRole(
             tenant_id=1,
             user_id=user.id,
             role_id=r1.id,
             source="MANUAL",
         ))
-        
+
         return user
 
     async def test_get_user_detail_returns_user(self, db_session, setup_user, admin_ctx):
         """UT-B2-U-12: get_user_detail returns user info."""
         from app.services.system_user import SystemUserService
-        
+
         svc = SystemUserService()
         result = await svc.get_user_detail(str(setup_user.id))
-        
+
         assert result is not None
         assert result["username"] == "testuser"
 
     async def test_get_user_detail_not_found_raises_1504(self, db_session, admin_ctx):
         """UT-B2-U-13: get_user_detail raises 1504 for non-existent user."""
-        from app.services.system_user import SystemUserService
         from app.core.errors import BizError
-        
+        from app.services.system_user import SystemUserService
+
         svc = SystemUserService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.get_user_detail("999999")
-        
+
         assert exc.value.code == 1504
 
     async def test_update_user_status_freeze(self, db_session, admin_ctx):
@@ -173,7 +173,7 @@ class TestUserLifecycleWithDb:
         from app.domains.sys.models import User
         from app.services.system_user import SystemUserService
         from tests.support.rows import add
-        
+
         other_user = add(db_session, User(
             tenant_id=1,
             username="otheruser",
@@ -182,29 +182,29 @@ class TestUserLifecycleWithDb:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         admin_ctx.user_id = 99999
         ctx.set(admin_ctx)
-        
+
         svc = SystemUserService()
         await svc.update_user_status(str(other_user.id), "FROZEN")
-        
+
         db_session.expire(other_user)
         assert other_user.status == "FROZEN"
 
     async def test_update_user_status_cannot_freeze_self(self, db_session, setup_user, admin_ctx):
         """UT-B2-U-15: Cannot freeze the current user."""
-        from app.services.system_user import SystemUserService
         from app.core.errors import BizError
-        
+        from app.services.system_user import SystemUserService
+
         admin_ctx.user_id = setup_user.id
         ctx.set(admin_ctx)
-        
+
         svc = SystemUserService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.update_user_status(str(setup_user.id), "FROZEN")
-        
+
         assert exc.value.code == 1001
 
     async def test_resign_user_sets_status(self, db_session, admin_ctx):
@@ -212,7 +212,7 @@ class TestUserLifecycleWithDb:
         from app.domains.sys.models import User
         from app.services.system_user import SystemUserService
         from tests.support.rows import add
-        
+
         other_user = add(db_session, User(
             tenant_id=1,
             username="resignuser",
@@ -221,29 +221,29 @@ class TestUserLifecycleWithDb:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         admin_ctx.user_id = 99999
         ctx.set(admin_ctx)
-        
+
         svc = SystemUserService()
         await svc.resign_user(str(other_user.id))
-        
+
         db_session.expire(other_user)
         assert other_user.status == "RESIGNED"
 
     async def test_resign_user_already_resigned_raises_1001(self, db_session, setup_user, admin_ctx):
         """UT-B2-U-17: resign_user raises 1001 for already resigned user."""
-        from app.services.system_user import SystemUserService
         from app.core.errors import BizError
-        
+        from app.services.system_user import SystemUserService
+
         setup_user.status = "RESIGNED"
         db_session.flush()
-        
+
         svc = SystemUserService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.resign_user(str(setup_user.id))
-        
+
         assert exc.value.code == 1001
 
     async def test_reset_password_returns_temp_password(self, db_session, admin_ctx):
@@ -251,7 +251,7 @@ class TestUserLifecycleWithDb:
         from app.domains.sys.models import User
         from app.services.system_user import SystemUserService
         from tests.support.rows import add
-        
+
         target_user = add(db_session, User(
             tenant_id=1,
             username="resetpwduser",
@@ -260,10 +260,10 @@ class TestUserLifecycleWithDb:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         svc = SystemUserService()
         result = await svc.reset_password(str(target_user.id))
-        
+
         assert "new_password" in result
         assert len(result["new_password"]) >= 8
 
@@ -272,7 +272,7 @@ class TestUserLifecycleWithDb:
         from app.domains.sys.models import User
         from app.services.system_user import SystemUserService
         from tests.support.rows import add
-        
+
         target_user = add(db_session, User(
             tenant_id=1,
             username="resetpwduser2",
@@ -281,23 +281,23 @@ class TestUserLifecycleWithDb:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         svc = SystemUserService()
         await svc.reset_password(str(target_user.id))
-        
+
         db_session.expire(target_user)
         assert target_user.pwd_reset_required is True
 
     async def test_reset_password_not_found_raises_1504(self, db_session, admin_ctx):
         """UT-B2-U-20: reset_password raises 1504 for non-existent user."""
-        from app.services.system_user import SystemUserService
         from app.core.errors import BizError
-        
+        from app.services.system_user import SystemUserService
+
         svc = SystemUserService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.reset_password("999999")
-        
+
         assert exc.value.code == 1504
 
 
@@ -333,6 +333,6 @@ class TestR1MemberHelpers:
     def test_count_r1_members_returns_zero_for_empty(self, db_session):
         """UT-B2-U-25: _count_r1_members returns 0 for empty tenant."""
         from app.services.system_user import _count_r1_members
-        
+
         count = _count_r1_members(db_session, tenant_id=9999)
         assert count == 0

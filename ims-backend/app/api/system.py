@@ -610,7 +610,7 @@ async def get_user_detail(
 ) -> CommonResult[UserDetailResponse]:
     """Get user detail by ID (U-06)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     result = await service.get_user_detail(id)
     return CommonResult.success(data=result)
@@ -628,7 +628,7 @@ async def update_user(
 ) -> CommonResult[UserDetailResponse]:
     """Update user basic info (U-06)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     result = await service.update_user(id, request)
     return CommonResult.success(data=result)
@@ -646,7 +646,7 @@ async def update_user_roles(
 ) -> CommonResult:
     """Update user's role assignments (U-08)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     await service.update_user_roles(id, request.role_ids)
     return CommonResult.success()
@@ -664,7 +664,7 @@ async def update_user_status(
 ) -> CommonResult:
     """Update user status - freeze or reactivate (U-09)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     await service.update_user_status(id, status)
     return CommonResult.success()
@@ -681,7 +681,7 @@ async def resign_user(
 ) -> CommonResult:
     """Mark user as resigned (U-10)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     await service.resign_user(id)
     return CommonResult.success()
@@ -703,7 +703,7 @@ async def reset_user_password(
 ) -> CommonResult[ResetPasswordResponse]:
     """Reset user password to a random value (U-11)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     result = await service.reset_password(id)
     return CommonResult.success(data=result)
@@ -720,7 +720,7 @@ async def unlock_user(
 ) -> CommonResult:
     """Unlock a locked user account (U-12)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     await service.unlock_user(id)
     return CommonResult.success()
@@ -737,7 +737,7 @@ async def kick_user(
 ) -> CommonResult:
     """Kick user's all sessions offline (U-13)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     await service.kick_user(id)
     return CommonResult.success()
@@ -752,7 +752,7 @@ async def kick_user(
 async def export_users() -> CommonResult:
     """Create user export task (U-15)."""
     from app.services.system_user import SystemUserService
-    
+
     service = SystemUserService()
     result = await service.export_users()
     return CommonResult.success(data=result)
@@ -839,7 +839,7 @@ async def get_role_page(
 ) -> CommonResult[PageResult[RoleListItem]]:
     """Get paginated role list (R-01)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_role_page(page_param, keyword, status)
@@ -855,7 +855,7 @@ async def get_role_page(
 async def create_role(request: RoleCreateRequest) -> CommonResult[RoleDetailResponse]:
     """Create a new role (R-02)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     result = await service.create_role(request)
     return CommonResult.success(data=result)
@@ -872,7 +872,7 @@ async def get_role_detail(
 ) -> CommonResult[RoleDetailResponse]:
     """Get role detail (R-03)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     result = await service.get_role_detail(id)
     return CommonResult.success(data=result)
@@ -890,7 +890,7 @@ async def update_role(
 ) -> CommonResult[RoleDetailResponse]:
     """Update role basic info (R-03)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     result = await service.update_role(id, request)
     return CommonResult.success(data=result)
@@ -908,7 +908,7 @@ async def update_role_status(
 ) -> CommonResult:
     """Update role status (R-03)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.update_role_status(id, status)
     return CommonResult.success()
@@ -926,7 +926,7 @@ async def update_role_menus(
 ) -> CommonResult:
     """Update role menu assignments (R-04)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.update_role_menus(id, request.menu_ids)
     return CommonResult.success()
@@ -944,7 +944,7 @@ async def update_role_perm_detail(
 ) -> CommonResult:
     """Update role permission detail R/W/D (R-04)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     result = await service.update_role_perm_detail(id, request.perm_code, request.r, request.w, request.d)
     return CommonResult.success(data=result)
@@ -962,7 +962,7 @@ async def update_role_data_scope(
 ) -> CommonResult:
     """Update role data scope (R-05)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.update_role_data_scope(id, data_scope)
     return CommonResult.success()
@@ -980,7 +980,7 @@ async def update_role_dingtalk_position(
 ) -> CommonResult:
     """Update role DingTalk position binding (R-06)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.update_role_dingtalk_position(id, position_code)
     return CommonResult.success()
@@ -999,7 +999,7 @@ async def get_role_members(
 ) -> CommonResult[PageResult[UserSimpleItem]]:
     """Get role members (R-09)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_role_members(id, page_param)
@@ -1018,7 +1018,7 @@ async def add_role_members(
 ) -> CommonResult:
     """Add members to role (R-09)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.add_role_members(id, request.user_ids)
     return CommonResult.success()
@@ -1036,7 +1036,7 @@ async def remove_role_members(
 ) -> CommonResult:
     """Remove members from role (R-09)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.remove_role_members(id, request.user_ids)
     return CommonResult.success()
@@ -1053,7 +1053,7 @@ async def delete_role(
 ) -> CommonResult:
     """Delete role (R-10)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     await service.delete_role(id)
     return CommonResult.success()
@@ -1068,7 +1068,7 @@ async def delete_role(
 async def export_roles() -> CommonResult:
     """Create role export task (R-12)."""
     from app.services.system_role import SystemRoleService
-    
+
     service = SystemRoleService()
     result = await service.export_roles()
     return CommonResult.success(data=result)
@@ -1126,7 +1126,7 @@ async def get_menu_tree(
 ) -> CommonResult[list[MenuTreeNode]]:
     """Get full menu tree (M-01). Platform tenant only."""
     from app.services.system_menu import SystemMenuService
-    
+
     service = SystemMenuService()
     result = await service.get_menu_tree(keyword)
     return CommonResult.success(data=result)
@@ -1141,7 +1141,7 @@ async def get_menu_tree(
 async def create_menu(request: MenuCreateRequest) -> CommonResult:
     """Create a new menu (M-02). Platform tenant only."""
     from app.services.system_menu import SystemMenuService
-    
+
     service = SystemMenuService()
     result = await service.create_menu(request)
     return CommonResult.success(data=result)
@@ -1159,7 +1159,7 @@ async def update_menu(
 ) -> CommonResult:
     """Update menu (M-02). Platform tenant only."""
     from app.services.system_menu import SystemMenuService
-    
+
     service = SystemMenuService()
     result = await service.update_menu(id, request)
     return CommonResult.success(data=result)
@@ -1176,7 +1176,7 @@ async def delete_menu(
 ) -> CommonResult:
     """Delete menu (M-04). Platform tenant only."""
     from app.services.system_menu import SystemMenuService
-    
+
     service = SystemMenuService()
     await service.delete_menu(id)
     return CommonResult.success()
@@ -1243,7 +1243,7 @@ async def get_operate_log_page(
 ) -> CommonResult[PageResult[OperateLogListItem]]:
     """Get paginated operation log list (L-01)."""
     from app.services.system_log import SystemLogService
-    
+
     service = SystemLogService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_operate_log_page(page_param, module, operation, operator_name, start_time, end_time)
@@ -1261,7 +1261,7 @@ async def get_operate_log_detail(
 ) -> CommonResult[OperateLogDetailResponse]:
     """Get operation log detail (L-02)."""
     from app.services.system_log import SystemLogService
-    
+
     service = SystemLogService()
     result = await service.get_operate_log_detail(id)
     return CommonResult.success(data=result)
@@ -1283,7 +1283,7 @@ async def get_login_log_page(
 ) -> CommonResult[PageResult[LoginLogListItem]]:
     """Get paginated login log list (L-03)."""
     from app.services.system_log import SystemLogService
-    
+
     service = SystemLogService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     log_result = await service.get_login_log_page(page_param, username, result, start_time, end_time)
@@ -1299,7 +1299,7 @@ async def get_login_log_page(
 async def export_operate_logs() -> CommonResult:
     """Create operation log export task (L-04)."""
     from app.services.system_log import SystemLogService
-    
+
     service = SystemLogService()
     result = await service.export_operate_logs()
     return CommonResult.success(data=result)
@@ -1314,7 +1314,7 @@ async def export_operate_logs() -> CommonResult:
 async def export_login_logs() -> CommonResult:
     """Create login log export task (L-04)."""
     from app.services.system_log import SystemLogService
-    
+
     service = SystemLogService()
     result = await service.export_login_logs()
     return CommonResult.success(data=result)
@@ -1349,7 +1349,7 @@ async def get_param_list(
 ) -> CommonResult[list[ParamListItem]]:
     """Get parameter list (P-01)."""
     from app.services.system_param import SystemParamService
-    
+
     service = SystemParamService()
     result = await service.get_param_list(group)
     return CommonResult.success(data=result)
@@ -1367,7 +1367,7 @@ async def update_param(
 ) -> CommonResult:
     """Update parameter value (P-02)."""
     from app.services.system_param import SystemParamService
-    
+
     service = SystemParamService()
     result = await service.update_param(param_key, value)
     return CommonResult.success(data=result)
@@ -1394,7 +1394,7 @@ async def get_calendar_list(
 ) -> CommonResult[list[CalendarDayItem]]:
     """Get calendar list (Q4)."""
     from app.services.system_calendar import SystemCalendarService
-    
+
     service = SystemCalendarService()
     result = await service.get_calendar_list(year, month)
     return CommonResult.success(data=result)
@@ -1412,7 +1412,7 @@ async def update_calendar(
 ) -> CommonResult:
     """Update calendar day (Q4)."""
     from app.services.system_calendar import SystemCalendarService
-    
+
     service = SystemCalendarService()
     result = await service.update_calendar(day, kind)
     return CommonResult.success(data=result)
@@ -1443,7 +1443,7 @@ async def get_notify_record_page(
 ) -> CommonResult[PageResult[NotifyRecordListItem]]:
     """Get paginated notification record list (N-01)."""
     from app.services.system_notify import SystemNotifyService
-    
+
     service = SystemNotifyService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_notify_record_page(page_param, status, event_type)
@@ -1461,7 +1461,7 @@ async def resend_notification(
 ) -> CommonResult:
     """Resend a failed notification (N-02)."""
     from app.services.system_notify import SystemNotifyService
-    
+
     service = SystemNotifyService()
     result = await service.resend_notification(id)
     return CommonResult.success(data=result)
@@ -1539,7 +1539,7 @@ async def get_tenant_page(
 ) -> CommonResult[PageResult[TenantListItem]]:
     """Get paginated tenant list (T-01). Platform-only."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     page_param = PageParam(page_no=page_no, page_size=page_size)
     result = await service.get_tenant_page(page_param, keyword, status)
@@ -1555,7 +1555,7 @@ async def get_tenant_page(
 async def create_tenant(request: TenantCreateRequest) -> CommonResult[TenantCreateResponse]:
     """Create a new tenant (T-02). Platform-only."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     result = await service.create_tenant(request)
     return CommonResult.success(data=result)
@@ -1573,7 +1573,7 @@ async def update_tenant(
 ) -> CommonResult:
     """Update tenant (T-03). Platform-only."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     result = await service.update_tenant(id, request)
     return CommonResult.success(data=result)
@@ -1588,7 +1588,7 @@ async def update_tenant(
 async def get_package_simple_list() -> CommonResult[list[PackageSimpleItem]]:
     """Get simple package list for selectors (T-03)."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     result = await service.get_package_simple_list()
     return CommonResult.success(data=result)
@@ -1603,7 +1603,7 @@ async def get_package_simple_list() -> CommonResult[list[PackageSimpleItem]]:
 async def get_package_list() -> CommonResult[list[PackageListItem]]:
     """Get full package list (T-04). Platform-only."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     result = await service.get_package_list()
     return CommonResult.success(data=result)
@@ -1618,7 +1618,7 @@ async def get_package_list() -> CommonResult[list[PackageListItem]]:
 async def create_package(request: PackageCreateRequest) -> CommonResult:
     """Create a new package (T-04). Platform-only."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     result = await service.create_package(request)
     return CommonResult.success(data=result)
@@ -1636,7 +1636,7 @@ async def update_package(
 ) -> CommonResult:
     """Update package (T-04). Platform-only."""
     from app.services.system_tenant import SystemTenantService
-    
+
     service = SystemTenantService()
     result = await service.update_package(id, request)
     return CommonResult.success(data=result)

@@ -27,7 +27,7 @@ class SystemNotifyService:
     ) -> PageResult:
         """Get paginated notification record list (N-01)."""
         from app.domains.sys.models import OutboxEvent
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -70,7 +70,7 @@ class SystemNotifyService:
     async def resend_notification(self, record_id: str) -> dict[str, Any]:
         """Resend a failed notification (N-02)."""
         from app.domains.sys.models import OutboxEvent
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         record_id_int = int(record_id)

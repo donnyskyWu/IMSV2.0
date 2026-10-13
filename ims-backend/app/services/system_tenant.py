@@ -34,7 +34,7 @@ class SystemTenantService:
     ) -> PageResult:
         """Get paginated tenant list (T-01). Platform-only."""
         from app.domains.sys.models import Tenant
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -81,10 +81,18 @@ class SystemTenantService:
         """Create a new tenant (T-02). Platform-only."""
         from app.db.ids import assign_pk
         from app.domains.sys.models import (
-            Dept, Menu, Role, RoleMenu, RolePermDetail, Tenant,
-            TenantPackageMenu, User, UserDept, UserRole,
+            Dept,
+            Menu,
+            Role,
+            RoleMenu,
+            RolePermDetail,
+            Tenant,
+            TenantPackageMenu,
+            User,
+            UserDept,
+            UserRole,
         )
-        
+
         session = get_db_session()
         current_tenant_id = ctx.tenant_id
 
@@ -202,7 +210,7 @@ class SystemTenantService:
             Dept.tenant_id == tenant.id,
             Dept.parent_id == 0,
         ).first()
-        
+
         if root_dept:
             admin_dept = UserDept(
                 tenant_id=tenant.id,
@@ -226,9 +234,14 @@ class SystemTenantService:
         """Update tenant (T-03). Platform-only."""
         from app.db.ids import assign_pk
         from app.domains.sys.models import (
-            Menu, Role, RoleMenu, RolePermDetail, Tenant, TenantPackageMenu,
+            Menu,
+            Role,
+            RoleMenu,
+            RolePermDetail,
+            Tenant,
+            TenantPackageMenu,
         )
-        
+
         session = get_db_session()
         current_tenant_id = ctx.tenant_id
         tenant_id_int = int(tenant_id)
@@ -353,7 +366,7 @@ class SystemTenantService:
     async def get_package_simple_list(self) -> list[dict[str, Any]]:
         """Get simple package list for selectors (T-03)."""
         from app.domains.sys.models import TenantPackage
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -376,9 +389,10 @@ class SystemTenantService:
 
     async def get_package_list(self) -> list[dict[str, Any]]:
         """Get full package list (T-04). Platform-only."""
-        from app.domains.sys.models import TenantPackage, TenantPackageMenu
         from sqlalchemy import func
-        
+
+        from app.domains.sys.models import TenantPackage, TenantPackageMenu
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -415,9 +429,9 @@ class SystemTenantService:
     @transactional
     async def create_package(self, request: Any) -> dict[str, Any]:
         """Create a new package (T-04). Platform-only."""
-        from app.domains.sys.models import TenantPackage
         from app.db.ids import assign_pk
-        
+        from app.domains.sys.models import TenantPackage
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -453,10 +467,15 @@ class SystemTenantService:
         """Update package (T-04). Platform-only."""
         from app.db.ids import assign_pk
         from app.domains.sys.models import (
-            Menu, Role, RoleMenu, RolePermDetail, Tenant,
-            TenantPackage, TenantPackageMenu,
+            Menu,
+            Role,
+            RoleMenu,
+            RolePermDetail,
+            Tenant,
+            TenantPackage,
+            TenantPackageMenu,
         )
-        
+
         session = get_db_session()
         current_tenant_id = ctx.tenant_id
         package_id_int = int(package_id)

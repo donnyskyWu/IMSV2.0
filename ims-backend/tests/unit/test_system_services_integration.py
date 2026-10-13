@@ -11,8 +11,8 @@ Covers API endpoints and service methods with database:
 - Param operations
 """
 
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from app.core.context import RequestContext, ctx
 
@@ -50,7 +50,7 @@ class TestSystemUserServiceIntegration:
         """Create a test user."""
         from app.domains.sys.models import User
         from tests.support.rows import add
-        
+
         return add(db_session, User(
             tenant_id=1,
             username="integration_user",
@@ -63,34 +63,35 @@ class TestSystemUserServiceIntegration:
     async def test_user_get_detail(self, db_session, test_user, platform_admin_ctx):
         """Test getting user detail."""
         from app.services.system_user import SystemUserService
-        
+
         svc = SystemUserService()
         result = await svc.get_user_detail(str(test_user.id))
-        
+
         assert result["username"] == "integration_user"
         assert result["status"] == "ACTIVE"
 
     async def test_user_update_roles_empty(self, db_session, test_user, platform_admin_ctx):
         """Test updating user with empty roles."""
         from app.services.system_user import SystemUserService
-        
+
         svc = SystemUserService()
         await svc.update_user_roles(str(test_user.id), [])
 
     async def test_user_kick_drops_sessions(self, db_session, test_user, platform_admin_ctx):
         """Test kick user drops all sessions."""
         from app.services.system_user import SystemUserService
-        
+
         svc = SystemUserService()
         await svc.kick_user(str(test_user.id))
 
     async def test_user_unlock(self, db_session, platform_admin_ctx):
         """Test unlocking a locked user."""
         from datetime import datetime, timedelta
+
         from app.domains.sys.models import User
         from app.services.system_user import SystemUserService
         from tests.support.rows import add
-        
+
         locked_user = add(db_session, User(
             tenant_id=1,
             username="locked_user",
@@ -100,10 +101,10 @@ class TestSystemUserServiceIntegration:
             source="LOCAL",
             lock_until=datetime.now() + timedelta(hours=1),
         ))
-        
+
         svc = SystemUserService()
         await svc.unlock_user(str(locked_user.id))
-        
+
         db_session.expire(locked_user)
         assert locked_user.lock_until is None
 
@@ -112,7 +113,7 @@ class TestSystemUserServiceIntegration:
         from app.domains.sys.models import User
         from app.services.system_user import SystemUserService
         from tests.support.rows import add
-        
+
         new_user = add(db_session, User(
             tenant_id=1,
             username="never_logged_user",
@@ -121,10 +122,10 @@ class TestSystemUserServiceIntegration:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         svc = SystemUserService()
         await svc.delete_user(str(new_user.id))
-        
+
         db_session.expire(new_user)
         assert new_user.deleted == new_user.id
 
@@ -155,28 +156,28 @@ class TestSystemRoleServiceIntegration:
 
     async def test_role_page_empty(self, db_session, platform_admin_ctx):
         """Test getting empty role page."""
-        from app.services.system_role import SystemRoleService
         from app.core.pagination import PageParam
-        
+        from app.services.system_role import SystemRoleService
+
         svc = SystemRoleService()
         result = await svc.get_role_page(PageParam(page_no=1, page_size=10))
-        
+
         assert result.list is not None
         assert result.total >= 0
 
     async def test_role_create_basic(self, db_session, platform_admin_ctx):
         """Test creating a basic role."""
         from app.services.system_role import SystemRoleService
-        
+
         class MockRequest:
             role_key = "TEST_CREATE"
             name = "Test Create Role"
             data_scope = None
             remark = None
-        
+
         svc = SystemRoleService()
         result = await svc.create_role(MockRequest())
-        
+
         assert result["name"] == "Test Create Role"
 
     async def test_role_update_basic(self, db_session, platform_admin_ctx):
@@ -184,7 +185,7 @@ class TestSystemRoleServiceIntegration:
         from app.domains.sys.models import Role
         from app.services.system_role import SystemRoleService
         from tests.support.rows import add
-        
+
         role = add(db_session, Role(
             tenant_id=1,
             role_key="UPDATE_ROLE",
@@ -193,14 +194,14 @@ class TestSystemRoleServiceIntegration:
             source="MANUAL",
             data_scope="ALL",
         ))
-        
+
         class MockRequest:
             name = "Updated Role Name"
             remark = "Updated remark"
-        
+
         svc = SystemRoleService()
         result = await svc.update_role(str(role.id), MockRequest())
-        
+
         assert result["name"] == "Updated Role Name"
 
     async def test_role_delete_no_members(self, db_session, platform_admin_ctx):
@@ -208,7 +209,7 @@ class TestSystemRoleServiceIntegration:
         from app.domains.sys.models import Role
         from app.services.system_role import SystemRoleService
         from tests.support.rows import add
-        
+
         role = add(db_session, Role(
             tenant_id=1,
             role_key="DELETE_ROLE",
@@ -217,10 +218,10 @@ class TestSystemRoleServiceIntegration:
             source="MANUAL",
             data_scope="ALL",
         ))
-        
+
         svc = SystemRoleService()
         await svc.delete_role(str(role.id))
-        
+
         db_session.expire(role)
         assert role.deleted == role.id
 
@@ -229,7 +230,7 @@ class TestSystemRoleServiceIntegration:
         from app.domains.sys.models import Menu, Role
         from app.services.system_role import SystemRoleService
         from tests.support.rows import add
-        
+
         role = add(db_session, Role(
             tenant_id=1,
             role_key="MENU_ROLE",
@@ -238,7 +239,7 @@ class TestSystemRoleServiceIntegration:
             source="MANUAL",
             data_scope="ALL",
         ))
-        
+
         menu = add(db_session, Menu(
             tenant_id=1,
             parent_id=0,
@@ -247,7 +248,7 @@ class TestSystemRoleServiceIntegration:
             perm_code="ims:test:menu",
             status="ENABLED",
         ))
-        
+
         svc = SystemRoleService()
         await svc.update_role_menus(str(role.id), [str(menu.id)])
 
@@ -256,7 +257,7 @@ class TestSystemRoleServiceIntegration:
         from app.domains.sys.models import Role
         from app.services.system_role import SystemRoleService
         from tests.support.rows import add
-        
+
         role = add(db_session, Role(
             tenant_id=1,
             role_key="SCOPE_ROLE",
@@ -264,10 +265,10 @@ class TestSystemRoleServiceIntegration:
             status="ENABLED",
             source="MANUAL",
         ))
-        
+
         svc = SystemRoleService()
         await svc.update_role_data_scope(str(role.id), "SELF")
-        
+
         db_session.expire(role)
         assert role.data_scope == "SELF"
 
@@ -294,16 +295,16 @@ class TestSystemMenuServiceIntegration:
     async def test_menu_tree_empty(self, db_session, platform_ctx):
         """Test getting empty menu tree."""
         from app.services.system_menu import SystemMenuService
-        
+
         svc = SystemMenuService()
         result = await svc.get_menu_tree()
-        
+
         assert isinstance(result, list)
 
     async def test_menu_create(self, db_session, platform_ctx):
         """Test creating a menu."""
         from app.services.system_menu import SystemMenuService
-        
+
         class MockRequest:
             parent_id = "0"
             type = "DIR"
@@ -314,10 +315,10 @@ class TestSystemMenuServiceIntegration:
             sort = 1
             visible = True
             keep_alive = False
-        
+
         svc = SystemMenuService()
         result = await svc.create_menu(MockRequest())
-        
+
         assert result["name"] == "Test Directory"
 
     async def test_menu_update(self, db_session, platform_ctx):
@@ -325,7 +326,7 @@ class TestSystemMenuServiceIntegration:
         from app.domains.sys.models import Menu
         from app.services.system_menu import SystemMenuService
         from tests.support.rows import add
-        
+
         menu = add(db_session, Menu(
             tenant_id=1,
             parent_id=0,
@@ -333,15 +334,15 @@ class TestSystemMenuServiceIntegration:
             name="Update Dir",
             status="ENABLED",
         ))
-        
+
         class MockRequest:
             name = "Updated Dir Name"
             sort = 10
             visible = False
-        
+
         svc = SystemMenuService()
         result = await svc.update_menu(str(menu.id), MockRequest())
-        
+
         assert result["name"] == "Updated Dir Name"
 
 
@@ -366,22 +367,22 @@ class TestSystemLogServiceIntegration:
 
     async def test_operate_log_page_empty(self, db_session, admin_ctx):
         """Test getting empty operate log page."""
-        from app.services.system_log import SystemLogService
         from app.core.pagination import PageParam
-        
+        from app.services.system_log import SystemLogService
+
         svc = SystemLogService()
         result = await svc.get_operate_log_page(PageParam(page_no=1, page_size=10))
-        
+
         assert result.list is not None
 
     async def test_login_log_page_empty(self, db_session, admin_ctx):
         """Test getting empty login log page."""
-        from app.services.system_log import SystemLogService
         from app.core.pagination import PageParam
-        
+        from app.services.system_log import SystemLogService
+
         svc = SystemLogService()
         result = await svc.get_login_log_page(PageParam(page_no=1, page_size=10))
-        
+
         assert result.list is not None
 
 
@@ -407,10 +408,10 @@ class TestSystemParamServiceIntegration:
     async def test_param_list_empty(self, db_session, admin_ctx):
         """Test getting empty param list."""
         from app.services.system_param import SystemParamService
-        
+
         svc = SystemParamService()
         result = await svc.get_param_list()
-        
+
         assert isinstance(result, list)
 
 
@@ -435,28 +436,28 @@ class TestSystemTenantServiceIntegration:
 
     async def test_tenant_page_empty(self, db_session, platform_ctx):
         """Test getting tenant page."""
-        from app.services.system_tenant import SystemTenantService
         from app.core.pagination import PageParam
-        
+        from app.services.system_tenant import SystemTenantService
+
         svc = SystemTenantService()
         result = await svc.get_tenant_page(PageParam(page_no=1, page_size=10))
-        
+
         assert result.list is not None
 
     async def test_package_list_empty(self, db_session, platform_ctx):
         """Test getting empty package list."""
         from app.services.system_tenant import SystemTenantService
-        
+
         svc = SystemTenantService()
         result = await svc.get_package_list()
-        
+
         assert isinstance(result, list)
 
     async def test_package_simple_list_empty(self, db_session, platform_ctx):
         """Test getting empty package simple list."""
         from app.services.system_tenant import SystemTenantService
-        
+
         svc = SystemTenantService()
         result = await svc.get_package_simple_list()
-        
+
         assert isinstance(result, list)

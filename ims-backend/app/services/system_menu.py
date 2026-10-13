@@ -27,7 +27,7 @@ class SystemMenuService:
     async def get_menu_tree(self, keyword: Optional[str] = None) -> list[dict[str, Any]]:
         """Get full menu tree (M-01). Platform tenant only."""
         from app.domains.sys.models import Menu
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -86,9 +86,9 @@ class SystemMenuService:
     @transactional
     async def create_menu(self, request: Any) -> dict[str, Any]:
         """Create a new menu (M-02)."""
-        from app.domains.sys.models import Menu
         from app.db.ids import assign_pk
-        
+        from app.domains.sys.models import Menu
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -110,7 +110,7 @@ class SystemMenuService:
             # Format: ims:<domain>:<resource>[:<action>]
             if not request.perm_code.startswith("ims:"):
                 raise BizError(1001, msg="权限码格式错误")
-            
+
             existing = session.query(Menu).filter(
                 Menu.perm_code == request.perm_code,
                 Menu.deleted == 0,
@@ -146,7 +146,7 @@ class SystemMenuService:
     async def update_menu(self, menu_id: str, request: Any) -> dict[str, Any]:
         """Update menu (M-02)."""
         from app.domains.sys.models import Menu
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         menu_id_int = int(menu_id)
@@ -195,7 +195,7 @@ class SystemMenuService:
     async def update_menu_visible(self, menu_id: str, visible: bool) -> None:
         """Toggle menu visibility (M-03)."""
         from app.domains.sys.models import Menu
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         menu_id_int = int(menu_id)
@@ -222,7 +222,7 @@ class SystemMenuService:
     async def delete_menu(self, menu_id: str) -> None:
         """Delete menu (M-04)."""
         from app.domains.sys.models import Menu, RoleMenu, TenantPackageMenu
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         menu_id_int = int(menu_id)

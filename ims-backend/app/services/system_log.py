@@ -30,7 +30,7 @@ class SystemLogService:
     ) -> PageResult:
         """Get paginated operation log list (L-01)."""
         from app.domains.sys.models import OperateLog
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -84,7 +84,7 @@ class SystemLogService:
     async def get_operate_log_detail(self, log_id: str) -> dict[str, Any]:
         """Get operation log detail (L-02)."""
         from app.domains.sys.models import OperateLog
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         log_id_int = int(log_id)
@@ -125,7 +125,7 @@ class SystemLogService:
     ) -> PageResult:
         """Get paginated login log list (L-03)."""
         from app.domains.sys.models import LoginLog
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 

@@ -11,15 +11,14 @@ Implements U-05 to U-16 from the B2 system management module:
 - User export
 """
 
-from typing import Any, Optional
+from typing import Any
 
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.cache import Cache
 from app.core.context import ctx
 from app.core.errors import BizError
-from app.core.pagination import PageParam, PageResult
 from app.db.session import get_db_session
 from app.db.transaction import transactional
 
@@ -29,8 +28,9 @@ _TENANT_ADMIN_KEY = "R" + "1"
 def _count_r1_members(session: Session, tenant_id: int, exclude_user_id: int = None) -> int:
     """Count R1 members (active users with enabled R1 role)."""
     from sqlalchemy import distinct
+
     from app.domains.sys.models import Role, User, UserRole
-    
+
     query = session.query(func.count(distinct(UserRole.user_id))).join(
         Role, Role.id == UserRole.role_id
     ).join(
@@ -51,7 +51,7 @@ def _count_r1_members(session: Session, tenant_id: int, exclude_user_id: int = N
 def _is_r1_member(session: Session, user_id: int, tenant_id: int) -> bool:
     """Check if user is an R1 member."""
     from app.domains.sys.models import Role, UserRole
-    
+
     return session.query(UserRole).join(
         Role, Role.id == UserRole.role_id
     ).filter(
@@ -69,7 +69,7 @@ class SystemUserService:
     def _drop_sessions(self, user_id: int) -> None:
         """Drop all sessions for a user and blacklist them."""
         from app.services.auth import AuthService
-        
+
         auth = AuthService()
         key = f"{auth.USER_SESSIONS_PREFIX}{user_id}"
         for sid in list(Cache.smembers(key)):
@@ -90,7 +90,7 @@ class SystemUserService:
     async def get_user_detail(self, user_id: str) -> dict[str, Any]:
         """Get user detail by ID (U-06)."""
         from app.domains.sys.models import Dept, Role, User, UserDept, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -110,7 +110,7 @@ class SystemUserService:
             UserDept.tenant_id == tenant_id,
         ).all()
         dept_ids = [ud.dept_id for ud in user_depts]
-        
+
         dept_names = {}
         if dept_ids:
             depts = session.query(Dept.id, Dept.name).filter(
@@ -124,7 +124,7 @@ class SystemUserService:
             UserRole.user_id == user_id_int,
         ).all()
         role_ids = [ur.role_id for ur in user_roles]
-        
+
         role_names = {}
         if role_ids:
             roles = session.query(Role.id, Role.name).filter(
@@ -157,7 +157,7 @@ class SystemUserService:
     async def update_user(self, user_id: str, request: Any) -> dict[str, Any]:
         """Update user basic info (U-06)."""
         from app.domains.sys.models import User
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -198,7 +198,7 @@ class SystemUserService:
     async def update_user_roles(self, user_id: str, role_ids: list[str]) -> None:
         """Update user's role assignments (U-08)."""
         from app.domains.sys.models import Role, User, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -219,14 +219,16 @@ class SystemUserService:
             UserRole.user_id == user_id_int,
         ).all()
         current_role_ids = {ur.role_id for ur in current_roles}
-        
+
         r1 = session.query(Role).filter(
             Role.tenant_id == tenant_id,
             Role.role_key == _TENANT_ADMIN_KEY,
             Role.deleted == 0,
         ).first()
-        
-        if r1 and r1.id in current_role_ids and r1.id not in role_id_ints:
+
+        if (  # noqa: SIM102
+            r1 and r1.id in current_role_ids and r1.id not in role_id_ints
+        ):
             # User had R1, now losing it
             if _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0:
                 raise BizError(1001, msg="操作将导致租户没有管理员")
@@ -259,7 +261,7 @@ class SystemUserService:
             session.add(user_role)
 
         session.flush()
-        
+
         # Bump permission version
         self._bump_perm_version(user_id_int)
 
@@ -267,7 +269,7 @@ class SystemUserService:
     async def update_user_status(self, user_id: str, status: str) -> None:
         """Update user status - freeze or reactivate (U-09)."""
         from app.domains.sys.models import User
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -288,10 +290,12 @@ class SystemUserService:
 
         if status == "FROZEN":
             # Check if freezing would leave tenant without admin
-            if _is_r1_member(session, user_id_int, tenant_id):
-                if _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0:
-                    raise BizError(1001, msg="操作将导致租户没有管理员")
-            
+            if (  # noqa: SIM102
+                _is_r1_member(session, user_id_int, tenant_id)
+                and _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0
+            ):
+                raise BizError(1001, msg="操作将导致租户没有管理员")
+
             user.status = "FROZEN"
             self._drop_sessions(user_id_int)
         elif status == "ACTIVE":
@@ -305,7 +309,7 @@ class SystemUserService:
     async def resign_user(self, user_id: str) -> None:
         """Mark user as resigned (U-10)."""
         from app.domains.sys.models import User
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -328,9 +332,11 @@ class SystemUserService:
             raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
 
         # Check if resigning would leave tenant without admin
-        if _is_r1_member(session, user_id_int, tenant_id):
-            if _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0:
-                raise BizError(1001, msg="操作将导致租户没有管理员")
+        if (  # noqa: SIM102
+            _is_r1_member(session, user_id_int, tenant_id)
+            and _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0
+        ):
+            raise BizError(1001, msg="操作将导致租户没有管理员")
 
         user.status = "RESIGNED"
         self._drop_sessions(user_id_int)
@@ -340,9 +346,11 @@ class SystemUserService:
     async def reset_password(self, user_id: str) -> dict[str, str]:
         """Reset user password to a random value (U-11)."""
         import secrets
+
         import bcrypt
+
         from app.domains.sys.models import User
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -361,7 +369,7 @@ class SystemUserService:
             new_password.encode(), bcrypt.gensalt(rounds=10)
         ).decode()
         user.pwd_reset_required = True
-        
+
         # Drop all sessions except none (force re-login)
         self._drop_sessions(user_id_int)
         session.flush()
@@ -373,7 +381,7 @@ class SystemUserService:
         """Unlock a locked user account (U-12)."""
         from app.domains.sys.models import User
         from app.services.auth import AuthService
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -390,19 +398,19 @@ class SystemUserService:
         # Clear lock state
         user.login_fail_count = 0
         user.lock_until = None
-        
+
         # Clear Redis lock key
         auth = AuthService()
         lock_key = f"{auth.LOGIN_FAIL_PREFIX}{user.username}"
         Cache.delete(lock_key)
-        
+
         session.flush()
 
     @transactional
     async def kick_user(self, user_id: str) -> None:
         """Kick user's all sessions offline (U-13)."""
         from app.domains.sys.models import User
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -422,7 +430,7 @@ class SystemUserService:
     async def delete_user(self, user_id: str) -> None:
         """Delete user (U-14). Only never-logged-in users can be deleted."""
         from app.domains.sys.models import User, UserDept, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         user_id_int = int(user_id)
@@ -450,9 +458,11 @@ class SystemUserService:
             raise BizError(1502, refs=[{"entity": "有登录记录的用户", "count": 1}])
 
         # Check if deleting would leave tenant without admin
-        if _is_r1_member(session, user_id_int, tenant_id):
-            if _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0:
-                raise BizError(1001, msg="操作将导致租户没有管理员")
+        if (  # noqa: SIM102
+            _is_r1_member(session, user_id_int, tenant_id)
+            and _count_r1_members(session, tenant_id, exclude_user_id=user_id_int) == 0
+        ):
+            raise BizError(1001, msg="操作将导致租户没有管理员")
 
         # Delete associations
         session.query(UserDept).filter(
@@ -466,10 +476,10 @@ class SystemUserService:
 
         # Soft delete user
         user.deleted = user.id
-        
+
         # Drop sessions
         self._drop_sessions(user_id_int)
-        
+
         session.flush()
 
     async def export_users(self) -> dict[str, Any]:

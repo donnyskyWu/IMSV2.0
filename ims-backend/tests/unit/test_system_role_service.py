@@ -136,7 +136,7 @@ class TestRoleServiceWithDb:
         """Create a test role."""
         from app.domains.sys.models import Role
         from tests.support.rows import add
-        
+
         role = add(db_session, Role(
             tenant_id=1,
             role_key="TEST_ROLE",
@@ -145,17 +145,17 @@ class TestRoleServiceWithDb:
             source="MANUAL",
             data_scope="ALL",
         ))
-        
+
         return role
 
     async def test_get_role_page_returns_list(self, db_session, setup_role, admin_ctx):
         """UT-B2-R-15: get_role_page returns paginated list."""
-        from app.services.system_role import SystemRoleService
         from app.core.pagination import PageParam
-        
+        from app.services.system_role import SystemRoleService
+
         svc = SystemRoleService()
         result = await svc.get_role_page(PageParam(page_no=1, page_size=10))
-        
+
         assert result is not None
         assert hasattr(result, 'list')
         assert hasattr(result, 'total')
@@ -163,42 +163,42 @@ class TestRoleServiceWithDb:
     async def test_get_role_detail_returns_role(self, db_session, setup_role, admin_ctx):
         """UT-B2-R-16: get_role_detail returns role info."""
         from app.services.system_role import SystemRoleService
-        
+
         svc = SystemRoleService()
         result = await svc.get_role_detail(str(setup_role.id))
-        
+
         assert result is not None
         assert result["name"] == "Test Role"
 
     async def test_get_role_detail_not_found_raises_1504(self, db_session, admin_ctx):
         """UT-B2-R-17: get_role_detail raises 1504 for non-existent role."""
-        from app.services.system_role import SystemRoleService
         from app.core.errors import BizError
-        
+        from app.services.system_role import SystemRoleService
+
         svc = SystemRoleService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.get_role_detail("999999")
-        
+
         assert exc.value.code == 1504
 
     async def test_update_role_status_can_disable(self, db_session, setup_role, admin_ctx):
         """UT-B2-R-18: update_role_status can disable role."""
         from app.services.system_role import SystemRoleService
-        
+
         svc = SystemRoleService()
         await svc.update_role_status(str(setup_role.id), "DISABLED")
-        
+
         db_session.expire(setup_role)
         assert setup_role.status == "DISABLED"
 
     async def test_cannot_disable_r1_role(self, db_session, admin_ctx):
         """UT-B2-R-19: Cannot disable R1 (tenant admin) role."""
+        from app.core.errors import BizError
         from app.domains.sys.models import Role
         from app.services.system_role import SystemRoleService
-        from app.core.errors import BizError
         from tests.support.rows import add
-        
+
         r1 = add(db_session, Role(
             tenant_id=1,
             role_key="R1",
@@ -207,21 +207,21 @@ class TestRoleServiceWithDb:
             source="MANUAL",
             data_scope="ALL",
         ))
-        
+
         svc = SystemRoleService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.update_role_status(str(r1.id), "DISABLED")
-        
+
         assert exc.value.code == 1001
 
     async def test_delete_role_with_members_raises_1502(self, db_session, setup_role, admin_ctx):
         """UT-B2-R-20: delete_role raises 1502 for role with members."""
+        from app.core.errors import BizError
         from app.domains.sys.models import User, UserRole
         from app.services.system_role import SystemRoleService
-        from app.core.errors import BizError
         from tests.support.rows import add
-        
+
         user = add(db_session, User(
             tenant_id=1,
             username="member",
@@ -229,19 +229,19 @@ class TestRoleServiceWithDb:
             status="ACTIVE",
             source="LOCAL",
         ))
-        
+
         add(db_session, UserRole(
             tenant_id=1,
             user_id=user.id,
             role_id=setup_role.id,
             source="MANUAL",
         ))
-        
+
         svc = SystemRoleService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.delete_role(str(setup_role.id))
-        
+
         assert exc.value.code == 1502
 
 

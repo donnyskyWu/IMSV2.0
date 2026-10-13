@@ -24,7 +24,7 @@ class SystemCalendarService:
     ) -> list[dict[str, Any]]:
         """Get calendar list (Q4)."""
         from app.domains.sys.models import WorkCalendarDay
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -34,10 +34,7 @@ class SystemCalendarService:
         )
 
         # Filter by year
-        if month:
-            prefix = f"{year}-{month:02d}"
-        else:
-            prefix = f"{year}-"
+        prefix = f"{year}-{month:02d}" if month else f"{year}-"
 
         query = query.filter(WorkCalendarDay.day.like(f"{prefix}%"))
 
@@ -59,9 +56,9 @@ class SystemCalendarService:
         kind: str,
     ) -> dict[str, Any]:
         """Update calendar day (Q4)."""
-        from app.domains.sys.models import WorkCalendarDay
         from app.db.ids import assign_pk
-        
+        from app.domains.sys.models import WorkCalendarDay
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 

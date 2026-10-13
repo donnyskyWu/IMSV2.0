@@ -204,7 +204,7 @@ class TestB2RefreshSessionMissingAndBlacklistReturns1216:
 
     根据实现理解 v2.1 的 4 处允许差异：
     (c) refresh 里会话缺失/黑名单分支冻结离职→1216、否则 1002
-    
+
     注意：这只影响 refresh，verify_token 保持 main 行为（返回 1002）。
     """
 

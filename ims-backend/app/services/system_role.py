@@ -31,11 +31,11 @@ class SystemRoleService:
     def _bump_perm_version_for_role_members(self, session, role_id: int) -> None:
         """Increment permission version for all members of a role."""
         from app.domains.sys.models import UserRole
-        
+
         user_roles = session.query(UserRole).filter(
             UserRole.role_id == role_id,
         ).all()
-        
+
         for ur in user_roles:
             Cache.incr(f"ims:perm_ver:u:{ur.user_id}")
             Cache.delete(f"ims:perm:{ur.user_id}")
@@ -48,7 +48,7 @@ class SystemRoleService:
     ) -> PageResult:
         """Get paginated role list (R-01)."""
         from app.domains.sys.models import Role, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -108,9 +108,9 @@ class SystemRoleService:
     @transactional
     async def create_role(self, request: Any) -> dict[str, Any]:
         """Create a new role (R-02)."""
-        from app.domains.sys.models import Role
         from app.db.ids import assign_pk
-        
+        from app.domains.sys.models import Role
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
 
@@ -148,7 +148,7 @@ class SystemRoleService:
     async def get_role_detail(self, role_id: str) -> dict[str, Any]:
         """Get role detail (R-03)."""
         from app.domains.sys.models import Role, RoleMenu, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -192,7 +192,7 @@ class SystemRoleService:
     async def update_role(self, role_id: str, request: Any) -> dict[str, Any]:
         """Update role basic info (R-03)."""
         from app.domains.sys.models import Role
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -220,7 +220,7 @@ class SystemRoleService:
     async def update_role_status(self, role_id: str, status: str) -> None:
         """Update role status (R-03)."""
         from app.domains.sys.models import Role
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -248,9 +248,9 @@ class SystemRoleService:
     @transactional
     async def update_role_menus(self, role_id: str, menu_ids: list[str]) -> None:
         """Update role menu assignments (R-04)."""
-        from app.domains.sys.models import Menu, Role, RoleMenu
         from app.db.ids import assign_pk
-        
+        from app.domains.sys.models import Menu, Role, RoleMenu
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -302,7 +302,7 @@ class SystemRoleService:
     ) -> dict[str, Any]:
         """Update role permission detail R/W/D (R-04)."""
         from app.domains.sys.models import Menu, Role, RolePermDetail
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -362,7 +362,7 @@ class SystemRoleService:
     async def update_role_data_scope(self, role_id: str, data_scope: str) -> None:
         """Update role data scope (R-05)."""
         from app.domains.sys.models import Role
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -383,11 +383,13 @@ class SystemRoleService:
                 ds.get("scope_type") if isinstance(ds, dict) else getattr(ds, "scope_type", None)
                 for ds in current.data_scopes
             }
-            # Anyone can set SELF
-            if data_scope != "SELF":
-                # ALL can only be set by ALL
-                if data_scope == "ALL" and "ALL" not in scope_types:
-                    raise BizError(1008)
+            # Anyone can set SELF; ALL can only be set by ALL
+            if (  # noqa: SIM102
+                data_scope != "SELF"
+                and data_scope == "ALL"
+                and "ALL" not in scope_types
+            ):
+                raise BizError(1008)
 
         role.data_scope = data_scope
         session.flush()
@@ -399,7 +401,7 @@ class SystemRoleService:
     async def update_role_dingtalk_position(self, role_id: str, position_code: str) -> None:
         """Update role DingTalk position binding (R-06)."""
         from app.domains.sys.models import Role
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -433,7 +435,7 @@ class SystemRoleService:
     ) -> PageResult:
         """Get role members (R-09)."""
         from app.domains.sys.models import Dept, Role, User, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -489,9 +491,9 @@ class SystemRoleService:
     @transactional
     async def add_role_members(self, role_id: str, user_ids: list[str]) -> None:
         """Add members to role (R-09)."""
-        from app.domains.sys.models import Role, User, UserRole
         from app.db.ids import assign_pk
-        
+        from app.domains.sys.models import Role, User, UserRole
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -545,7 +547,7 @@ class SystemRoleService:
     async def remove_role_members(self, role_id: str, user_ids: list[str]) -> None:
         """Remove members from role (R-09)."""
         from app.domains.sys.models import Role, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)
@@ -585,7 +587,7 @@ class SystemRoleService:
     async def delete_role(self, role_id: str) -> None:
         """Delete role (R-10)."""
         from app.domains.sys.models import Role, RoleMenu, RolePermDetail, UserRole
-        
+
         session = get_db_session()
         tenant_id = ctx.tenant_id
         role_id_int = int(role_id)

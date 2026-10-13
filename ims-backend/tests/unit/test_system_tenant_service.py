@@ -110,54 +110,54 @@ class TestTenantServiceWithDb:
 
     async def test_get_tenant_page_platform_only(self, db_session, non_platform_ctx):
         """UT-B2-T-09: get_tenant_page only accessible by platform tenant."""
-        from app.services.system_tenant import SystemTenantService
-        from app.core.pagination import PageParam
         from app.core.errors import BizError
-        
+        from app.core.pagination import PageParam
+        from app.services.system_tenant import SystemTenantService
+
         svc = SystemTenantService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.get_tenant_page(PageParam(page_no=1, page_size=10))
-        
+
         assert exc.value.code == 1008
 
     async def test_get_tenant_page_returns_list(self, db_session, platform_ctx):
         """UT-B2-T-10: get_tenant_page returns paginated list."""
-        from app.services.system_tenant import SystemTenantService
         from app.core.pagination import PageParam
-        
+        from app.services.system_tenant import SystemTenantService
+
         svc = SystemTenantService()
         result = await svc.get_tenant_page(PageParam(page_no=1, page_size=10))
-        
+
         assert result is not None
         assert hasattr(result, 'list')
         assert hasattr(result, 'total')
 
     async def test_get_package_simple_list_platform_only(self, db_session, non_platform_ctx):
         """UT-B2-T-11: get_package_simple_list only accessible by platform tenant."""
-        from app.services.system_tenant import SystemTenantService
         from app.core.errors import BizError
-        
+        from app.services.system_tenant import SystemTenantService
+
         svc = SystemTenantService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.get_package_simple_list()
-        
+
         assert exc.value.code == 1008
 
     async def test_update_tenant_not_found_raises_1504(self, db_session, platform_ctx):
         """UT-B2-T-12: update_tenant raises 1504 for non-existent tenant."""
-        from app.services.system_tenant import SystemTenantService
         from app.core.errors import BizError
-        
+        from app.services.system_tenant import SystemTenantService
+
         class MockRequest:
             name = "New Name"
-        
+
         svc = SystemTenantService()
-        
+
         with pytest.raises(BizError) as exc:
             await svc.update_tenant("999999", MockRequest())
-        
+
         assert exc.value.code == 1504
 
 
@@ -183,16 +183,21 @@ class TestR1Synchronization:
     def test_r1_sync_preserves_old_menus(self, db_session, platform_ctx):
         """UT-B2-T-03-09: R1 keeps menus when package drops them (only add, don't remove)."""
         from app.domains.sys.models import (
-            Menu, Role, RoleMenu, Tenant, TenantPackage, TenantPackageMenu,
+            Menu,
+            Role,
+            RoleMenu,
+            Tenant,
+            TenantPackage,
+            TenantPackageMenu,
         )
         from tests.support.rows import add
-        
+
         tenant = add(db_session, Tenant(
             tenant_id=1,
             name="Test Tenant",
             status="ENABLED",
         ))
-        
+
         menu_a = add(db_session, Menu(
             tenant_id=1, parent_id=0, type="MENU", name="Menu A",
             perm_code="test:menu:a", status="ENABLED",
@@ -201,41 +206,41 @@ class TestR1Synchronization:
             tenant_id=1, parent_id=0, type="MENU", name="Menu B",
             perm_code="test:menu:b", status="ENABLED",
         ))
-        
+
         old_package = add(db_session, TenantPackage(
             tenant_id=1, name="Old Package", status="ENABLED",
         ))
         add(db_session, TenantPackageMenu(package_id=old_package.id, menu_id=menu_a.id))
         add(db_session, TenantPackageMenu(package_id=old_package.id, menu_id=menu_b.id))
-        
+
         new_package = add(db_session, TenantPackage(
             tenant_id=1, name="New Package", status="ENABLED",
         ))
         add(db_session, TenantPackageMenu(package_id=new_package.id, menu_id=menu_a.id))
-        
+
         r1 = add(db_session, Role(
             tenant_id=tenant.id, role_key="R1", name="Tenant Admin",
             status="ENABLED", source="MANUAL", data_scope="ALL",
         ))
         add(db_session, RoleMenu(tenant_id=tenant.id, role_id=r1.id, menu_id=menu_a.id))
         add(db_session, RoleMenu(tenant_id=tenant.id, role_id=r1.id, menu_id=menu_b.id))
-        
+
         tenant.package_id = old_package.id
         db_session.flush()
-        
+
         r1_menus_before = {rm.menu_id for rm in db_session.query(RoleMenu).filter(
             RoleMenu.role_id == r1.id
         ).all()}
         assert menu_a.id in r1_menus_before
         assert menu_b.id in r1_menus_before
-        
+
         tenant.package_id = new_package.id
         db_session.flush()
-        
+
         r1_menus_after = {rm.menu_id for rm in db_session.query(RoleMenu).filter(
             RoleMenu.role_id == r1.id
         ).all()}
-        
+
         assert menu_a.id in r1_menus_after, "Menu from new package should be preserved"
         assert menu_b.id in r1_menus_after, "Menu not in new package should also be preserved (only add, don't remove)"
 
@@ -244,7 +249,7 @@ class TestR1Synchronization:
         from app.core.cache import Cache
         from app.domains.sys.models import Tenant, TenantPackage
         from tests.support.rows import add
-        
+
         tenant = add(db_session, Tenant(
             tenant_id=1,
             name="Test Tenant",
@@ -255,14 +260,14 @@ class TestR1Synchronization:
         ))
         tenant.package_id = package.id
         db_session.flush()
-        
+
         perm_ver_key = f"ims:perm_ver:t:{tenant.id}"
         Cache.set(perm_ver_key, "1")
         initial_version = Cache.get(perm_ver_key)
-        
+
         tenant.name = "Updated Tenant Name"
         db_session.flush()
-        
+
         after_version = Cache.get(perm_ver_key)
         assert after_version == initial_version, "perm_version should not change when package is unchanged"
 
@@ -279,11 +284,11 @@ class TestTenantAdminKeyConstant:
         """UT-B2-T-14: Code uses _TENANT_ADMIN_KEY instead of direct 'R1' comparison."""
         import re
         from pathlib import Path
-        
+
         service_file = Path(__file__).parent.parent.parent / "app" / "services" / "system_tenant.py"
         content = service_file.read_text()
-        
+
         pattern = re.compile(r'role_key\s*==\s*["\']R\d+["\']')
         matches = pattern.findall(content)
-        
+
         assert len(matches) == 0, f"Found direct role_key comparison: {matches}"

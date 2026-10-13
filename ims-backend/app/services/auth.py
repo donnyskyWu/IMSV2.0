@@ -981,47 +981,47 @@ class AuthService:
     async def get_my_sessions(self, user_id: int) -> list[dict[str, Any]]:
         """Get current user's session list (PC-04)."""
         current_session_id = ctx.session_id if ctx.current_or_none else None
-        
+
         sessions_key = f"{self.USER_SESSIONS_PREFIX}{user_id}"
         session_ids = list(Cache.smembers(sessions_key))
-        
+
         result = []
         for sid in session_ids:
             session_data = Cache.get_json(f"{self.SESSION_PREFIX}{sid}")
             if not isinstance(session_data, dict):
                 continue
-            
+
             remaining = session_remaining_seconds(session_data)
             if remaining <= 0:
                 continue
-            
+
             result.append({
                 "sid": sid,
-                "deviceName": "未知设备",  # TODO: Parse from user agent
+                "device_name": "未知设备",  # TODO: Parse from user agent
                 "ip": "",  # TODO: Store IP in session
-                "loginTime": session_data.get("created_at"),
-                "lastActiveTime": session_data.get("created_at"),  # TODO: Track activity
+                "login_time": session_data.get("created_at"),
+                "last_active_time": session_data.get("created_at"),  # TODO: Track activity
                 "current": sid == current_session_id,
             })
-        
+
         return result
 
     async def delete_my_session(self, user_id: int, session_id: str) -> None:
         """Delete one of current user's sessions (PC-04)."""
         if not session_id:
             raise BizError(1001, msg="会话ID不能为空")
-        
+
         session_key = f"{self.SESSION_PREFIX}{session_id}"
         session_data = Cache.get_json(session_key)
-        
+
         # Session not found
         if not isinstance(session_data, dict):
             raise BizError(1504)
-        
+
         # Session belongs to another user
         if session_data.get("user_id") != user_id:
             raise BizError(1504)
-        
+
         # Delete session
         self._forget_refresh_index(session_data)
         Cache.delete(session_key)
@@ -1033,44 +1033,44 @@ class AuthService:
     ) -> None:
         """Set password for user without password (PC-03)."""
         from app.domains.sys.models import User
-        
+
         session = get_db_session()
         user = session.query(User).filter(
             User.id == user_id,
             User.deleted == 0,
         ).first()
-        
+
         if not user:
             raise BizError(1002)
-        
+
         # Already has password
         if user.password_hash:
             raise BizError(1001, msg="已设置密码，请使用修改密码功能")
-        
+
         # Validate password
         if re.search(r"\s", new_password):
             raise BizError(1001, msg="密码不能包含空格")
         if _PASSWORD_RULE.fullmatch(new_password) is None:
             raise BizError(1001, msg="密码需 8～32 位，且同时包含字母和数字")
-        
+
         # Set password
         user.password_hash = bcrypt.hashpw(
             new_password.encode(), bcrypt.gensalt(rounds=10)
         ).decode()
         user.pwd_reset_required = False
-        
+
         # Invalidate other sessions (keep current)
         await self.change_password(user_id, new_password, keep_session_id)
 
     async def get_current_user_info_extended(self, user_id: int) -> dict[str, Any]:
         """Get extended user info with mobileMasked and roleNames (PC-01)."""
         from app.domains.sys.models import Role, User, UserRole
-        
+
         base_info = await self.get_current_user_info(user_id)
-        
+
         session = get_db_session()
         user = session.query(User).filter(User.id == user_id).first()
-        
+
         # Add mobileMasked
         mobile_masked = None
         if user and user.mobile_enc:
@@ -1078,7 +1078,7 @@ class AuthService:
             mobile = user.mobile_enc  # TODO: Decrypt first
             if len(mobile) >= 11:
                 mobile_masked = mobile[:3] + "****" + mobile[-4:]
-        
+
         # Add roleNames
         role_names = []
         if user:
@@ -1090,10 +1090,10 @@ class AuthService:
                 Role.deleted == 0,
             ).all()
             role_names = [r.name for r in roles]
-        
+
         base_info["user"]["mobileMasked"] = mobile_masked
         base_info["user"]["roleNames"] = role_names
-        
+
         return base_info
 
     async def handle_dingtalk_callback(self, auth_code: str, state: str) -> str:

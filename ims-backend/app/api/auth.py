@@ -107,11 +107,12 @@ class SetPasswordRequest(BaseSchema):
 
 class SessionItem(BaseSchema):
     """Session item (PC-04)."""
+
     sid: str
-    deviceName: str
+    device_name: str = Field(..., serialization_alias="deviceName")
     ip: str
-    loginTime: Optional[str] = None
-    lastActiveTime: Optional[str] = None
+    login_time: Optional[str] = Field(None, serialization_alias="loginTime")
+    last_active_time: Optional[str] = Field(None, serialization_alias="lastActiveTime")
     current: bool = False
 
 

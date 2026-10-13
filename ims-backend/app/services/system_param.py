@@ -10,7 +10,6 @@ Implements P-01 to P-03 from the B2 system management module:
 
 from typing import Any, Optional
 
-from app.core.context import ctx
 from app.core.errors import BizError
 from app.db.session import get_db_session
 from app.db.transaction import transactional
@@ -25,7 +24,7 @@ class SystemParamService:
     ) -> list[dict[str, Any]]:
         """Get parameter list (P-01)."""
         from app.domains.sys.models import SysParam
-        
+
         session = get_db_session()
 
         query = session.query(SysParam).filter(
@@ -65,7 +64,7 @@ class SystemParamService:
     async def update_param(self, param_key: str, value: str) -> dict[str, Any]:
         """Update parameter value (P-02)."""
         from app.domains.sys.models import SysParam
-        
+
         session = get_db_session()
 
         param = session.query(SysParam).filter(
@@ -84,12 +83,11 @@ class SystemParamService:
                     raise BizError(1001, msg=f"值不能小于{param.min_value}")
                 if param.max_value and num > float(param.max_value):
                     raise BizError(1001, msg=f"值不能大于{param.max_value}")
-            except ValueError:
-                raise BizError(1001, msg="值必须是数字")
+            except ValueError as exc:
+                raise BizError(1001, msg="值必须是数字") from exc
 
-        if param.value_type == "BOOLEAN":
-            if value not in ("true", "false", "1", "0"):
-                raise BizError(1001, msg="值必须是布尔值")
+        if param.value_type == "BOOLEAN" and value not in ("true", "false", "1", "0"):
+            raise BizError(1001, msg="值必须是布尔值")
 
         if param.value_type == "ENUM" and param.options:
             import json
