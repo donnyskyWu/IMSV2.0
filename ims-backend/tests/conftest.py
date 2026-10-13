@@ -74,10 +74,9 @@ def db_engine():
     from app.domains.sys import models  # noqa: F401
 
     # Drop and recreate all tables for clean state
-    if not is_sqlite:
-        # For MySQL, drop tables first to ensure clean state
-        Base.metadata.drop_all(bind=engine)
-
+    # Note: We drop tables for both MySQL and SQLite to ensure clean state,
+    # especially when SQLite uses StaticPool which reuses connections
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     yield engine
