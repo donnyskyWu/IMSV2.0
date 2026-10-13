@@ -187,12 +187,26 @@ def register_routes(app: FastAPI) -> None:
     from app.api.org_sync import router as org_sync_router
     from app.api.org_sync_callback import router as org_sync_callback_router
     from app.api.system import router as system_router
+    from app.api.workbench import (
+        message_router,
+        todo_router,
+        workbench_auth_router,
+    )
 
     # Health check (anonymous)
     app.include_router(health_router)
 
     # Auth routes (/admin-api/ims/auth)
     app.include_router(auth_router, prefix="/admin-api/ims/auth", tags=["认证"])
+
+    # Workbench dashboard (/admin-api/ims/auth/workbench/dashboard)
+    app.include_router(workbench_auth_router, prefix="/admin-api/ims/auth", tags=["工作台"])
+
+    # Todo routes (/admin-api/ims/todo)
+    app.include_router(todo_router, prefix="/admin-api/ims/todo", tags=["待办"])
+
+    # Message routes (/admin-api/ims/message)
+    app.include_router(message_router, prefix="/admin-api/ims/message", tags=["消息"])
 
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])

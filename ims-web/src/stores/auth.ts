@@ -144,6 +144,9 @@ export const useAuthStore = defineStore('auth', () => {
       // 部门 id 等 B2 用户接口再补，这里不能把部门名称写进 id。
       deptId: '',
       deptName: profile.mainDeptName || profile.deptNames?.[0] || '',
+      mainDeptName: profile.mainDeptName || '',
+      deptNames: profile.deptNames || [],
+      roleNames: profile.roleNames || [],
       permCodes: data.permCodes || [],
       dataScopeText: data.dataScopeText || '',
       pwdResetRequired: Boolean(profile.pwdResetRequired),
@@ -215,11 +218,19 @@ export const useAuthStore = defineStore('auth', () => {
         'ims:demo:order:create',
         'ims:demo:order:update',
         'ims:demo:order:delete',
+        'ims:workbench:query',
       ],
       dataScopeText: '全部',
     }
     const narrow = sessionStorage.getItem('ims_menu_profile') === 'narrow'
     menus.value = [
+      {
+        id: '0',
+        name: '个人工作台',
+        icon: 'HomeFilled',
+        path: '/ims/workbench',
+        permCode: 'ims:workbench:query',
+      },
       {
         id: '1',
         name: '示例',
@@ -251,6 +262,7 @@ export const useAuthStore = defineStore('auth', () => {
       'ims:demo:order:create',
       'ims:demo:order:update',
       'ims:demo:order:delete',
+      'ims:workbench:query',
     ]
   }
 

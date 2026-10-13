@@ -23,9 +23,9 @@ B0A_ORG_MENU = {
 # Menu tree structure
 # type: DIR (directory), MENU (page), BUTTON (action)
 MENUS = [
-    # 个人工作台。页面在 B3，菜单行本批就要有，供 R10 只授这一条。
+    # 个人工作台（B3 Q8：改名为"个人工作台"，排序 0）
     {
-        "name": "工作台",
+        "name": "个人工作台",
         "type": "MENU",
         "path": "/ims/workbench",
         "component": "ims/workbench/index",

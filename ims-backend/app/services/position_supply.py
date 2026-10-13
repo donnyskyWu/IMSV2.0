@@ -164,7 +164,8 @@ class PositionSupplyService:
     def _notify_holders(
         self, session: Any, tenant_id: int, event_id: str, position_code: str
     ) -> None:
-        from app.domains.sys.models import Menu, Role, RoleMenu, TodoItem, UserRole
+        from app.domains.sys.models import Menu, Role, RoleMenu, UserRole
+        from app.services import todo as todo_service
 
         menu_ids = [
             row.id
@@ -187,20 +188,21 @@ class PositionSupplyService:
                 Role.deleted == 0,
             ).all()
         }
-        holders = {
+        holders = list({
             row.user_id
             for row in session.query(UserRole).filter(
                 UserRole.role_id.in_(enabled or [-1]),
             ).all()
-        }
-        for user_id in holders:
-            todo = TodoItem(
-                tenant_id=tenant_id,
-                assignee_user_id=user_id,
+        })
+        if holders:
+            todo_service.create(
+                session,
+                todo_type="CONFIRM",
+                source_module="岗位供给",
+                source_type="position_supply",
+                source_id=hash(f"{event_id}:{position_code}") % (10**18),
                 title=f"请配置岗位{position_code}的自动角色",
-                event_id=event_id,
-                status="OPEN",
+                route="/ims/auth/position",
+                assignee_user_ids=holders,
             )
-            assign_pk(session, todo)
-            session.add(todo)
         session.flush()

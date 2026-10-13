@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppLayout: typeof import('./components/layout/AppLayout.vue')['default']
+    BellDrawer: typeof import('./components/workbench/BellDrawer.vue')['default']
     Chart: typeof import('./components/display/Chart.vue')['default']
     Chip: typeof import('./components/list/Chip.vue')['default']
     ConfirmDialog: typeof import('./components/form/ConfirmDialog.vue')['default']
@@ -52,6 +53,7 @@ declare module 'vue' {
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']
     ElScrollbar: typeof import('element-plus/es')['ElScrollbar']
     ElSelect: typeof import('element-plus/es')['ElSelect']
+    ElSkeleton: typeof import('element-plus/es')['ElSkeleton']
     ElStep: typeof import('element-plus/es')['ElStep']
     ElSteps: typeof import('element-plus/es')['ElSteps']
     ElSubMenu: typeof import('element-plus/es')['ElSubMenu']
@@ -74,6 +76,7 @@ declare module 'vue' {
     ImportDialog: typeof import('./components/file/ImportDialog.vue')['default']
     LeftTreeRightTable: typeof import('./components/list/LeftTreeRightTable.vue')['default']
     MaskedText: typeof import('./components/display/MaskedText.vue')['default']
+    MessageCard: typeof import('./components/workbench/MessageCard.vue')['default']
     Modal: typeof import('./components/form/Modal.vue')['default']
     MoneyText: typeof import('./components/display/MoneyText.vue')['default']
     PageHeader: typeof import('./components/layout/PageHeader.vue')['default']
@@ -89,6 +92,7 @@ declare module 'vue' {
     StepsWizard: typeof import('./components/form/StepsWizard.vue')['default']
     Tabs: typeof import('./components/layout/Tabs.vue')['default']
     Timeline: typeof import('./components/display/Timeline.vue')['default']
+    TodoCard: typeof import('./components/workbench/TodoCard.vue')['default']
     TraceGraph: typeof import('./components/display/TraceGraph.vue')['default']
     UserSelect: typeof import('./components/selector/UserSelect.vue')['default']
   }

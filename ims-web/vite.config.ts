@@ -105,7 +105,7 @@ export default defineConfig(({ mode }) => {
         'element-plus/es/locale/lang/zh-cn',
         '@element-plus/icons-vue',
         // 冷启动日志里实际触发 reloading 的样式。
-        // 登录/布局，以及组织同步页懒加载后才会扫到的组件，都要在这里预构建。
+        // 登录/布局、组织同步页、工作台首页都是懒加载，第一次进入才会扫到这些样式。
         ...[
           'avatar',
           'badge',
@@ -139,6 +139,8 @@ export default defineConfig(({ mode }) => {
           'radio-group',
           'scrollbar',
           'select',
+          'skeleton',
+          'skeleton-item',
           'sub-menu',
           'tab-pane',
           'table',

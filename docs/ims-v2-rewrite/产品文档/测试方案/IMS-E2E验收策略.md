@@ -1,6 +1,6 @@
 # IMS E2E 验收策略（PO / Agent / CI）
 
-> 版本 2026-10-09 · 配套 [`IMS-E2E测试用例Checklist.md`](./IMS-E2E测试用例Checklist.md) · 执行入口 **`ims-web/scripts/run_e2e.ps1`** · 完整交付环、合入窗口与 PO **UAT 状态** 列见 [`IMS-Agent交付循环.md`](../开发规范/IMS-Agent交付循环.md)、[`IMS-PRD功能点执行对照表.md`](../开发方案/IMS-PRD功能点执行对照表.md)
+> 版本 2026-10-13 · 配套 [`IMS-E2E测试用例Checklist.md`](./IMS-E2E测试用例Checklist.md) · 执行入口 **`ims-web/scripts/run_e2e.ps1`** · 完整交付环、合入窗口与 PO **UAT 状态** 列见 [`IMS-Agent交付循环.md`](../开发规范/IMS-Agent交付循环.md)、[`IMS-PRD功能点执行对照表.md`](../开发方案/IMS-PRD功能点执行对照表.md)
 
 ## 角色分工
 
@@ -27,6 +27,16 @@
 | Playwright | 同上；`playwright.config.ts` 在 `IMS_DINGTALK_L3≠1` 时 **ignore** `dingtalk-org-l3.spec.ts` | 与 pytest 同脚本编排 |
 
 组织矩阵行 **已验收** = 默认 **21/21 PASS** + **L3 PASS** + PO **UAT 状态=通过**（见 PRD 对照表 †）。
+
+## UI 与原型一致性（硬门禁）
+
+> **who kong 裁定**：功能 UI 必须与模块设计稿 / 原型一致，作为 E2E **硬门禁**；偏差即 **算不过**。
+
+1. **对照范围**：页面结构、关键组件、文案，以及响应式布局，须与该模块的原型 / UI 设计规格一致。
+2. **偏差处理**：与原型或设计规格不一致 → **算不过**（硬门禁，不得以「后续再改」放行）。
+3. **原型路径**：以仓库约定为准 —— [`产品文档/UI原型/pages/`](../UI原型/pages/) 下对应 HTML；各模块具体页面清单写在该模块 `00-工作包.md` 或 `01-功能点清单.md`。若某页尚未列出，**以该模块设计稿/原型为准，路径在实现理解或 00 中写明**。
+4. **不算通过**：空 `pass`、仅字符串匹配、只截图而无断言的用例 —— 一律不计入通过（与 `AGENTS.md`「空壳用例 / 仅字符串匹配不算覆盖」同口径）。
+5. **适用 Playwright project**：至少覆盖 **`desktop-chromium`**；若该模块工作包或 `02` 已要求其它 project（如 `mobile-390-chromium` / `mobile-390-webkit`），一并作为硬门禁。
 
 ## 一键执行（PO 无需手敲 npm）
 

@@ -17,3 +17,7 @@ app/services/role.py
 app/services/org_sync.py
 app/services/org_sync_event.py
 app/services/org_sync_alert.py
+# B3 新增
+app/services/todo.py
+app/services/message.py
+app/services/workbench.py

@@ -83,7 +83,7 @@ export function resolveLanding(options: {
   if (redirectPath && leaves.includes(redirectPath) && registered.has(redirectPath)) {
     return redirectPath
   }
-  if (registered.has('/ims/workbench')) return '/ims/workbench'
+  if (leaves.includes('/ims/workbench') && registered.has('/ims/workbench')) return '/ims/workbench'
   const first = leaves.find((path) => registered.has(path))
   return first || null
 }

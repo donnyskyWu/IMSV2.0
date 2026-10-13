@@ -1364,6 +1364,12 @@ export interface components {
             /** Positionlabel */
             positionLabel?: string | null;
             /**
+             * Rolenames
+             * @description 当前用户已启用角色名称，可多个
+             * @default []
+             */
+            roleNames?: string[];
+            /**
              * Pwdresetrequired
              * @default false
              */
