@@ -251,3 +251,73 @@ class TestTrainRecordRepo:
 
         assert result["total"] == 0
         assert result["finished"] == 0
+
+
+class TestTrainCateRepoHasMaterials:
+    """Tests for has_materials method."""
+
+    def test_has_materials_false(self, db_session, test_context):
+        """Has materials returns false when none exist."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainCateRepo
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="Empty Category",
+        )
+        db_session.add(cate)
+        db_session.flush()
+
+        repo = TrainCateRepo(db_session)
+        result = repo.has_materials(cate.id, ctx.tenant_id)
+
+        assert result is False
+
+    def test_soft_delete(self, db_session, test_context):
+        """Soft delete sets deleted = id."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainCateRepo
+
+        cate = TrainMaterialCate(
+            tenant_id=ctx.tenant_id,
+            parent_id=0,
+            cate_name="To Delete",
+        )
+        db_session.add(cate)
+        db_session.flush()
+        cate_id = cate.id
+
+        repo = TrainCateRepo(db_session)
+        repo.soft_delete(cate)
+        db_session.flush()
+
+        assert cate.deleted == cate_id
+
+
+class TestTrainMaterialVersionRepo:
+    """Tests for TrainMaterialVersionRepo."""
+
+    def test_get_versions_empty(self, db_session, test_context):
+        """Get versions returns empty when none exist."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainMaterialVersionRepo
+
+        repo = TrainMaterialVersionRepo(db_session)
+        result = repo.get_versions(99999, ctx.tenant_id)
+
+        assert result == []
+
+
+class TestTrainDeptAlertRepo:
+    """Tests for TrainDeptAlertRepo."""
+
+    def test_has_alert_false(self, db_session, test_context):
+        """Has alert returns false when not found."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainDeptAlertRepo
+
+        repo = TrainDeptAlertRepo(db_session)
+        result = repo.has_alert(ctx.tenant_id, 1, "2026-10-07")
+
+        assert result is False
