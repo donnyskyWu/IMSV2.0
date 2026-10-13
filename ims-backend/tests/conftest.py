@@ -76,7 +76,12 @@ def db_engine():
                 cursor.close()
 
             # Create tables only once for the SQLite engine
-            Base.metadata.create_all(bind=_sqlite_engine)
+            # Use checkfirst=True and catch any duplicate index errors
+            try:
+                Base.metadata.create_all(bind=_sqlite_engine, checkfirst=True)
+            except Exception as e:
+                if "already exists" not in str(e):
+                    raise
 
         engine = _sqlite_engine
 
