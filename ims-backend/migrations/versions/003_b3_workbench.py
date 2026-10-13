@@ -25,12 +25,66 @@ depends_on = None
 
 def upgrade() -> None:
     """扩展表结构，创建新表，回填数据。"""
+    _ensure_base_tables()
     _extend_todo_table()
     _create_todo_assignee_table()
     _extend_inbox_table()
     _migrate_todo_status()
     _backfill_todo_type()
     _backfill_todo_assignee()
+
+
+def _ensure_base_tables() -> None:
+    """空库没有 B3 之前的待办/收件表时先建基表，再走加列。
+
+    降级只去掉本迁移加的列，基表留下来，第二次 upgrade 仍能改表。
+    """
+    inspector = sa.inspect(op.get_bind())
+    if not inspector.has_table("ims_sys_todo"):
+        _create_base_todo()
+    if not inspector.has_table("ims_sys_inbox"):
+        _create_base_inbox()
+
+
+def _audit_columns() -> list[sa.Column]:
+    return [
+        sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column("tenant_id", sa.BigInteger(), nullable=False),
+        sa.Column("creator", sa.BigInteger(), nullable=True),
+        sa.Column("create_time", sa.DateTime(), nullable=True),
+        sa.Column("updater", sa.BigInteger(), nullable=True),
+        sa.Column("update_time", sa.DateTime(), nullable=True),
+        sa.Column("deleted", sa.BigInteger(), nullable=False, server_default="0"),
+    ]
+
+
+def _create_base_todo() -> None:
+    """B3 加列之前的 ims_sys_todo。"""
+    op.create_table(
+        "ims_sys_todo",
+        *_audit_columns(),
+        sa.Column("assignee_user_id", sa.BigInteger(), nullable=False),
+        sa.Column("title", sa.String(200), nullable=False),
+        sa.Column("event_id", sa.String(64), nullable=True),
+        sa.Column("status", sa.String(20), nullable=False, server_default="OPEN"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_ims_sys_todo_tenant_id", "ims_sys_todo", ["tenant_id"])
+    op.create_index("ix_ims_sys_todo_assignee_user_id", "ims_sys_todo", ["assignee_user_id"])
+
+
+def _create_base_inbox() -> None:
+    """B3 加列之前的 ims_sys_inbox。"""
+    op.create_table(
+        "ims_sys_inbox",
+        *_audit_columns(),
+        sa.Column("user_id", sa.BigInteger(), nullable=False),
+        sa.Column("title", sa.String(200), nullable=False),
+        sa.Column("body", sa.Text(), nullable=False, server_default=""),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_ims_sys_inbox_tenant_id", "ims_sys_inbox", ["tenant_id"])
+    op.create_index("ix_ims_sys_inbox_user_id", "ims_sys_inbox", ["user_id"])
 
 
 def downgrade() -> None:
@@ -84,9 +138,9 @@ def _create_todo_assignee_table() -> None:
     op.create_table(
         "ims_sys_todo_assignee",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column("tenant_id", sa.BigInteger, nullable=False, index=True),
-        sa.Column("todo_id", sa.BigInteger, nullable=False, index=True),
-        sa.Column("user_id", sa.BigInteger, nullable=False, index=True),
+        sa.Column("tenant_id", sa.BigInteger, nullable=False),
+        sa.Column("todo_id", sa.BigInteger, nullable=False),
+        sa.Column("user_id", sa.BigInteger, nullable=False),
         sa.Column("closed", sa.SmallInteger, nullable=False, default=0),
         sa.Column("closed_time", sa.DateTime, nullable=True),
         sa.Column("creator", sa.BigInteger, nullable=True),
@@ -94,12 +148,12 @@ def _create_todo_assignee_table() -> None:
         sa.Column("updater", sa.BigInteger, nullable=True),
         sa.Column("update_time", sa.DateTime, nullable=True),
         sa.Column("deleted", sa.BigInteger, nullable=False, default=0),
+        sa.UniqueConstraint("todo_id", "user_id", "deleted", name="uk_todo_assignee"),
     )
-    op.create_unique_constraint(
-        "uk_todo_assignee",
-        "ims_sys_todo_assignee",
-        ["todo_id", "user_id", "deleted"],
-    )
+    op.create_index("ix_ims_sys_todo_assignee_tenant_id", "ims_sys_todo_assignee", ["tenant_id"])
+    op.create_index("ix_ims_sys_todo_assignee_todo_id", "ims_sys_todo_assignee", ["todo_id"])
+    # 与待办表 ix_ims_sys_todo_assignee_user_id 分开命名，SQLite 索引名是库级的。
+    op.create_index("idx_todo_assignee_user", "ims_sys_todo_assignee", ["user_id"])
 
 
 def _extend_inbox_table() -> None:
@@ -149,7 +203,7 @@ def _backfill_todo_type() -> None:
     """回填 type 字段。存量数据来自 position_supply。"""
     # 先按标题匹配岗位相关
     op.execute("""
-        UPDATE ims_sys_todo 
+        UPDATE ims_sys_todo
         SET type = 'CONFIRM', source_module = '岗位供给', route = '/ims/auth/position'
         WHERE type IS NULL AND title LIKE '%岗位%' AND deleted = 0
     """)

@@ -61,11 +61,161 @@ async function getAccessToken(page: Page): Promise<string | null> {
   return page.evaluate(() => localStorage.getItem('ims_access_token'))
 }
 
+function jsonBody(body: unknown, status = 200) {
+  return {
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  }
+}
+
+function ok(data: unknown) {
+  return { code: 0, msg: '成功', data }
+}
+
+function menu(path: string, name: string) {
+  return { id: path, name, path, type: 'MENU', sort: 0, visible: true, children: [] }
+}
+
+function bearerToken(authorization: string | undefined): string {
+  const header = authorization || ''
+  return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''
+}
+
+function menusFor(token: string) {
+  if (token === 'r10-token') return [menu('/ims/workbench', '个人工作台')]
+  return [
+    menu('/ims/workbench', '个人工作台'),
+    menu('/ims/auth/org', '组织架构同步'),
+    menu('/ims/auth/position', '岗位-角色供给规则'),
+  ]
+}
+
+/**
+ * 组件套件没有后端。登录、/me 和工作台接口都在浏览器里挡掉，
+ * 不把这组用例塞进 live-proxy，避免和改密夹具抢同一个种子账号。
+ */
+async function installWorkbenchMocks(page: Page) {
+  await page.route('**/admin-api/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    const token = bearerToken(request.headers().authorization)
+
+    if (path.endsWith('/auth/login') && request.method() === 'POST') {
+      const raw = request.postDataJSON() as { username?: string } | null
+      const username = raw?.username || ''
+      const accessToken = username === 'test_r10'
+        ? 'r10-token'
+        : username === 'test_reset'
+          ? 'reset-token'
+          : username === 'test_yg'
+            ? 'yg-token'
+            : 'admin-token'
+      await route.fulfill(jsonBody(ok({
+        accessToken,
+        refreshToken: `${accessToken}-refresh`,
+        expiresIn: 7200,
+        pwdResetRequired: username === 'test_reset',
+      })))
+      return
+    }
+
+    if (path.endsWith('/auth/me')) {
+      if (!token) {
+        await route.fulfill(jsonBody({ code: 1002, msg: '登录已失效，请重新登录', data: null }, 401))
+        return
+      }
+      await route.fulfill(jsonBody(ok({
+        user: {
+          id: '1',
+          username: token.replace('-token', ''),
+          nickname: token === 'r10-token' ? '外协' : '测试管理员',
+          avatar: null,
+          deptNames: ['信息部'],
+          mainDeptName: '信息部',
+          positionLabel: null,
+          pwdResetRequired: token === 'reset-token',
+        },
+        menus: menusFor(token),
+        permCodes: ['ims:workbench:query'],
+        permDetails: {},
+        dataScopeText: '本人',
+      })))
+      return
+    }
+
+    if (path.endsWith('/workbench/dashboard')) {
+      if (token === 'reset-token') {
+        await route.fulfill(jsonBody({ code: 1008, msg: '请先修改密码', data: null }))
+        return
+      }
+      await route.fulfill(jsonBody(ok({
+        todoCount: 0,
+        todoByType: {},
+        todoOverdue: 0,
+        unreadMessageCount: 0,
+        myAccountCount: null,
+        myAssetCount: null,
+        myApprovalCount: null,
+        myAttendanceCount: null,
+      })))
+      return
+    }
+
+    if (path.endsWith('/todo/my/get')) {
+      const id = new URL(request.url()).searchParams.get('id')
+      if (id === '999999999') {
+        await route.fulfill(jsonBody({ code: 1504, msg: '待办不存在', data: null }))
+        return
+      }
+    }
+
+    if (path.endsWith('/todo/my/page') || path.endsWith('/message/my/page') || path.endsWith('/message/my/get')) {
+      await route.fulfill(jsonBody(ok({
+        total: 0,
+        pageNo: 1,
+        pageSize: 20,
+        list: [],
+      })))
+      return
+    }
+
+    if (path.endsWith('/todo/my/count')) {
+      await route.fulfill(jsonBody(ok({ total: 0, byType: {}, overdue: 0 })))
+      return
+    }
+
+    if (path.endsWith('/message/my/unread-count')) {
+      await route.fulfill(jsonBody(ok(0)))
+      return
+    }
+
+    if (path.endsWith('/message/my/read') || path.endsWith('/message/my/read-all')) {
+      await route.fulfill(jsonBody(ok({ updated: 1 })))
+      return
+    }
+
+    await route.fulfill(jsonBody(ok(null)))
+  })
+}
+
+async function revealSidebar(page: Page) {
+  const width = page.viewportSize()?.width ?? 1440
+  if (width <= 390) {
+    await page.locator('.app-layout').locator('> .app-main > .app-topbar .menu-btn').click()
+  }
+}
+
 test.describe('B3 个人工作台', () => {
+  test.beforeEach(async ({ page }) => {
+    await installWorkbenchMocks(page)
+  })
+
   test.describe('WB 工作台首页', () => {
     test('E2E-B3-WB-01: 无 redirect 落地 /ims/workbench，侧栏高亮排第一', async ({ page }) => {
       await loginAs(page, 'test_admin')
       await expect(page).toHaveURL(/\/ims\/workbench/)
+      await revealSidebar(page)
       const sidebar = page.locator('[data-testid="app-sidebar"]')
       await expect(sidebar).toBeVisible()
       await expect(sidebar.getByText('个人工作台')).toBeVisible()
@@ -212,8 +362,12 @@ test.describe('B3 个人工作台', () => {
   test.describe('BG 后台能力', () => {
     test('E2E-B3-BG-01: R10 视角侧栏只有工作台', async ({ page }) => {
       await loginAs(page, 'test_r10')
-      await expect(page).toHaveURL((url) => url.pathname === '/')
-      await expect(page.getByTestId('unassigned-panel')).toHaveText('您的账号尚未分配权限，请联系管理员')
+      await expect(page).toHaveURL((url) => url.pathname === '/ims/workbench')
+      await expect(page.getByTestId('unassigned-panel')).toHaveCount(0)
+      await revealSidebar(page)
+      const sidebar = page.getByTestId('app-sidebar')
+      await expect(sidebar.locator('.el-menu-item')).toHaveCount(1)
+      await expect(sidebar.getByText('个人工作台')).toBeVisible()
     })
 
     test('E2E-B3-BG-02: 有 id 参数的接口访问他人数据返回 1504', async ({ page }) => {
@@ -236,9 +390,9 @@ test.describe('B3 个人工作台', () => {
       expect(me.body.code).toBe(0)
     })
 
-    test('E2E-B3-BG-04: 无权限用户落地无权限页', async ({ page }) => {
+    test('E2E-B3-BG-04: 无权限用户打开组织页看到无权限', async ({ page }) => {
       await loginAs(page, 'test_r10')
-      await page.goto('/ims/workbench')
+      await page.goto('/ims/auth/org')
       await expect(page.getByTestId('denied-panel')).toHaveText('暂无权限查看此内容')
     })
 

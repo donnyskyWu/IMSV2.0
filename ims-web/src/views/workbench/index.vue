@@ -11,18 +11,15 @@
  */
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import TodoCard from '@/components/workbench/TodoCard.vue'
 import MessageCard from '@/components/workbench/MessageCard.vue'
 import { workbenchApi, todoApi, messageApi, type DashboardData, type TodoItem, type MessageItem } from '@/api/workbench'
 import { useAuthStore } from '@/stores/auth'
-import { useUnreadStore } from '@/stores/unread'
 import { useResponsive } from '@/utils/responsive'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const unreadStore = useUnreadStore()
 useResponsive()
 
 const loading = ref(true)
@@ -58,6 +55,8 @@ async function fetchData() {
     if (messagesRes.code === 0 && messagesRes.data) {
       messages.value = messagesRes.data.list
     }
+  } catch {
+    // 全局拦截器已提示
   } finally {
     loading.value = false
   }
@@ -89,13 +88,11 @@ function handleMessageClick(message: MessageItem) {
 
 onMounted(() => {
   fetchData()
-  unreadStore.startPolling()
 })
 </script>
 
 <template>
-  <AppLayout>
-    <div class="workbench-page">
+  <div class="workbench-page">
       <PageHeader :title="`${greeting}，${nickname}`" />
 
       <!-- 数据卡片区 -->
@@ -156,8 +153,7 @@ onMounted(() => {
           />
         </div>
       </section>
-    </div>
-  </AppLayout>
+  </div>
 </template>
 
 <style lang="scss" scoped>

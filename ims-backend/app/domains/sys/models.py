@@ -939,12 +939,14 @@ class TodoAssignee(AuditBase):
     __tablename__ = "ims_sys_todo_assignee"
 
     todo_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, comment="关联待办 ID")
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, comment="处理人 user_id")
+    # 不用 index=True：默认名 ix_ims_sys_todo_assignee_user_id 与待办表 assignee_user_id 在 SQLite 全局撞名。
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="处理人 user_id")
     closed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0, comment="本人是否已关闭")
     closed_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, comment="关闭时间")
 
     __table_args__ = (
         UniqueConstraint("todo_id", "user_id", "deleted", name="uk_todo_assignee"),
+        Index("idx_todo_assignee_user", "user_id"),
     )
 
 

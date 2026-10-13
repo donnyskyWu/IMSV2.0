@@ -503,3 +503,148 @@ class TestTodoOverdue:
 
         assert detail["isOverdue"] is True
         assert detail["overdueDays"] == 1
+
+
+class TestTodoMissingBranches:
+    """补齐 complete/cancel/关闭/筛选/详情姓名这些还没走到的分支。"""
+
+    def test_complete_and_cancel_missing_return_none(self, db_session, todo_context):
+        assert todo_service.complete(
+            db_session, source_type="missing", source_id=1, by_user=100,
+        ) is None
+        assert todo_service.cancel(
+            db_session, source_type="missing", source_id=1,
+        ) is None
+
+    def test_cancel_appends_reason(self, db_session, todo_context):
+        todo_service.create(
+            db_session,
+            todo_type=TodoType.CONFIRM,
+            source_module="测试",
+            source_type="test",
+            source_id=401,
+            title="作废原因",
+            content="原文",
+            assignee_user_ids=[100],
+        )
+        db_session.flush()
+
+        result = todo_service.cancel(
+            db_session, source_type="test", source_id=401, reason="来源单据撤回",
+        )
+
+        assert result is not None
+        assert "作废原因：来源单据撤回" in (result.content or "")
+
+    def test_close_missing_todo_or_assignee_or_repeat(self, db_session, todo_context):
+        from app.core.errors import BizError
+
+        with pytest.raises(BizError) as missing:
+            todo_service.close_for_user(db_session, todo_id=999999999, user_id=100)
+        assert missing.value.code == 1504
+
+        todo = todo_service.create(
+            db_session,
+            todo_type=TodoType.CONFIRM,
+            source_module="测试",
+            source_type="test",
+            source_id=402,
+            title="关闭分支",
+            assignee_user_ids=[100],
+        )
+        db_session.flush()
+
+        with pytest.raises(BizError) as stranger:
+            todo_service.close_for_user(db_session, todo_id=todo.id, user_id=200)
+        assert stranger.value.code == 1504
+
+        todo_service.close_for_user(db_session, todo_id=todo.id, user_id=100)
+        with pytest.raises(BizError) as again:
+            todo_service.close_for_user(db_session, todo_id=todo.id, user_id=100)
+        assert again.value.code == 1001
+
+    def test_page_filters_type_status_keyword(self, db_session, todo_context, fixed_time):
+        fixed_time(datetime(2026, 10, 13, 12, 0, 0))
+        confirm = todo_service.create(
+            db_session,
+            todo_type=TodoType.CONFIRM,
+            source_module="测试",
+            source_type="test",
+            source_id=403,
+            title="关键字确认",
+            content="正文甲",
+            assignee_user_ids=[100],
+            due_time=datetime(2026, 10, 12, 12, 0, 0),
+        )
+        done = todo_service.create(
+            db_session,
+            todo_type=TodoType.RETURN,
+            source_module="测试",
+            source_type="test",
+            source_id=404,
+            title="已完成项",
+            assignee_user_ids=[100],
+        )
+        db_session.flush()
+        todo_service.complete(db_session, source_type="test", source_id=404, by_user=100)
+        db_session.flush()
+
+        by_type = todo_service.get_my_page(db_session, user_id=100, todo_type=TodoType.CONFIRM)
+        assert [item["id"] for item in by_type["list"]] == [str(confirm.id)]
+
+        overdue = todo_service.get_my_page(db_session, user_id=100, status="OVERDUE")
+        assert [item["id"] for item in overdue["list"]] == [str(confirm.id)]
+
+        done_page = todo_service.get_my_page(db_session, user_id=100, status="DONE")
+        assert [item["id"] for item in done_page["list"]] == [str(done.id)]
+
+        keyword = todo_service.get_my_page(db_session, user_id=100, keyword="关键字")
+        assert [item["id"] for item in keyword["list"]] == [str(confirm.id)]
+
+    def test_detail_missing_and_done_by_name(self, db_session, todo_context):
+        from app.core.errors import BizError
+        from tests.support import rows
+
+        with pytest.raises(BizError) as missing:
+            todo_service.get_my_detail(db_session, todo_id=999999999, user_id=100)
+        assert missing.value.code == 1504
+
+        person = rows.user(db_session, "todo_done_by", nickname="处理人甲")
+        created = todo_service.create(
+            db_session,
+            todo_type=TodoType.CONFIRM,
+            source_module="测试",
+            source_type="test",
+            source_id=405,
+            title="带姓名",
+            assignee_user_ids=[100],
+        )
+        db_session.flush()
+        todo_service.complete(
+            db_session, source_type="test", source_id=405, by_user=person.id,
+        )
+        db_session.flush()
+
+        detail = todo_service.get_my_detail(db_session, todo_id=created.id, user_id=100)
+        assert detail["doneByName"] == "处理人甲"
+
+    def test_dingtalk_push_dedup_skips_second_type(self, db_session, todo_context):
+        todo_service.create(
+            db_session,
+            todo_type=TodoType.CONFIRM,
+            source_module="测试",
+            source_type="dedup_src",
+            source_id=406,
+            title="第一次推送",
+            assignee_user_ids=[100],
+        )
+        second = todo_service.create(
+            db_session,
+            todo_type=TodoType.WARNING,
+            source_module="测试",
+            source_type="dedup_src",
+            source_id=406,
+            title="第二次去重",
+            assignee_user_ids=[100],
+        )
+        assert second.title == "第二次去重"

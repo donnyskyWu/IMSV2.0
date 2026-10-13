@@ -227,5 +227,76 @@ class TestMessageDetail:
 
         with pytest.raises(BizError) as exc_info:
             message_service.get_my_detail(db_session, message_id=msgs[0].id, user_id=200)
+        assert exc_info.value.code == 1504
+
+
+class TestMessageMissingBranches:
+    """补齐去重、钉钉通道、关键字和标记已读的空列表/他人数据。"""
+
+    def test_dedup_and_dingtalk_channel(self, db_session, message_context):
+        first = message_service.notify(
+            db_session,
+            event_type="dedup_event",
+            biz_key="same",
+            receivers=[100],
+            title="第一条",
+            content="内容",
+            channels=["dingtalk"],
+        )
+        second = message_service.notify(
+            db_session,
+            event_type="dedup_event",
+            biz_key="same",
+            receivers=[100],
+            title="第二条不应入库",
+            content="内容",
+            channels=["dingtalk"],
+        )
+
+        assert len(first) == 1
+        assert second == []
+
+    def test_page_keyword(self, db_session, message_context):
+        message_service.notify(
+            db_session,
+            event_type="kw",
+            biz_key="kw1",
+            receivers=[100],
+            title="预算审批",
+            content="普通正文",
+        )
+        message_service.notify(
+            db_session,
+            event_type="kw",
+            biz_key="kw2",
+            receivers=[100],
+            title="其他",
+            content="含关键字正文",
+        )
+        db_session.flush()
+
+        by_title = message_service.get_my_page(db_session, user_id=100, keyword="预算")
+        by_body = message_service.get_my_page(db_session, user_id=100, keyword="关键字")
+        assert [item["title"] for item in by_title["list"]] == ["预算审批"]
+        assert [item["title"] for item in by_body["list"]] == ["其他"]
+
+    def test_mark_read_empty_and_foreign(self, db_session, message_context):
+        from app.core.errors import BizError
+
+        assert message_service.mark_read(db_session, user_id=100, ids=[]) == {"updated": 0}
+
+        foreign = message_service.notify(
+            db_session,
+            event_type="foreign",
+            biz_key="foreign1",
+            receivers=[200],
+            title="别人的",
+            content="内容",
+        )
+        db_session.flush()
+
+        with pytest.raises(BizError) as exc_info:
+            message_service.mark_read(db_session, user_id=100, ids=[foreign[0].id])
+        assert exc_info.value.code == 1504
 
         assert exc_info.value.code == 1504
