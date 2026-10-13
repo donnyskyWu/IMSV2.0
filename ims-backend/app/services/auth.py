@@ -529,14 +529,25 @@ class AuthService:
         """校验会话后签发新的 access 与 refresh，并把旧刷新令牌记成已轮换。
 
         user_id 参数来自 claim_refresh 解析的索引值，用于冻结/离职检查。
+        差异(c)：会话缺失和黑名单分支用 user_id 查用户状态，冻结/离职返回 1216，其余返回 1002。
         """
         from app.domains.sys.models import User
 
         session_key = f"{self.SESSION_PREFIX}{session_id}"
         session_data = Cache.get_json(session_key)
         if not isinstance(session_data, dict) or session_data.get("refresh_token") != refresh_token:
+            if user_id:
+                db = get_db_session()
+                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
+                if user and user.status in ("FROZEN", "RESIGNED"):
+                    raise BizError(1216)
             raise BizError(1002)
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
+            if user_id:
+                db = get_db_session()
+                user = db.query(User).filter(User.id == user_id, User.deleted == 0).first()
+                if user and user.status in ("FROZEN", "RESIGNED"):
+                    raise BizError(1216)
             raise BizError(1002)
 
         db = get_db_session()

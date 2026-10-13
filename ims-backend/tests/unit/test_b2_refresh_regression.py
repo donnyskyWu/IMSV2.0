@@ -199,16 +199,17 @@ class TestB2RefreshRegression:
         assert exc_info.value.code == 1002
 
 
-class TestB2SessionMissingAndBlacklistReturns1002:
-    """会话失效分支（session_missing/blacklist）按 main 行为返回 1002。
+class TestB2RefreshSessionMissingAndBlacklistReturns1216:
+    """refresh 的 _issue_rotated_tokens 会话失效分支返回 1216（差异 c）。
 
-    根据代码评审要求，refresh 分支中 session_missing 和 blacklist 场景
-    保持 main 的行为：返回 1002（会话无效），不检查用户状态返回 1216。
-    只有 _issue_rotated_tokens 中从 session_data 查到用户后才检查冻结/离职。
+    根据实现理解 v2.1 的 4 处允许差异：
+    (c) refresh 里会话缺失/黑名单分支冻结离职→1216、否则 1002
+    
+    注意：这只影响 refresh，verify_token 保持 main 行为（返回 1002）。
     """
 
-    def test_session_missing_frozen_returns_1002(self, db_session, test_context):
-        """会话缺失时，返回 1002（保持 main 行为，不检查用户状态）。"""
+    def test_session_missing_frozen_returns_1216(self, db_session, test_context):
+        """refresh 会话缺失 + 用户冻结 → 1216（差异 c）。"""
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.domains.sys.models import User
@@ -232,10 +233,10 @@ class TestB2SessionMissingAndBlacklistReturns1002:
 
         with pytest.raises(BizError) as exc_info:
             _run(service.refresh(refresh_token))
-        assert exc_info.value.code == 1002
+        assert exc_info.value.code == 1216
 
-    def test_blacklist_resigned_returns_1002(self, db_session, test_context):
-        """会话被拉黑时，返回 1002（保持 main 行为，不检查用户状态）。"""
+    def test_blacklist_resigned_returns_1216(self, db_session, test_context):
+        """refresh 会话被拉黑 + 用户离职 → 1216（差异 c）。"""
         from app.core.cache import Cache
         from app.core.errors import BizError
         from app.domains.sys.models import User
@@ -256,6 +257,28 @@ class TestB2SessionMissingAndBlacklistReturns1002:
         row = db_session.query(User).filter(User.username == "blacklist_resigned").one()
         row.status = "RESIGNED"
         db_session.flush()
+
+        with pytest.raises(BizError) as exc_info:
+            _run(service.refresh(refresh_token))
+        assert exc_info.value.code == 1216
+
+    def test_session_missing_active_returns_1002(self, db_session, test_context):
+        """refresh 会话缺失 + 用户正常 → 1002。"""
+        from app.core.cache import Cache
+        from app.core.errors import BizError
+        from app.services.auth import AuthService
+
+        _add_user(db_session, "session_missing_active")
+        db_session.flush()
+        service = AuthService()
+
+        tokens = _run(service.login("session_missing_active", "Test1234"))
+        refresh_token = tokens["refresh_token"]
+
+        index_val = Cache.get(f"{service.REFRESH_INDEX_PREFIX}{refresh_token}")
+        assert index_val
+        session_id = index_val.split(":")[0]
+        Cache.delete(f"{service.SESSION_PREFIX}{session_id}")
 
         with pytest.raises(BizError) as exc_info:
             _run(service.refresh(refresh_token))
