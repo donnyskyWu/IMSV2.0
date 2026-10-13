@@ -572,9 +572,7 @@ class UserService:
             User.deleted == 0,
         ).all()
 
-        if len(active_r1_users) == 1 and active_r1_users[0].id == user_id:
-            return True
-        return False
+        return bool(len(active_r1_users) == 1 and active_r1_users[0].id == user_id)
 
     async def freeze_user(self, user_id: str) -> None:
         """Freeze a user and invalidate every session (FP-B03-01)."""

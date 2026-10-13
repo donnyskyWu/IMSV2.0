@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app.core.clock import set_clock, reset_clock
+from app.core.clock import reset_clock, set_clock
 from app.core.errors import BizError
 from app.services.org_sync_event import MAX_RETRIES, OrgSyncEventService
 from tests.support import rows

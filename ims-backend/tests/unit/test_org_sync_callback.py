@@ -11,7 +11,6 @@ Tests:
 import base64
 import secrets
 import struct
-import time
 from datetime import datetime
 
 import pytest
@@ -20,17 +19,16 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from app.api.org_sync_callback import (
     BLOCK_SIZE,
+    _check_replay,
+    _pkcs7_pad,
+    _pkcs7_unpad,
     decrypt_callback,
     encrypt_callback,
     encrypt_response,
     sign_callback,
     verify_callback_signature,
-    _check_replay,
-    _pkcs7_pad,
-    _pkcs7_unpad,
 )
-from app.core.cache import Cache
-from app.core.clock import set_clock, reset_clock
+from app.core.clock import reset_clock, set_clock
 
 
 class TestPKCS7Padding:
@@ -248,9 +246,9 @@ class TestEncryptResponse:
         aes_key = base64.b64encode(secrets.token_bytes(32)).decode().rstrip("=")
         token = "test_token"
         app_key = "test_app_key"
-        
+
         response = encrypt_response(token, aes_key, app_key)
-        
+
         assert "msg_signature" in response
         assert "timeStamp" in response
         assert "nonce" in response
@@ -263,10 +261,10 @@ class TestEncryptResponse:
         aes_key = base64.b64encode(secrets.token_bytes(32)).decode().rstrip("=")
         token = "test_token"
         app_key = "test_app_key"
-        
+
         response = encrypt_response(token, aes_key, app_key)
         decrypted = decrypt_callback(aes_key, response["encrypt"], app_key)
-        
+
         assert decrypted == "success"
 
     def test_encrypt_response_signature_valid(self):
@@ -274,9 +272,9 @@ class TestEncryptResponse:
         aes_key = base64.b64encode(secrets.token_bytes(32)).decode().rstrip("=")
         token = "test_token"
         app_key = "test_app_key"
-        
+
         response = encrypt_response(token, aes_key, app_key)
-        
+
         assert verify_callback_signature(
             token,
             response["timeStamp"],

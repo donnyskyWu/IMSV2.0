@@ -97,12 +97,12 @@ STANDARD_ROLES = [
 def seed_roles(env: str, dry_run: bool = False) -> int:
     """
     Seed standard roles R1-R11.
-    
+
     Rules per FP-H05-01:
     - Upsert by role_key
     - Mark as is_standard=True
     - E2E roles use "测试-" prefix with e2e_ key prefix
-    
+
     Returns:
         Number of records upserted
     """

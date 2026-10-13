@@ -8,19 +8,17 @@ Covers:
 - UT-B1-LG-07-USERNAME-COLLISION: Username collision with suffix
 """
 
-import threading
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.core.clock import set_clock, reset_clock
+from app.core.clock import reset_clock, set_clock
 from app.core.errors import BizError
 from app.integrations.dingtalk.login_client import DingTalkIdentity
 from app.services.dingtalk_login import (
     DingTalkLoginService,
-    use_dingtalk_login_client,
     reset_dingtalk_login_client,
+    use_dingtalk_login_client,
 )
 from tests.support import rows
 
@@ -86,13 +84,13 @@ class TestInstantSyncBasic:
         self, db_session, test_context, monkeypatch, ding_client, fixed_clock
     ):
         """UT-B1-LG-07-01: Unmapped user triggers instant sync and creates user."""
-        from app.domains.sys.models import OrgSyncEvent, Tenant, User, UserMapping
+        from app.domains.sys.models import OrgSyncEvent, Tenant, UserMapping
 
         _enable(monkeypatch)
 
         rows.add(db_session, Tenant(id=1, tenant_id=1, name="测试公司", status="ENABLED"))
 
-        client = ding_client(ScriptedDingTalk(
+        ding_client(ScriptedDingTalk(
             identity=DingTalkIdentity(user_id="dt-new-user", mobile="", name="新员工"),
             user_detail={"active": True, "name": "张新员工", "job_number": "EMP001"},
         ))
@@ -151,7 +149,7 @@ class TestUsernameCollision:
         self, db_session, test_context, monkeypatch, ding_client, fixed_clock
     ):
         """UT-B1-LG-07-USERNAME-COLLISION: Username collision adds _2, _3 suffix."""
-        from app.domains.sys.models import Tenant, User, UserMapping
+        from app.domains.sys.models import Tenant
 
         _enable(monkeypatch)
 
@@ -177,14 +175,14 @@ class TestUsernameCollision:
         self, db_session, test_context, monkeypatch, ding_client, fixed_clock
     ):
         """Long username is truncated to fit suffix within 50 chars."""
-        from app.domains.sys.models import Tenant, User
+        from app.domains.sys.models import Tenant
 
         _enable(monkeypatch)
 
         rows.add(db_session, Tenant(id=1, tenant_id=1, name="测试公司", status="ENABLED"))
 
         long_userid = "a" * 50
-        existing_user = rows.user(db_session, long_userid)
+        rows.user(db_session, long_userid)
 
         ding_client(ScriptedDingTalk(
             identity=DingTalkIdentity(user_id=long_userid, mobile="", name="长名员工"),
@@ -247,7 +245,7 @@ class TestConcurrentLogin:
         self, db_session, test_context, monkeypatch, ding_client, fixed_clock
     ):
         """UT-B1-LG-07-CONCURRENT: Second concurrent login finds existing user."""
-        from app.domains.sys.models import Tenant, User, UserMapping
+        from app.domains.sys.models import Tenant, UserMapping
 
         _enable(monkeypatch)
 
@@ -277,10 +275,9 @@ class TestConcurrentLogin:
         self, db_session, test_context, monkeypatch, ding_client, fixed_clock
     ):
         """IntegrityError during instant sync retries with username suffix."""
-        from unittest.mock import MagicMock
         from sqlalchemy.exc import IntegrityError
 
-        from app.domains.sys.models import Tenant, User, UserMapping
+        from app.domains.sys.models import Tenant
 
         _enable(monkeypatch)
 
@@ -301,7 +298,6 @@ class TestConcurrentLogin:
             call_count += 1
             if call_count == 1:
                 nested = original_begin_nested()
-                original_commit = nested.commit
                 def fail_commit():
                     nested.rollback()
                     raise IntegrityError("", {}, None)

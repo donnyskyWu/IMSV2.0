@@ -289,7 +289,6 @@ class DingTalkLoginService:
         from app.domains.sys.models import OrgSyncEvent, User, UserMapping
 
         session = get_db_session()
-        settings = get_settings()
 
         tenant_id = self._get_default_tenant_id()
         if tenant_id is None:
@@ -411,7 +410,7 @@ class DingTalkLoginService:
                         identity.user_id,
                         max_suffix_retries + 1,
                     )
-                    raise BizError(1001, msg="用户名冲突次数超限，请联系管理员")
+                    raise BizError(1001, msg="用户名冲突次数超限，请联系管理员") from None
                 suffix = f"_{retry_count + 1}"
                 username = self._generate_username(identity.user_id, suffix)
                 logger.info(

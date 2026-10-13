@@ -155,11 +155,11 @@ PARAMS = [
 def seed_params(env: str, dry_run: bool = False) -> int:
     """
     Seed system parameters.
-    
+
     Rules per FP-H05-01:
     - Upsert by param_key
     - Does not overwrite admin-modified values
-    
+
     Returns:
         Number of records upserted
     """

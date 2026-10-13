@@ -10,6 +10,7 @@ Implements:
 """
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
@@ -307,12 +308,10 @@ async def handle_dingtalk_callback(
     if event_data.get("TimeStamp"):
         from datetime import datetime
 
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             event_time = datetime.fromtimestamp(
                 int(event_data["TimeStamp"]) / 1000
             )
-        except (ValueError, TypeError):
-            pass
 
     biz_type = _map_event_type(event_type)
 

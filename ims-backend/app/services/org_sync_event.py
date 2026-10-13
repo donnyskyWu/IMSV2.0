@@ -10,11 +10,9 @@ Implements:
 """
 
 import logging
-from datetime import timedelta
 from typing import Any, Optional
 
 from app.core.clock import get_now
-from app.core.context import ctx
 from app.core.errors import BizError
 from app.db.ids import assign_pk
 from app.db.session import get_db_session
@@ -199,17 +197,16 @@ class OrgSyncEventService:
                 if mapping and mapping.last_sync_time:
                     return event.event_time <= mapping.last_sync_time
 
-        elif event.biz_type in ("DEPT_CREATE", "DEPT_UPDATE", "DEPT_DELETE"):
-            if event.dept_id:
-                from app.domains.sys.models import Dept
+        elif event.biz_type in ("DEPT_CREATE", "DEPT_UPDATE", "DEPT_DELETE") and event.dept_id:
+            from app.domains.sys.models import Dept
 
-                session = get_db_session()
-                dept = session.query(Dept).filter(
-                    Dept.id == event.dept_id,
-                    Dept.deleted == 0,
-                ).first()
-                if dept and dept.last_sync_at:
-                    return event.event_time <= dept.last_sync_at
+            session = get_db_session()
+            dept = session.query(Dept).filter(
+                Dept.id == event.dept_id,
+                Dept.deleted == 0,
+            ).first()
+            if dept and dept.last_sync_at:
+                return event.event_time <= dept.last_sync_at
 
         return False
 
@@ -236,7 +233,7 @@ class OrgSyncEventService:
 
     async def _apply_hire(self, event: Any) -> None:
         """Handle HIRE event - create user if not exists.
-        
+
         Creates local user and mapping if no mapping exists for the dingtalk_user_id.
         Similar to instant sync (LG-07) but triggered by event callback.
         """
@@ -338,7 +335,7 @@ class OrgSyncEventService:
 
     async def _apply_user_update(self, event: Any) -> None:
         """Handle USER_UPDATE event.
-        
+
         Updates user info. If main dept or position changes, the biz_type
         should have been converted to TRANSFER during processing.
         """
@@ -384,7 +381,7 @@ class OrgSyncEventService:
 
     async def _apply_transfer(self, event: Any) -> None:
         """Handle TRANSFER event - department change.
-        
+
         Updates user's department assignments based on DingTalk data.
         """
         from app.db.ids import assign_pk
@@ -456,7 +453,7 @@ class OrgSyncEventService:
 
     async def _apply_dept_create(self, event: Any) -> None:
         """Handle DEPT_CREATE event - create a new department.
-        
+
         Creates department with DingTalk source if it doesn't exist.
         """
         from app.db.ids import assign_pk
@@ -522,7 +519,7 @@ class OrgSyncEventService:
 
     async def _apply_dept_update(self, event: Any) -> None:
         """Handle DEPT_UPDATE event - update department info.
-        
+
         Updates department name or parent based on DingTalk data.
         Records ChangeLog for overwrites.
         """
@@ -606,7 +603,7 @@ class OrgSyncEventService:
 
     async def _apply_dept_delete(self, event: Any) -> None:
         """Handle DEPT_DELETE event - soft delete department.
-        
+
         Soft deletes department (deleted = dept.id).
         Members are handled separately by USER_UPDATE/TRANSFER events.
         """

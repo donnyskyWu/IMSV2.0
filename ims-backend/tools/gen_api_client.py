@@ -98,7 +98,7 @@ def generate_api_function(
     ref_resolver: dict,
 ) -> str:
     """Generate TypeScript API function."""
-    operation_id = operation.get("operationId", "")
+    operation.get("operationId", "")
     summary = operation.get("summary", "")
 
     # Generate clean function name from path
@@ -296,7 +296,7 @@ def main():
     ref_resolver = schemas
 
     # Map Chinese tags to domain names
-    TAG_TO_DOMAIN = {
+    tag_to_domain = {
         "认证": "auth",
         "系统管理": "system",
         "演示": "demo",
@@ -312,7 +312,7 @@ def main():
             tags = operation.get("tags", ["common"])
             for tag in tags:
                 # Map Chinese tag to domain name
-                domain = TAG_TO_DOMAIN.get(tag)
+                domain = tag_to_domain.get(tag)
                 if not domain:
                     # Normalize non-Chinese tag name
                     domain = re.sub(r"[^a-zA-Z0-9]", "_", tag).lower()

@@ -142,12 +142,12 @@ ORG_SYNC_STATUS_LEGACY_LABELS = {
 def seed_dicts(env: str, dry_run: bool = False) -> int:
     """
     Seed dictionary types and values.
-    
+
     Rules per FP-H05-01:
     - Insert by unique business key (dict_type, dict_value) when missing
     - Does not overwrite admin-modified fields
     - Q17：dict_org_sync_status 若仍是旧文案「待执行」「成功」，改成 BG-07 文案
-    
+
     Returns:
         Number of records upserted
     """

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.core.cache import Cache
-from app.core.clock import set_clock, reset_clock
+from app.core.clock import reset_clock, set_clock
 from app.services.org_sync_alert import OrgSyncAlertService
 from tests.support import rows
 

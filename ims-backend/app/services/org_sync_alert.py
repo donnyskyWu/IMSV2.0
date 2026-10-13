@@ -9,11 +9,11 @@ Implements:
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Optional
+from datetime import timedelta
+from typing import Any
 
 from app.core.cache import Cache
-from app.core.clock import BEIJING_TZ, get_now
+from app.core.clock import get_now
 from app.db.ids import assign_pk
 from app.db.session import get_db_session
 
@@ -66,7 +66,6 @@ class OrgSyncAlertService:
         from app.domains.sys.models import InboxMessage
 
         session = get_db_session()
-        now = get_now()
 
         for user_id in recipients:
             message = InboxMessage(
@@ -205,7 +204,7 @@ class OrgSyncAlertService:
 
     async def _get_alert_recipients(self, tenant_id: int, perm_code: str) -> list[int]:
         """Get users with the specified permission code who are active."""
-        from app.domains.sys.models import Menu, Role, RoleMenu, User, UserRole
+        from app.domains.sys.models import Menu, RoleMenu, User, UserRole
 
         session = get_db_session()
 
@@ -261,7 +260,6 @@ class OrgSyncAlertService:
         - dingtalkUnavailable: timeout in last 10 minutes
         - reconcileFailedTwice: last two batches failed
         """
-        from sqlalchemy import func
 
         from app.domains.sys.models import OrgSyncBatch, OrgSyncEvent, User
 

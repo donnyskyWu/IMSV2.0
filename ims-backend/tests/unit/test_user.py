@@ -300,7 +300,7 @@ class TestLastR1Protection:
     @pytest.mark.asyncio
     async def test_freeze_last_r1_raises_1001(self, db_session, admin_context):
         """UT-B1-R1-PROTECT-01: Last active R1 cannot be frozen."""
-        from app.domains.sys.models import Role, UserRole
+        from app.domains.sys.models import UserRole
         from app.services.user import UserService
 
         r1_role = rows.role(db_session, "R1", "管理员")
@@ -322,7 +322,7 @@ class TestLastR1Protection:
     @pytest.mark.asyncio
     async def test_resign_last_r1_raises_1001(self, db_session, admin_context):
         """UT-B1-R1-PROTECT-02: Last active R1 cannot resign."""
-        from app.domains.sys.models import Role, UserRole
+        from app.domains.sys.models import UserRole
         from app.services.user import UserService
 
         r1_role = rows.role(db_session, "R1", "管理员")
@@ -344,7 +344,7 @@ class TestLastR1Protection:
     @pytest.mark.asyncio
     async def test_delete_last_r1_raises_1001(self, db_session, admin_context):
         """UT-B1-R1-PROTECT-03: Last active R1 cannot be deleted."""
-        from app.domains.sys.models import Role, UserRole
+        from app.domains.sys.models import UserRole
         from app.services.user import UserService
 
         r1_role = rows.role(db_session, "R1", "管理员")
@@ -366,7 +366,7 @@ class TestLastR1Protection:
     @pytest.mark.asyncio
     async def test_freeze_r1_with_other_active_r1_succeeds(self, db_session, admin_context):
         """UT-B1-R1-PROTECT-04: R1 can be frozen if another active R1 exists."""
-        from app.domains.sys.models import Role, UserRole
+        from app.domains.sys.models import UserRole
         from app.services.user import UserService
 
         r1_role = rows.role(db_session, "R1", "管理员")
@@ -398,16 +398,17 @@ class TestFrozenEmployee1216:
     @pytest.mark.asyncio
     async def test_frozen_user_login_returns_1216(self, db_session, test_context):
         """UT-B1-LG-06-FROZEN: Frozen user login returns 1216.
-        
+
         Must truly hit 1216, not 1214 from a bad password hash.
         Uses a valid bcrypt hash for 'correct_password'.
         """
         import bcrypt
+
         from app.services.auth import AuthService
 
         correct_password = "correct_password"
         valid_hash = bcrypt.hashpw(correct_password.encode(), bcrypt.gensalt(rounds=10)).decode()
-        
+
         rows.user(
             db_session,
             "frozen_employee",
@@ -423,16 +424,17 @@ class TestFrozenEmployee1216:
     @pytest.mark.asyncio
     async def test_resigned_user_login_returns_1216(self, db_session, test_context):
         """UT-B1-LG-06-RESIGNED: Resigned user login returns 1216.
-        
+
         Must truly hit 1216, not 1214 from a bad password hash.
         Uses a valid bcrypt hash for 'correct_password'.
         """
         import bcrypt
+
         from app.services.auth import AuthService
 
         correct_password = "correct_password"
         valid_hash = bcrypt.hashpw(correct_password.encode(), bcrypt.gensalt(rounds=10)).decode()
-        
+
         rows.user(
             db_session,
             "resigned_employee",
@@ -452,6 +454,7 @@ class TestDropSessionsBlacklistTTL:
     def test_blacklist_ttl_at_least_access_token_ttl(self, db_session, test_context):
         """UT-B1-BLACKLIST-TTL-01: Blacklist TTL >= access-token TTL."""
         from unittest.mock import patch
+
         from app.core.cache import Cache
         from app.core.config import get_settings
         from app.services.auth import AuthService
@@ -459,26 +462,26 @@ class TestDropSessionsBlacklistTTL:
 
         settings = get_settings()
         access_token_ttl = settings.jwt.access_token_ttl
-        
+
         user = rows.user(db_session, "blacklist_test_user")
         auth_service = AuthService()
-        
+
         session_id = "test_session_for_blacklist"
         Cache.sadd(f"{auth_service.USER_SESSIONS_PREFIX}{user.id}", session_id)
         Cache.set(f"{auth_service.SESSION_PREFIX}{session_id}", "{}")
-        
+
         captured_ttl = None
         original_set = Cache.set
-        
+
         def capture_ttl(key: str, value: str, *, ttl: int = None, **kwargs):
             nonlocal captured_ttl
             if auth_service.TOKEN_BLACKLIST_PREFIX in key:
                 captured_ttl = ttl
             return original_set(key, value, ttl=ttl, **kwargs)
-        
+
         with patch.object(Cache, 'set', side_effect=capture_ttl):
             UserService()._drop_sessions(user.id)
-        
+
         assert captured_ttl is not None, "Blacklist set was not called"
         assert captured_ttl >= access_token_ttl, (
             f"Blacklist TTL ({captured_ttl}s) must be >= access-token TTL ({access_token_ttl}s)"

@@ -251,13 +251,14 @@ class TestPermVersionInvalidation:
 
     def test_bump_perm_version_invalidates_cache(self, db_session, test_context):
         """UT-B1-PERM-VER-01: Bumping perm_ver invalidates cached permissions.
-        
+
         Flow:
         1. Load user permissions (populates cache with version N)
         2. Bump user perm version (version becomes N+1)
         3. Load permissions again - should reload from DB (versions mismatch)
         """
         import asyncio
+
         from app.core.cache import Cache
         from app.domains.sys.models import Menu, Role, RoleMenu, User, UserRole
         from app.services.auth import AuthService
@@ -271,7 +272,7 @@ class TestPermVersionInvalidation:
             source="LOCAL",
         )
         db_session.add(user)
-        
+
         role = Role(
             id=100,
             tenant_id=1,
@@ -281,7 +282,7 @@ class TestPermVersionInvalidation:
             source="LOCAL",
         )
         db_session.add(role)
-        
+
         menu = Menu(
             id=100,
             tenant_id=1,
@@ -292,7 +293,7 @@ class TestPermVersionInvalidation:
             status="ENABLED",
         )
         db_session.add(menu)
-        
+
         user_role = UserRole(
             id=100,
             tenant_id=1,
@@ -301,7 +302,7 @@ class TestPermVersionInvalidation:
             source="LOCAL",
         )
         db_session.add(user_role)
-        
+
         role_menu = RoleMenu(
             id=100,
             tenant_id=1,
@@ -313,24 +314,24 @@ class TestPermVersionInvalidation:
 
         service = AuthService()
         cache_key = f"{service.PERM_CACHE_PREFIX}100"
-        
+
         perms1 = asyncio.get_event_loop().run_until_complete(
             service._get_user_permissions(100)
         )
         assert "test:perm:code" in perms1["perm_codes"]
-        
+
         cached_before = Cache.get_json(cache_key)
         assert cached_before is not None
         assert "_perm_ver" in cached_before
         ver_before = cached_before["_perm_ver"]
-        
+
         new_ver = AuthService.bump_user_perm_version(100)
         assert new_ver == ver_before + 1
-        
+
         perms2 = asyncio.get_event_loop().run_until_complete(
             service._get_user_permissions(100)
         )
-        
+
         cached_after = Cache.get_json(cache_key)
         assert cached_after is not None
         assert cached_after["_perm_ver"] == new_ver
@@ -351,7 +352,7 @@ class TestPermVersionInvalidation:
             source="LOCAL",
         )
         db_session.add(role)
-        
+
         menu = Menu(
             id=200,
             tenant_id=1,
@@ -362,7 +363,7 @@ class TestPermVersionInvalidation:
             status="ENABLED",
         )
         db_session.add(menu)
-        
+
         user_role = UserRole(
             id=200,
             tenant_id=1,
@@ -374,9 +375,9 @@ class TestPermVersionInvalidation:
         db_session.flush()
 
         ver_before = AuthService.get_user_perm_version(200)
-        
+
         grant_menu(200, 200)
-        
+
         ver_after = AuthService.get_user_perm_version(200)
         assert ver_after == ver_before + 1, "grant_menu should bump user's perm version"
 
@@ -395,7 +396,7 @@ class TestPermVersionInvalidation:
             source="LOCAL",
         )
         db_session.add(role)
-        
+
         menu = Menu(
             id=300,
             tenant_id=1,
@@ -406,7 +407,7 @@ class TestPermVersionInvalidation:
             status="ENABLED",
         )
         db_session.add(menu)
-        
+
         role_menu = RoleMenu(
             id=300,
             tenant_id=1,
@@ -414,7 +415,7 @@ class TestPermVersionInvalidation:
             menu_id=300,
         )
         db_session.add(role_menu)
-        
+
         user_role = UserRole(
             id=300,
             tenant_id=1,
@@ -426,8 +427,8 @@ class TestPermVersionInvalidation:
         db_session.flush()
 
         ver_before = AuthService.get_user_perm_version(300)
-        
+
         revoke_menu(300, 300)
-        
+
         ver_after = AuthService.get_user_perm_version(300)
         assert ver_after == ver_before + 1, "revoke_menu should bump user's perm version"
