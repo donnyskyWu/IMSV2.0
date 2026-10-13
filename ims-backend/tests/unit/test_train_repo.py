@@ -201,12 +201,53 @@ class TestTrainTaskRepo:
 class TestTrainRecordRepo:
     """Tests for TrainRecordRepo."""
 
-    def test_get_by_task_and_user_not_found(self, db_session, test_context):
+    def test_get_by_user_task_not_found(self, db_session, test_context):
         """Get record by task and user returns None when not found."""
         from app.core.context import ctx
         from app.domains.train.repo import TrainRecordRepo
 
         repo = TrainRecordRepo(db_session)
-        result = repo.get_by_task_and_user(99999, ctx.user_id, ctx.tenant_id)
+        result = repo.get_by_user_task(99999, ctx.user_id, ctx.tenant_id)
 
         assert result is None
+
+    def test_get_by_task_empty(self, db_session, test_context):
+        """Get records by task returns empty list when none exist."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainRecordRepo
+
+        repo = TrainRecordRepo(db_session)
+        result = repo.get_by_task(99999, ctx.tenant_id)
+
+        assert result == []
+
+    def test_is_user_assigned_false(self, db_session, test_context):
+        """Is user assigned returns false when not assigned."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainRecordRepo
+
+        repo = TrainRecordRepo(db_session)
+        result = repo.is_user_assigned(99999, ctx.user_id, ctx.tenant_id)
+
+        assert result is False
+
+    def test_get_assigned_dept_ids_empty(self, db_session, test_context):
+        """Get assigned dept IDs returns empty when no records."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainRecordRepo
+
+        repo = TrainRecordRepo(db_session)
+        result = repo.get_assigned_dept_ids(99999, ctx.tenant_id)
+
+        assert result == []
+
+    def test_count_by_task_zero(self, db_session, test_context):
+        """Count by task returns zeros when no records."""
+        from app.core.context import ctx
+        from app.domains.train.repo import TrainRecordRepo
+
+        repo = TrainRecordRepo(db_session)
+        result = repo.count_by_task(99999, ctx.tenant_id)
+
+        assert result["total"] == 0
+        assert result["confirmed"] == 0
