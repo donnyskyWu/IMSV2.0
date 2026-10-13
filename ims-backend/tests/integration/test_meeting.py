@@ -1857,3 +1857,448 @@ class TestValidationTests:
             await service.close_action_item(item.id, close_req)
         
         assert exc.value.code == 1001
+
+
+class TestMeetingReminderJob:
+    """ST-02: 24h/48h 提醒任务测试。"""
+
+    @pytest.mark.asyncio
+    async def test_24h_boundary_before(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-ST-02-01: 超 23h 未录纪要（边界前）→ 未发送。"""
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.meet.jobs import meeting_reminder_job
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+
+        meeting_time = now - timedelta(hours=23, minutes=59)
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101301",
+            title="Test Meeting 23h",
+            meeting_date=meeting_time,
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="REGISTERED",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats = await meeting_reminder_job()
+
+        assert stats["reminded_24h"] == 0
+        db_session.refresh(minutes)
+        assert minutes.remind_24h_at is None
+
+    @pytest.mark.asyncio
+    async def test_24h_boundary_after(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-ST-02-02: 超 24h 未录纪要（边界后）→ 记录人收到消息，remind_24h_at 有值。"""
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.meet.jobs import meeting_reminder_job
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+
+        meeting_time = now - timedelta(hours=24, minutes=1)
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101302",
+            title="Test Meeting 24h",
+            meeting_date=meeting_time,
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="REGISTERED",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats = await meeting_reminder_job()
+
+        assert stats["reminded_24h"] >= 1
+        db_session.refresh(minutes)
+        assert minutes.remind_24h_at is not None
+
+    @pytest.mark.asyncio
+    async def test_48h_boundary_before(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-ST-02-03: 超 47h 未归档（边界前）→ 未发送。"""
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.meet.jobs import meeting_reminder_job
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+
+        meeting_time = now - timedelta(hours=47, minutes=59)
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101303",
+            title="Test Meeting 47h",
+            meeting_date=meeting_time,
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats = await meeting_reminder_job()
+
+        assert stats["reminded_48h"] == 0
+        db_session.refresh(minutes)
+        assert minutes.remind_48h_at is None
+
+    @pytest.mark.asyncio
+    async def test_48h_boundary_after(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-ST-02-04: 超 48h 未归档（边界后）→ 记录人+supervise 收到消息。"""
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.meet.jobs import meeting_reminder_job
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+
+        meeting_time = now - timedelta(hours=48, minutes=1)
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101304",
+            title="Test Meeting 48h",
+            meeting_date=meeting_time,
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats = await meeting_reminder_job()
+
+        assert stats["reminded_48h"] >= 1
+        db_session.refresh(minutes)
+        assert minutes.remind_48h_at is not None
+
+    @pytest.mark.asyncio
+    async def test_idempotent_no_repeat(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-ST-02-05: 任务幂等（重入测试）→ 第二次运行不重复发送。"""
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.meet.jobs import meeting_reminder_job
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+
+        meeting_time = now - timedelta(hours=25)
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101305",
+            title="Test Meeting Idempotent",
+            meeting_date=meeting_time,
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="REGISTERED",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats1 = await meeting_reminder_job()
+        stats2 = await meeting_reminder_job()
+
+        assert stats2["reminded_24h"] == 0
+
+    @pytest.mark.asyncio
+    async def test_recorder_resigned_skip(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-ST-02-06: 记录人已离职 → 不推送。"""
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.meet.jobs import meeting_reminder_job
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+
+        meeting_time = now - timedelta(hours=25)
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101306",
+            title="Test Meeting Resigned",
+            meeting_date=meeting_time,
+            dept_id=1,
+            recorder_user_id=4,
+            attendees={"internal": [4], "external": []},
+            status="REGISTERED",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats = await meeting_reminder_job()
+
+        assert stats["skipped_resigned"] >= 1
+
+
+class TestMeetingOverdueJob:
+    """AI-03: 逾期推送与升级任务测试。"""
+
+    @pytest.mark.asyncio
+    async def test_overdue_1d_boundary_before(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-AI-03-01: 逾期刚好 1 天（边界前，get_now()）→ 未推送。"""
+        from app.domains.meet.models import MeetingMinutes, MeetingActionItem
+        from app.domains.meet.jobs import meeting_overdue_job
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        today = now.date()
+
+        yesterday = today - timedelta(days=1)
+
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101307",
+            title="Test Overdue Meeting",
+            meeting_date=now - timedelta(days=2),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="Overdue action",
+            assignee_user_id=2,
+            due_date=yesterday,
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats = await meeting_overdue_job()
+
+        assert stats["marked_overdue"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_overdue_1d_boundary_after(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-AI-03-02: 逾期满 1 天（边界后）→ 责任人收到推送，数据范围外用户收不到。"""
+        from app.domains.meet.models import MeetingMinutes, MeetingActionItem
+        from app.domains.meet.jobs import meeting_overdue_job
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        today = now.date()
+
+        two_days_ago = today - timedelta(days=2)
+
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101308",
+            title="Test Overdue Meeting 1d",
+            meeting_date=now - timedelta(days=3),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="Overdue action 1d",
+            assignee_user_id=2,
+            due_date=two_days_ago,
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats = await meeting_overdue_job()
+
+        assert stats["notified_1d"] >= 1
+        db_session.refresh(item)
+        assert item.notified_at is not None
+
+    @pytest.mark.asyncio
+    async def test_overdue_3d_boundary_before(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-AI-03-03: 逾期刚好 3 天（边界前）→ 未升级。"""
+        from app.domains.meet.models import MeetingMinutes, MeetingActionItem
+        from app.domains.meet.jobs import meeting_overdue_job
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        today = now.date()
+
+        three_days_ago = today - timedelta(days=3)
+
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101309",
+            title="Test Overdue Meeting 3d",
+            meeting_date=now - timedelta(days=5),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="Overdue action 3d boundary",
+            assignee_user_id=2,
+            due_date=three_days_ago,
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats = await meeting_overdue_job()
+
+        db_session.refresh(item)
+        assert item.escalated_at is None
+
+    @pytest.mark.asyncio
+    async def test_overdue_3d_boundary_after(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-AI-03-04: 逾期满 3 天（边界后）→ supervise 用户收到升级推送，数据范围外用户收不到。"""
+        from app.domains.meet.models import MeetingMinutes, MeetingActionItem
+        from app.domains.meet.jobs import meeting_overdue_job
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        today = now.date()
+
+        four_days_ago = today - timedelta(days=4)
+
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101310",
+            title="Test Overdue Meeting 3d escalate",
+            meeting_date=now - timedelta(days=6),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="Overdue action escalate",
+            assignee_user_id=2,
+            due_date=four_days_ago,
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats = await meeting_overdue_job()
+
+        assert stats["escalated_3d"] >= 1
+        db_session.refresh(item)
+        assert item.escalated_at is not None
+
+    @pytest.mark.asyncio
+    async def test_overdue_idempotent(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-AI-03-05: 任务幂等（重入测试）→ 第二次运行不重复推送。"""
+        from app.domains.meet.models import MeetingMinutes, MeetingActionItem
+        from app.domains.meet.jobs import meeting_overdue_job
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        today = now.date()
+
+        two_days_ago = today - timedelta(days=2)
+
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101311",
+            title="Test Overdue Idempotent",
+            meeting_date=now - timedelta(days=4),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="Idempotent test action",
+            assignee_user_id=2,
+            due_date=two_days_ago,
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats1 = await meeting_overdue_job()
+        stats2 = await meeting_overdue_job()
+
+        assert stats2["notified_1d"] == 0
+
+    @pytest.mark.asyncio
+    async def test_assignee_resigned_skip(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """UT-B18-AI-03-06: 责任人已离职 → 不推送。"""
+        from app.domains.meet.models import MeetingMinutes, MeetingActionItem
+        from app.domains.meet.jobs import meeting_overdue_job
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        today = now.date()
+
+        two_days_ago = today - timedelta(days=2)
+
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101312",
+            title="Test Overdue Resigned",
+            meeting_date=now - timedelta(days=4),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="Resigned assignee action",
+            assignee_user_id=4,
+            due_date=two_days_ago,
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats = await meeting_overdue_job()
+
+        assert stats["skipped_resigned"] >= 1

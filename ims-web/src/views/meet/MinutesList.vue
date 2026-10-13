@@ -18,65 +18,8 @@ import { useDictStore } from '@/stores/dict'
 import { useAuthStore } from '@/stores/auth'
 import { useResponsive } from '@/utils/responsive'
 import { fmtDateTime } from '@/utils/format'
+import { meetApi, type MeetingMinutes, type MeetingMinutesListItem, type ActionItem } from '@/api/meet'
 import type { EmptyType } from '@/types'
-
-interface Attendees {
-  internal: number[]
-  external: string[]
-}
-
-interface ActionItem {
-  id: string
-  description: string
-  assignee_user_id: string
-  assignee_name: string
-  due_date: string
-  status: string
-  close_remark: string | null
-  evidence_url: string | null
-  closed_at: string | null
-  overdue_days: number | null
-}
-
-interface Decision {
-  id: string
-  seq: number
-  content: string
-}
-
-interface Appendix {
-  id: string
-  content: string
-  creator_name: string
-  create_time: string
-}
-
-interface MeetingMinutes {
-  id: string
-  code: string
-  title: string
-  meeting_date: string
-  meeting_room: string | null
-  dept_id: string
-  dept_name: string | null
-  recorder_user_id: string
-  recorder_name: string | null
-  attendees: Attendees
-  attendee_names: string[]
-  summary: string | null
-  status: string
-  archived_at: string | null
-  archived_by: string | null
-  archived_by_name: string | null
-  create_time: string
-  update_time: string
-  version: number
-  action_item_count: number
-  action_item_closed_count: number
-  decisions: Decision[]
-  action_items: ActionItem[]
-  appendices: Appendix[]
-}
 
 const router = useRouter()
 const dictStore = useDictStore()
@@ -84,11 +27,12 @@ const authStore = useAuthStore()
 const { isMobile } = useResponsive()
 
 const loading = ref(false)
-const list = ref<MeetingMinutes[]>([])
+const list = ref<MeetingMinutesListItem[]>([])
 const total = ref(0)
 const pageNo = ref(1)
 const pageSize = ref(10)
 const emptyMode = ref<EmptyType | ''>('')
+const detailData = ref<MeetingMinutes | null>(null)
 
 const searchForm = ref({
   title: '',
@@ -116,7 +60,6 @@ const formModel = ref({
 
 const detailOpen = ref(false)
 const detailTab = ref('base')
-const detailRow = ref<MeetingMinutes | null>(null)
 
 const appendixVisible = ref(false)
 const appendixContent = ref('')
@@ -141,29 +84,22 @@ const statusOptions = computed(() => dictStore.getOptions('meet_minutes_status')
 async function fetchList() {
   loading.value = true
   try {
-    const params = new URLSearchParams({
-      page_no: String(pageNo.value),
-      page_size: String(pageSize.value),
+    const result = await meetApi.list({
+      page_no: pageNo.value,
+      page_size: pageSize.value,
+      title: searchForm.value.title || undefined,
+      status: searchForm.value.status || undefined,
+      meeting_date_start: searchForm.value.meeting_date_start || undefined,
+      meeting_date_end: searchForm.value.meeting_date_end || undefined,
     })
-    if (searchForm.value.title) params.append('title', searchForm.value.title)
-    if (searchForm.value.status) params.append('status', searchForm.value.status)
-    if (searchForm.value.meeting_date_start) params.append('meeting_date_start', searchForm.value.meeting_date_start)
-    if (searchForm.value.meeting_date_end) params.append('meeting_date_end', searchForm.value.meeting_date_end)
-
-    const response = await fetch(`/admin-api/ims/meet/minutes/list?${params}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('ims_access_token')}` },
-    })
-    const result = await response.json()
-    if (result.code === 0) {
+    if (result.code === 0 && result.data) {
       list.value = result.data.list
       total.value = result.data.total
       emptyMode.value = total.value === 0 ? 'no-data' : ''
     } else {
-      toast.error(result.msg || '加载失败')
       emptyMode.value = 'error'
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
     emptyMode.value = 'error'
   } finally {
     loading.value = false
@@ -204,7 +140,7 @@ function handleAdd() {
   drawerVisible.value = true
 }
 
-async function handleEdit(row: MeetingMinutes) {
+async function handleEdit(row: MeetingMinutesListItem) {
   if (row.status === 'ARCHIVED') {
     toast.warning('已归档纪要不可修改')
     return
@@ -215,26 +151,34 @@ async function handleEdit(row: MeetingMinutes) {
     return
   }
 
-  editingId.value = row.id
-  drawerTitle.value = '编辑纪要'
-  formModel.value = {
-    title: row.title,
-    meeting_date: row.meeting_date.slice(0, 16),
-    meeting_room: row.meeting_room || '',
-    recorder_user_id: row.recorder_user_id,
-    attendees_internal: row.attendees.internal,
-    attendees_external: row.attendees.external,
-    summary: row.summary || '',
-    decisions: row.decisions.map(d => ({ content: d.content })),
-    action_items: row.action_items.map(a => ({
-      description: a.description,
-      assignee_user_id: Number(a.assignee_user_id),
-      due_date: a.due_date,
-    })),
-    client_token: generateToken(),
-    base_version: row.version,
+  try {
+    const result = await meetApi.get(row.id)
+    if (result.code === 0 && result.data) {
+      const detail = result.data
+      editingId.value = row.id
+      drawerTitle.value = '编辑纪要'
+      formModel.value = {
+        title: detail.title,
+        meeting_date: detail.meeting_date.slice(0, 16),
+        meeting_room: detail.meeting_room || '',
+        recorder_user_id: detail.recorder_user_id,
+        attendees_internal: detail.attendees.internal,
+        attendees_external: detail.attendees.external,
+        summary: detail.summary || '',
+        decisions: detail.decisions.map(d => ({ content: d.content })),
+        action_items: detail.action_items.map(a => ({
+          description: a.description,
+          assignee_user_id: Number(a.assignee_user_id),
+          due_date: a.due_date,
+        })),
+        client_token: generateToken(),
+        base_version: detail.version,
+      }
+      drawerVisible.value = true
+    }
+  } catch {
+    toast.error('加载详情失败')
   }
-  drawerVisible.value = true
 }
 
 async function handleSave() {
@@ -268,36 +212,24 @@ async function handleSave() {
   }
 
   try {
-    const url = editingId.value
-      ? `/admin-api/ims/meet/minutes/${editingId.value}`
-      : '/admin-api/ims/meet/minutes'
-    const method = editingId.value ? 'PUT' : 'POST'
-
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('ims_access_token')}`,
-      },
-      body: JSON.stringify(body),
-    })
-    const result = await response.json()
+    const result = editingId.value
+      ? await meetApi.update(editingId.value, body)
+      : await meetApi.create(body)
+    
     if (result.code === 0) {
       toast.success('保存成功')
-      if (result.data.warnings?.includes(1116)) {
+      if (result.data?.warnings?.includes(1116)) {
         toast.warning('会后超过 24 小时录入纪要')
       }
       drawerVisible.value = false
       fetchList()
-    } else {
-      toast.error(result.msg || '保存失败')
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
+    // Error handled by request interceptor
   }
 }
 
-async function handleArchive(row: MeetingMinutes) {
+async function handleArchive(row: MeetingMinutesListItem) {
   if (row.status === 'REGISTERED') {
     toast.error('请先录入纪要')
     return
@@ -320,26 +252,20 @@ async function handleArchive(row: MeetingMinutes) {
   if (!confirmed) return
 
   try {
-    const response = await fetch(`/admin-api/ims/meet/minutes/${row.id}/archive`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${localStorage.getItem('ims_access_token')}` },
-    })
-    const result = await response.json()
+    const result = await meetApi.archive(row.id)
     if (result.code === 0) {
       toast.success('归档成功')
-      if (result.data.warnings?.includes(1116)) {
+      if (result.data?.warnings?.includes(1116)) {
         toast.warning('会后超过 48 小时归档')
       }
       fetchList()
-    } else {
-      toast.error(result.msg || '归档失败')
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
+    // Error handled by request interceptor
   }
 }
 
-async function handleDelete(row: MeetingMinutes) {
+async function handleDelete(row: MeetingMinutesListItem) {
   if (row.status === 'ARCHIVED') {
     toast.error('已归档纪要不可删除')
     return
@@ -353,29 +279,30 @@ async function handleDelete(row: MeetingMinutes) {
   if (!confirmed) return
 
   try {
-    const response = await fetch(`/admin-api/ims/meet/minutes/${row.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${localStorage.getItem('ims_access_token')}` },
-    })
-    const result = await response.json()
+    const result = await meetApi.delete(row.id)
     if (result.code === 0) {
       toast.success('删除成功')
       fetchList()
-    } else {
-      toast.error(result.msg || '删除失败')
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
+    // Error handled by request interceptor
   }
 }
 
-function handleView(row: MeetingMinutes) {
-  detailRow.value = row
-  detailTab.value = 'base'
-  detailOpen.value = true
+async function handleView(row: MeetingMinutesListItem) {
+  try {
+    const result = await meetApi.get(row.id)
+    if (result.code === 0 && result.data) {
+      detailData.value = result.data
+      detailTab.value = 'base'
+      detailOpen.value = true
+    }
+  } catch {
+    toast.error('加载详情失败')
+  }
 }
 
-function openAppendix(row: MeetingMinutes) {
+function openAppendix(row: MeetingMinutesListItem) {
   if (row.status !== 'ARCHIVED') {
     toast.warning('未归档纪要请直接编辑')
     return
@@ -392,24 +319,14 @@ async function handleAppendixSave() {
   }
 
   try {
-    const response = await fetch(`/admin-api/ims/meet/minutes/${appendixMinutesId.value}/appendix`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('ims_access_token')}`,
-      },
-      body: JSON.stringify({ content: appendixContent.value.trim() }),
-    })
-    const result = await response.json()
+    const result = await meetApi.addAppendix(appendixMinutesId.value!, { content: appendixContent.value.trim() })
     if (result.code === 0) {
       toast.success('附录添加成功')
       appendixVisible.value = false
       fetchList()
-    } else {
-      toast.error(result.msg || '添加失败')
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
+    // Error handled by request interceptor
   }
 }
 
@@ -446,24 +363,14 @@ async function handleCloseAction() {
   }
 
   try {
-    const response = await fetch(`/admin-api/ims/meet/minutes/action-item/${closingActionItemId.value}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('ims_access_token')}`,
-      },
-      body: JSON.stringify(closeActionForm.value),
-    })
-    const result = await response.json()
+    const result = await meetApi.closeActionItem(closingActionItemId.value!, closeActionForm.value)
     if (result.code === 0) {
       toast.success('行动项已闭环')
       closeActionVisible.value = false
       fetchList()
-    } else {
-      toast.error(result.msg || '操作失败')
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
+    // Error handled by request interceptor
   }
 }
 
@@ -476,19 +383,19 @@ function getStatusType(status: string): string {
   return map[status] || 'info'
 }
 
-function isRecorder(row: MeetingMinutes): boolean {
+function isRecorder(row: MeetingMinutesListItem): boolean {
   return row.recorder_user_id === authStore.user?.id
 }
 
-function canEditRow(row: MeetingMinutes): boolean {
+function canEditRow(row: MeetingMinutesListItem): boolean {
   return row.status !== 'ARCHIVED' && (isRecorder(row) || canEdit.value)
 }
 
-function canArchiveRow(row: MeetingMinutes): boolean {
+function canArchiveRow(row: MeetingMinutesListItem): boolean {
   return row.status === 'MINUTES_RECORDED' && (isRecorder(row) || canArchive.value)
 }
 
-function canAppendixRow(row: MeetingMinutes): boolean {
+function canAppendixRow(row: MeetingMinutesListItem): boolean {
   return row.status === 'ARCHIVED' && (isRecorder(row) || canAppendix.value)
 }
 
@@ -606,33 +513,33 @@ onMounted(() => {
       </FormDrawer>
 
       <DetailDrawer v-model="detailOpen" title="会议纪要详情">
-        <template v-if="detailRow">
+        <template v-if="detailData">
           <el-tabs v-model="detailTab">
             <el-tab-pane label="基本信息" name="base">
               <el-descriptions :column="isMobile ? 1 : 2" border>
-                <el-descriptions-item label="编号">{{ detailRow.code }}</el-descriptions-item>
-                <el-descriptions-item label="主题">{{ detailRow.title }}</el-descriptions-item>
-                <el-descriptions-item label="会议时间">{{ fmtDateTime(detailRow.meeting_date) }}</el-descriptions-item>
-                <el-descriptions-item label="会议室">{{ detailRow.meeting_room || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="记录人">{{ detailRow.recorder_name }}</el-descriptions-item>
+                <el-descriptions-item label="编号">{{ detailData.code }}</el-descriptions-item>
+                <el-descriptions-item label="主题">{{ detailData.title }}</el-descriptions-item>
+                <el-descriptions-item label="会议时间">{{ fmtDateTime(detailData.meeting_date) }}</el-descriptions-item>
+                <el-descriptions-item label="会议室">{{ detailData.meeting_room || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="记录人">{{ detailData.recorder_name }}</el-descriptions-item>
                 <el-descriptions-item label="状态">
-                  <StatusTag :type="getStatusType(detailRow.status)" :label="dictStore.getLabel('meet_minutes_status', detailRow.status)" />
+                  <StatusTag :type="getStatusType(detailData.status)" :label="dictStore.getLabel('meet_minutes_status', detailData.status)" />
                 </el-descriptions-item>
-                <el-descriptions-item label="参会人" :span="2">{{ detailRow.attendee_names.join('、') }}</el-descriptions-item>
+                <el-descriptions-item label="参会人" :span="2">{{ detailData.attendee_names.join('、') }}</el-descriptions-item>
               </el-descriptions>
-              <div v-if="detailRow.summary" class="summary-section">
+              <div v-if="detailData.summary" class="summary-section">
                 <h4>纪要正文</h4>
-                <div v-html="detailRow.summary"></div>
+                <div v-html="detailData.summary"></div>
               </div>
             </el-tab-pane>
             <el-tab-pane label="决议事项" name="decisions">
-              <el-table :data="detailRow.decisions" stripe>
+              <el-table :data="detailData.decisions" stripe>
                 <el-table-column prop="seq" label="序号" width="80" />
                 <el-table-column prop="content" label="内容" />
               </el-table>
             </el-tab-pane>
             <el-tab-pane label="行动项" name="actions">
-              <el-table :data="detailRow.action_items" stripe>
+              <el-table :data="detailData.action_items" stripe>
                 <el-table-column prop="description" label="描述" min-width="200" />
                 <el-table-column prop="assignee_name" label="责任人" width="100" />
                 <el-table-column prop="due_date" label="截止日期" width="120" />
@@ -651,8 +558,8 @@ onMounted(() => {
                 </el-table-column>
               </el-table>
             </el-tab-pane>
-            <el-tab-pane v-if="detailRow.status === 'ARCHIVED'" label="附录" name="appendix">
-              <el-table :data="detailRow.appendices" stripe>
+            <el-tab-pane v-if="detailData.status === 'ARCHIVED'" label="附录" name="appendix">
+              <el-table :data="detailData.appendices" stripe>
                 <el-table-column prop="content" label="内容" />
                 <el-table-column prop="creator_name" label="添加人" width="100" />
                 <el-table-column prop="create_time" label="添加时间" width="160">

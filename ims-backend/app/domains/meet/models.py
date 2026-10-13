@@ -14,16 +14,16 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Date,
     DateTime,
+    Index,
     Integer,
     SmallInteger,
     String,
     Text,
     UniqueConstraint,
-    Index,
-    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 

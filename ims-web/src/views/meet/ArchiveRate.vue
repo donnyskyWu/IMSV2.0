@@ -9,21 +9,7 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime } from '@/utils/format'
-
-interface UnarchivedMinutes {
-  minutes_no: string
-  meeting_title: string
-  meeting_date: string
-  recorder_name: string
-  hours_since_meeting: number
-}
-
-interface ArchiveRateData {
-  total_meetings: number
-  archived_count: number
-  archive_rate: number
-  unarchived_list: UnarchivedMinutes[]
-}
+import { meetApi, type ArchiveRateData } from '@/api/meet'
 
 const authStore = useAuthStore()
 const loading = ref(false)
@@ -40,23 +26,16 @@ async function fetchData() {
 
   loading.value = true
   try {
-    const params = new URLSearchParams()
-    if (dateRange.value) {
-      params.append('date_range_start', dateRange.value[0])
-      params.append('date_range_end', dateRange.value[1])
-    }
-
-    const response = await fetch(`/admin-api/ims/meet/minutes/archive-rate?${params}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('ims_access_token')}` },
-    })
-    const result = await response.json()
-    if (result.code === 0) {
+    const result = await meetApi.getArchiveRate(
+      dateRange.value
+        ? { date_range_start: dateRange.value[0], date_range_end: dateRange.value[1] }
+        : undefined
+    )
+    if (result.code === 0 && result.data) {
       data.value = result.data
-    } else {
-      toast.error(result.msg || '加载失败')
     }
   } catch {
-    toast.error('网络异常，请检查网络后重试')
+    // Error handled by request interceptor
   } finally {
     loading.value = false
   }

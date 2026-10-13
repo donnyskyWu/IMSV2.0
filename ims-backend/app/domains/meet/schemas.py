@@ -6,7 +6,7 @@ All schemas use camelCase for API compatibility per global conventions.
 """
 
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import Field, field_validator
 

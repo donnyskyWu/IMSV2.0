@@ -26,15 +26,14 @@ from app.core.pagination import PageParam
 from app.core.response import CommonResult
 from app.core.serialization import BaseSchema
 from app.domains.meet.schemas import (
-    MeetingMinutesCreateReq,
-    MeetingMinutesUpdateReq,
-    AppendixCreateReq,
     ActionItemCloseReq,
-    MeetingMinutesVO,
-    MeetingMinutesListVO,
     ActionItemVO,
+    AppendixCreateReq,
     ArchiveRateResp,
     MeetingCreateResp,
+    MeetingMinutesCreateReq,
+    MeetingMinutesUpdateReq,
+    MeetingMinutesVO,
 )
 from app.domains.meet.service import MeetingService
 
@@ -76,17 +75,17 @@ async def _is_recorder(minutes_id: int) -> bool:
     """检查当前用户是否是指定纪要的记录人。"""
     from app.db.session import get_db_session
     from app.domains.meet.models import MeetingMinutes
-    
+
     session = get_db_session()
     minutes = session.query(MeetingMinutes).filter(
         MeetingMinutes.id == minutes_id,
         MeetingMinutes.tenant_id == ctx.tenant_id,
         MeetingMinutes.deleted == 0,
     ).first()
-    
+
     if not minutes:
         return False
-    
+
     return minutes.recorder_user_id == ctx.user_id
 
 
@@ -104,16 +103,16 @@ class ListQuery(BaseSchema):
 async def create_minutes(request: MeetingMinutesCreateReq) -> CommonResult[MeetingCreateResp]:
     """
     登记会议或录入纪要 (MN-02, MN-03).
-    
+
     - 正文为空 → REGISTERED
     - 正文非空 → MINUTES_RECORDED
     - 会后 > 24h → warnings 带 1116
     """
     _require_perm(PERM_ADD)
-    
+
     service = MeetingService()
     result = await service.create_minutes(request)
-    
+
     return CommonResult.success(data=MeetingCreateResp(
         data=result["data"],
         warnings=result["warnings"],
@@ -131,11 +130,11 @@ async def list_minutes(
 ) -> CommonResult:
     """
     纪要列表 (MN-01).
-    
+
     按数据范围过滤。
     """
     _require_any_perm(PERM_QUERY, PERM_QUERY_SELF)
-    
+
     service = MeetingService()
     result = await service.list_minutes(
         page_param=PageParam(page_no=page_no, page_size=page_size),
@@ -144,7 +143,7 @@ async def list_minutes(
         meeting_date_end=meeting_date_end,
         status=status,
     )
-    
+
     return CommonResult.success(data=result.model_dump())
 
 
@@ -155,17 +154,17 @@ async def get_archive_rate(
 ) -> CommonResult[ArchiveRateResp]:
     """
     留痕率统计 (ST-01).
-    
+
     按数据范围过滤。
     """
     _require_perm(PERM_SUPERVISE)
-    
+
     service = MeetingService()
     result = await service.get_archive_rate(
         date_range_start=date_range_start,
         date_range_end=date_range_end,
     )
-    
+
     return CommonResult.success(data=result)
 
 
@@ -173,14 +172,14 @@ async def get_archive_rate(
 async def get_minutes(minutes_id: int) -> CommonResult[MeetingMinutesVO]:
     """
     纪要详情 (MN-08).
-    
+
     按数据范围过滤。
     """
     _require_any_perm(PERM_QUERY, PERM_QUERY_SELF)
-    
+
     service = MeetingService()
     result = await service.get_minutes(minutes_id)
-    
+
     return CommonResult.success(data=result)
 
 
@@ -188,17 +187,17 @@ async def get_minutes(minutes_id: int) -> CommonResult[MeetingMinutesVO]:
 async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> CommonResult[MeetingCreateResp]:
     """
     编辑纪要 (MN-03, MN-04).
-    
+
     - 记录人可编辑，无需 edit 权限
     - 已归档不可编辑 → 1117
     """
     is_recorder = await _is_recorder(minutes_id)
     if not is_recorder:
         _require_perm(PERM_EDIT)
-    
+
     service = MeetingService()
     result = await service.update_minutes(minutes_id, request)
-    
+
     return CommonResult.success(data=MeetingCreateResp(
         data=result["data"],
         warnings=result["warnings"],
@@ -209,7 +208,7 @@ async def update_minutes(minutes_id: int, request: MeetingMinutesUpdateReq) -> C
 async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     """
     归档纪要 (MN-05).
-    
+
     - 记录人可归档，无需 archive 权限
     - REGISTERED 不可归档 → 1001
     - 已归档不可重复归档 → 1117
@@ -217,10 +216,10 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
     is_recorder = await _is_recorder(minutes_id)
     if not is_recorder:
         _require_perm(PERM_ARCHIVE)
-    
+
     service = MeetingService()
     result = await service.archive_minutes(minutes_id)
-    
+
     return CommonResult.success(data=MeetingCreateResp(
         data=result["data"],
         warnings=result["warnings"],
@@ -231,17 +230,17 @@ async def archive_minutes(minutes_id: int) -> CommonResult[MeetingCreateResp]:
 async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonResult[MeetingMinutesVO]:
     """
     附录说明 (MN-06).
-    
+
     - 记录人可添加，无需 appendix 权限
     - 仅已归档可追加
     """
     is_recorder = await _is_recorder(minutes_id)
     if not is_recorder:
         _require_perm(PERM_APPENDIX)
-    
+
     service = MeetingService()
     result = await service.add_appendix(minutes_id, request)
-    
+
     return CommonResult.success(data=result)
 
 
@@ -249,15 +248,15 @@ async def add_appendix(minutes_id: int, request: AppendixCreateReq) -> CommonRes
 async def delete_minutes(minutes_id: int) -> CommonResult:
     """
     删除纪要 (MN-07).
-    
+
     - 需要 delete 权限
     - 已归档不可删除 → 1117
     """
     _require_perm(PERM_DELETE)
-    
+
     service = MeetingService()
     await service.delete_minutes(minutes_id)
-    
+
     return CommonResult.success()
 
 
@@ -265,12 +264,12 @@ async def delete_minutes(minutes_id: int) -> CommonResult:
 async def close_action_item(item_id: int, request: ActionItemCloseReq) -> CommonResult[ActionItemVO]:
     """
     行动项回填 (AI-02).
-    
+
     - LOGIN_ONLY + 责任人校验
     - 非责任人 → 1118
     - 已闭环 → 1001
     """
     service = MeetingService()
     result = await service.close_action_item(item_id, request)
-    
+
     return CommonResult.success(data=result)
