@@ -179,6 +179,9 @@ class TestAuthBranches:
         from app.domains.sys.models import UserMapping
 
         service = AuthService()
+        import app.services.auth as auth_mod
+        monkeypatch.setattr(auth_mod.settings.dingtalk, "app_key", "ding-key")
+        monkeypatch.setattr(auth_mod.settings.dingtalk, "mode", "mock")
         mobile = "13800138000"
         with pytest.raises(BizError) as missing_user:
             await service.map_dingtalk_user_by_mobile("dt-missing", mobile)
@@ -222,8 +225,10 @@ class TestAuthBranches:
 
         monkeypatch.setattr(auth_mod.settings.dingtalk, "app_key", "ding-key")
         url = await service.get_dingtalk_redirect_url("/ims/home")
-        assert url.startswith("https://login.dingtalk.com/oauth2/auth?state=")
-        state = url.split("state=", 1)[1]
+        assert url.startswith("https://login.dingtalk.com/oauth2/auth?")
+        from urllib.parse import parse_qs, urlparse
+        state = parse_qs(urlparse(url).query)["state"][0]
+        assert len(state) == 32
         stored = Cache.get_json(f"{service.SSO_STATE_PREFIX}{state}")
         assert stored == {"redirect": "/ims/home"}
 
