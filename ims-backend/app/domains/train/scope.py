@@ -16,8 +16,12 @@ from typing import Optional
 
 from sqlalchemy import Select, or_, select
 
-from app.core.context import DataScope, RequestContext
+from app.core.context import RequestContext
 from app.domains.train.models import TrainTask, TrainTaskRecord
+
+SCOPE_ALL = "ALL"
+SCOPE_DEPT = "DEPT"
+SCOPE_SELF = "SELF"
 
 
 def apply_task_scope_filter(
@@ -34,12 +38,12 @@ def apply_task_scope_filter(
     - DEPT: creator_dept_id IN dept_ids OR EXISTS(record WHERE user_dept_id IN dept_ids)
     - SELF: creator == user_id OR EXISTS(record WHERE user_id == ctx.user_id)
     """
-    scope = _get_effective_scope(ctx)
+    scope_type = _get_effective_scope(ctx)
 
-    if scope == DataScope.ALL:
+    if scope_type == SCOPE_ALL:
         return query
 
-    if scope == DataScope.DEPT:
+    if scope_type == SCOPE_DEPT:
         dept_ids = ctx.dept_ids or []
         if not dept_ids:
             return query.where(False)
@@ -59,7 +63,7 @@ def apply_task_scope_filter(
             )
         )
 
-    if scope == DataScope.SELF:
+    if scope_type == SCOPE_SELF:
         user_id = ctx.user_id
         if not user_id:
             return query.where(False)
@@ -96,18 +100,18 @@ def apply_record_scope_filter(
     - DEPT: user_dept_id IN ctx.dept_ids
     - SELF: user_id == ctx.user_id
     """
-    scope = _get_effective_scope(ctx)
+    scope_type = _get_effective_scope(ctx)
 
-    if scope == DataScope.ALL:
+    if scope_type == SCOPE_ALL:
         return query
 
-    if scope == DataScope.DEPT:
+    if scope_type == SCOPE_DEPT:
         dept_ids = ctx.dept_ids or []
         if not dept_ids:
             return query.where(False)
         return query.where(TrainTaskRecord.user_dept_id.in_(dept_ids))
 
-    if scope == DataScope.SELF:
+    if scope_type == SCOPE_SELF:
         user_id = ctx.user_id
         if not user_id:
             return query.where(False)
@@ -134,17 +138,17 @@ def get_stat_visible_depts(
 
     E2E-B21-38: DEPT user passing other dept's ID -> empty result (intersection)
     """
-    scope = _get_effective_scope(ctx)
+    scope_type = _get_effective_scope(ctx)
 
-    if scope == DataScope.SELF:
+    if scope_type == SCOPE_SELF:
         return None, True
 
-    if scope == DataScope.ALL:
+    if scope_type == SCOPE_ALL:
         if request_dept_id:
             return [request_dept_id], False
         return None, False
 
-    if scope == DataScope.DEPT:
+    if scope_type == SCOPE_DEPT:
         user_depts = ctx.dept_ids or []
         if not user_depts:
             return [], False
@@ -177,34 +181,34 @@ def check_task_in_scope(
     Returns:
         True if task is visible to the user
     """
-    scope = _get_effective_scope(ctx)
+    scope_type = _get_effective_scope(ctx)
 
-    if scope == DataScope.ALL:
+    if scope_type == SCOPE_ALL:
         return True
 
-    if scope == DataScope.DEPT:
+    if scope_type == SCOPE_DEPT:
         user_depts = set(ctx.dept_ids or [])
         if task.creator_dept_id in user_depts:
             return True
         return bool(user_depts.intersection(assigned_user_dept_ids))
 
-    if scope == DataScope.SELF:
+    if scope_type == SCOPE_SELF:
         return task.creator == ctx.user_id
 
     return False
 
 
-def _get_effective_scope(ctx: RequestContext) -> DataScope:
-    """Get the effective data scope from context."""
+def _get_effective_scope(ctx: RequestContext) -> str:
+    """Get the effective data scope type from context."""
     if ctx.data_scopes:
         for ds in ctx.data_scopes:
-            scope_type = ds.get("scope_type")
-            if scope_type:
-                try:
-                    return DataScope(scope_type)
-                except ValueError:
-                    pass
-    return DataScope.SELF
+            if hasattr(ds, "scope_type"):
+                return ds.scope_type
+            if isinstance(ds, dict):
+                scope_type = ds.get("scope_type")
+                if scope_type:
+                    return scope_type
+    return SCOPE_SELF
 
 
 def get_user_perm_key(user_id: int) -> str:

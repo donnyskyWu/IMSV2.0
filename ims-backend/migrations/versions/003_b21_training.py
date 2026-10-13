@@ -232,32 +232,63 @@ def upgrade() -> None:
     )
 
     # Dictionary seeds for training module
-    op.execute("""
-        INSERT IGNORE INTO ims_sys_dict_type (id, tenant_id, dict_type, name, status, deleted)
-        VALUES
-            (901, 1, 'dict_train_material_type', '培训资料类型', 'ENABLED', 0),
-            (902, 1, 'dict_train_material_status', '培训资料状态', 'ENABLED', 0),
-            (903, 1, 'dict_train_task_status', '学习任务状态', 'ENABLED', 0),
-            (904, 1, 'dict_train_confirm_type', '确认方式', 'ENABLED', 0),
-            (905, 1, 'dict_train_assign_scope', '指派范围', 'ENABLED', 0)
-    """)
+    # Use dialect-specific syntax for UPSERT
+    dialect = op.get_bind().dialect.name
 
-    op.execute("""
-        INSERT IGNORE INTO ims_sys_dict_data (id, tenant_id, dict_type, dict_value, dict_label, color_type, sort, status, is_builtin, deleted)
-        VALUES
-            (9001, 1, 'dict_train_material_type', 'DOC', '文档', 'primary', 1, 'ENABLED', 1, 0),
-            (9002, 1, 'dict_train_material_type', 'VIDEO', '视频', 'success', 2, 'ENABLED', 1, 0),
-            (9003, 1, 'dict_train_material_type', 'LINK', '外链', 'info', 3, 'ENABLED', 1, 0),
-            (9004, 1, 'dict_train_material_status', 'DRAFT', '草稿', 'neutral', 1, 'ENABLED', 1, 0),
-            (9005, 1, 'dict_train_material_status', 'PUBLISHED', '已发布', 'success', 2, 'ENABLED', 1, 0),
-            (9006, 1, 'dict_train_material_status', 'OFFLINE', '已下架', 'danger', 3, 'ENABLED', 1, 0),
-            (9007, 1, 'dict_train_task_status', 'IN_PROGRESS', '进行中', 'primary', 1, 'ENABLED', 1, 0),
-            (9008, 1, 'dict_train_task_status', 'FINISHED', '已结束', 'neutral', 2, 'ENABLED', 1, 0),
-            (9009, 1, 'dict_train_confirm_type', 'DURATION', '学时达标', 'primary', 1, 'ENABLED', 1, 0),
-            (9010, 1, 'dict_train_confirm_type', 'QUIZ', '自测问卷', 'success', 2, 'ENABLED', 1, 0),
-            (9011, 1, 'dict_train_assign_scope', 'BY_USER', '按人', 'primary', 1, 'ENABLED', 1, 0),
-            (9012, 1, 'dict_train_assign_scope', 'BY_POSITION', '按岗位', 'success', 2, 'ENABLED', 1, 0)
-    """)
+    if dialect == "sqlite":
+        op.execute("""
+            INSERT OR IGNORE INTO ims_sys_dict_type (id, tenant_id, dict_type, name, status, deleted)
+            VALUES
+                (901, 1, 'dict_train_material_type', '培训资料类型', 'ENABLED', 0),
+                (902, 1, 'dict_train_material_status', '培训资料状态', 'ENABLED', 0),
+                (903, 1, 'dict_train_task_status', '学习任务状态', 'ENABLED', 0),
+                (904, 1, 'dict_train_confirm_type', '确认方式', 'ENABLED', 0),
+                (905, 1, 'dict_train_assign_scope', '指派范围', 'ENABLED', 0)
+        """)
+
+        op.execute("""
+            INSERT OR IGNORE INTO ims_sys_dict_data (id, tenant_id, dict_type, dict_value, dict_label, color_type, sort, status, is_builtin, deleted)
+            VALUES
+                (9001, 1, 'dict_train_material_type', 'DOC', '文档', 'primary', 1, 'ENABLED', 1, 0),
+                (9002, 1, 'dict_train_material_type', 'VIDEO', '视频', 'success', 2, 'ENABLED', 1, 0),
+                (9003, 1, 'dict_train_material_type', 'LINK', '外链', 'info', 3, 'ENABLED', 1, 0),
+                (9004, 1, 'dict_train_material_status', 'DRAFT', '草稿', 'neutral', 1, 'ENABLED', 1, 0),
+                (9005, 1, 'dict_train_material_status', 'PUBLISHED', '已发布', 'success', 2, 'ENABLED', 1, 0),
+                (9006, 1, 'dict_train_material_status', 'OFFLINE', '已下架', 'danger', 3, 'ENABLED', 1, 0),
+                (9007, 1, 'dict_train_task_status', 'IN_PROGRESS', '进行中', 'primary', 1, 'ENABLED', 1, 0),
+                (9008, 1, 'dict_train_task_status', 'FINISHED', '已结束', 'neutral', 2, 'ENABLED', 1, 0),
+                (9009, 1, 'dict_train_confirm_type', 'DURATION', '学时达标', 'primary', 1, 'ENABLED', 1, 0),
+                (9010, 1, 'dict_train_confirm_type', 'QUIZ', '自测问卷', 'success', 2, 'ENABLED', 1, 0),
+                (9011, 1, 'dict_train_assign_scope', 'BY_USER', '按人', 'primary', 1, 'ENABLED', 1, 0),
+                (9012, 1, 'dict_train_assign_scope', 'BY_POSITION', '按岗位', 'success', 2, 'ENABLED', 1, 0)
+        """)
+    else:
+        op.execute("""
+            INSERT IGNORE INTO ims_sys_dict_type (id, tenant_id, dict_type, name, status, deleted)
+            VALUES
+                (901, 1, 'dict_train_material_type', '培训资料类型', 'ENABLED', 0),
+                (902, 1, 'dict_train_material_status', '培训资料状态', 'ENABLED', 0),
+                (903, 1, 'dict_train_task_status', '学习任务状态', 'ENABLED', 0),
+                (904, 1, 'dict_train_confirm_type', '确认方式', 'ENABLED', 0),
+                (905, 1, 'dict_train_assign_scope', '指派范围', 'ENABLED', 0)
+        """)
+
+        op.execute("""
+            INSERT IGNORE INTO ims_sys_dict_data (id, tenant_id, dict_type, dict_value, dict_label, color_type, sort, status, is_builtin, deleted)
+            VALUES
+                (9001, 1, 'dict_train_material_type', 'DOC', '文档', 'primary', 1, 'ENABLED', 1, 0),
+                (9002, 1, 'dict_train_material_type', 'VIDEO', '视频', 'success', 2, 'ENABLED', 1, 0),
+                (9003, 1, 'dict_train_material_type', 'LINK', '外链', 'info', 3, 'ENABLED', 1, 0),
+                (9004, 1, 'dict_train_material_status', 'DRAFT', '草稿', 'neutral', 1, 'ENABLED', 1, 0),
+                (9005, 1, 'dict_train_material_status', 'PUBLISHED', '已发布', 'success', 2, 'ENABLED', 1, 0),
+                (9006, 1, 'dict_train_material_status', 'OFFLINE', '已下架', 'danger', 3, 'ENABLED', 1, 0),
+                (9007, 1, 'dict_train_task_status', 'IN_PROGRESS', '进行中', 'primary', 1, 'ENABLED', 1, 0),
+                (9008, 1, 'dict_train_task_status', 'FINISHED', '已结束', 'neutral', 2, 'ENABLED', 1, 0),
+                (9009, 1, 'dict_train_confirm_type', 'DURATION', '学时达标', 'primary', 1, 'ENABLED', 1, 0),
+                (9010, 1, 'dict_train_confirm_type', 'QUIZ', '自测问卷', 'success', 2, 'ENABLED', 1, 0),
+                (9011, 1, 'dict_train_assign_scope', 'BY_USER', '按人', 'primary', 1, 'ENABLED', 1, 0),
+                (9012, 1, 'dict_train_assign_scope', 'BY_POSITION', '按岗位', 'success', 2, 'ENABLED', 1, 0)
+        """)
 
 
 def downgrade() -> None:

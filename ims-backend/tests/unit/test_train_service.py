@@ -122,7 +122,7 @@ class TestTrainMaterialServiceCreateMaterial:
 class TestTrainTaskServiceValidation:
     """Tests for task validation."""
 
-    def test_validate_quiz_empty(self):
+    def test_validate_quiz_empty(self, db_session):
         """Empty quiz fails validation."""
         from app.domains.train.service import TrainTaskService
 
@@ -133,7 +133,7 @@ class TestTrainTaskServiceValidation:
         assert exc.value.code == 1001
         assert "不能为空" in exc.value.msg
 
-    def test_validate_quiz_single_missing_options(self):
+    def test_validate_quiz_single_missing_options(self, db_session):
         """SINGLE type without options fails."""
         from app.domains.train.service import TrainTaskService
 
@@ -145,7 +145,7 @@ class TestTrainTaskServiceValidation:
         assert exc.value.code == 1001
         assert "选项" in exc.value.msg
 
-    def test_validate_quiz_single_invalid_answer(self):
+    def test_validate_quiz_single_invalid_answer(self, db_session):
         """SINGLE type with invalid answer index fails."""
         from app.domains.train.service import TrainTaskService
 
@@ -162,7 +162,7 @@ class TestTrainTaskServiceValidation:
         assert exc.value.code == 1001
         assert "答案索引" in exc.value.msg
 
-    def test_validate_quiz_true_false_missing_answer(self):
+    def test_validate_quiz_true_false_missing_answer(self, db_session):
         """TRUE_FALSE type without answer fails."""
         from app.domains.train.service import TrainTaskService
 
@@ -174,7 +174,7 @@ class TestTrainTaskServiceValidation:
         assert exc.value.code == 1001
         assert "答案不能为空" in exc.value.msg
 
-    def test_validate_quiz_valid(self):
+    def test_validate_quiz_valid(self, db_session):
         """Valid quiz passes."""
         from app.domains.train.service import TrainTaskService
 
@@ -199,14 +199,14 @@ class TestTrainTaskServiceValidation:
 class TestTrainStudyServiceGradeQuiz:
     """Tests for quiz grading."""
 
-    def test_grade_empty_quiz(self):
+    def test_grade_empty_quiz(self, db_session):
         """Empty quiz returns 0."""
         from app.domains.train.service import TrainStudyService
 
         service = TrainStudyService()
         assert service._grade_quiz([], []) == 0
 
-    def test_grade_all_correct(self):
+    def test_grade_all_correct(self, db_session):
         """All correct answers return 100."""
         from app.domains.train.service import TrainStudyService
 
@@ -220,7 +220,7 @@ class TestTrainStudyServiceGradeQuiz:
 
         assert service._grade_quiz(quiz, answers) == 100
 
-    def test_grade_partial_correct(self):
+    def test_grade_partial_correct(self, db_session):
         """Partial correct answers return proportional score."""
         from app.domains.train.service import TrainStudyService
 
@@ -233,7 +233,7 @@ class TestTrainStudyServiceGradeQuiz:
 
         assert service._grade_quiz(quiz, answers) == 50
 
-    def test_grade_all_wrong(self):
+    def test_grade_all_wrong(self, db_session):
         """All wrong answers return 0."""
         from app.domains.train.service import TrainStudyService
 
@@ -246,7 +246,7 @@ class TestTrainStudyServiceGradeQuiz:
 
         assert service._grade_quiz(quiz, answers) == 0
 
-    def test_grade_missing_answers(self):
+    def test_grade_missing_answers(self, db_session):
         """Missing answers count as wrong."""
         from app.domains.train.service import TrainStudyService
 
@@ -264,7 +264,7 @@ class TestTrainStudyServiceGradeQuiz:
 class TestTrainStudyServiceCalculateProgress:
     """Tests for progress calculation."""
 
-    def test_calculate_empty_materials(self):
+    def test_calculate_empty_materials(self, db_session):
         """Empty materials return 0."""
         from app.domains.train.service import TrainStudyService
 
@@ -274,7 +274,7 @@ class TestTrainStudyServiceCalculateProgress:
 
         assert service._calculate_overall_progress(task, {}) == 0
 
-    def test_calculate_all_complete(self):
+    def test_calculate_all_complete(self, db_session):
         """All complete materials return 100."""
         from app.domains.train.service import TrainStudyService
 
@@ -285,7 +285,7 @@ class TestTrainStudyServiceCalculateProgress:
         progress = {"1": 100, "2": 100, "3": 100}
         assert service._calculate_overall_progress(task, progress) == 100
 
-    def test_calculate_partial_progress(self):
+    def test_calculate_partial_progress(self, db_session):
         """Partial progress calculated correctly."""
         from app.domains.train.service import TrainStudyService
 
@@ -296,7 +296,7 @@ class TestTrainStudyServiceCalculateProgress:
         progress = {"1": 100, "2": 50}
         assert service._calculate_overall_progress(task, progress) == 75
 
-    def test_calculate_missing_progress(self):
+    def test_calculate_missing_progress(self, db_session):
         """Missing material progress counts as 0."""
         from app.domains.train.service import TrainStudyService
 

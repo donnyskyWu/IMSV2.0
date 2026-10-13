@@ -22,11 +22,12 @@ class TestTrainTaskJobFinishExpired:
     @pytest.mark.asyncio
     async def test_finishes_expired_tasks(self, db_session, test_context):
         """Tasks past deadline are marked FINISHED."""
+        from app.core.clock import get_now
         from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
 
-        past = datetime.now() - timedelta(days=1)
+        past = get_now() - timedelta(days=1)
         task = TrainTask(
             tenant_id=ctx.tenant_id,
             task_no="TT202610010001",
@@ -49,11 +50,12 @@ class TestTrainTaskJobFinishExpired:
     @pytest.mark.asyncio
     async def test_does_not_finish_future_tasks(self, db_session, test_context):
         """Tasks with future deadline not affected."""
+        from app.core.clock import get_now
         from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
 
-        future = datetime.now() + timedelta(days=7)
+        future = get_now() + timedelta(days=7)
         task = TrainTask(
             tenant_id=ctx.tenant_id,
             task_no="TT202610010002",
@@ -75,11 +77,12 @@ class TestTrainTaskJobFinishExpired:
     @pytest.mark.asyncio
     async def test_idempotent_on_already_finished(self, db_session, test_context):
         """Already finished tasks not re-processed."""
+        from app.core.clock import get_now
         from app.core.context import ctx
         from app.domains.train.jobs import TrainTaskJob
         from app.domains.train.models import TrainTask
 
-        past = datetime.now() - timedelta(days=1)
+        past = get_now() - timedelta(days=1)
         task = TrainTask(
             tenant_id=ctx.tenant_id,
             task_no="TT202610010003",
@@ -220,11 +223,12 @@ class TestTrainStatJobDailySummary:
     @pytest.mark.asyncio
     async def test_generates_summary(self, db_session, test_context):
         """Daily summary is generated correctly."""
+        from app.core.clock import get_now
         from app.core.context import ctx
         from app.domains.train.jobs import TrainStatJob
         from app.domains.train.models import TrainTask, TrainTaskRecord
 
-        now = datetime.now()
+        now = get_now()
         task = TrainTask(
             tenant_id=ctx.tenant_id,
             task_no="TT202610010007",

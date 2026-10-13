@@ -143,7 +143,7 @@ class TestIntegrationWithTrainModule:
         except ImportError:
             pytest.fail("Cannot import _drop_sessions from user service")
 
-    def test_study_service_validates_user_assignment(self):
+    def test_study_service_validates_user_assignment(self, db_session):
         """Study service validates user is assigned (→ 1105)."""
         from app.domains.train.service import TrainStudyService
 

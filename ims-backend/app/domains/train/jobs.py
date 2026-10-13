@@ -23,7 +23,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.clock import get_now
@@ -418,10 +418,10 @@ class TrainStatJob:
                 TrainTaskRecord.user_dept_id,
                 func.count(TrainTaskRecord.id).label("total"),
                 func.sum(
-                    func.case((TrainTaskRecord.confirm_status == "CONFIRMED", 1), else_=0)
+                    case((TrainTaskRecord.confirm_status == "CONFIRMED", 1), else_=0)
                 ).label("finished"),
                 func.sum(
-                    func.case((TrainTaskRecord.is_overdue, 1), else_=0)
+                    case((TrainTaskRecord.is_overdue == True, 1), else_=0)  # noqa: E712
                 ).label("overdue"),
                 func.sum(TrainTaskRecord.effective_seconds).label("total_seconds"),
             )
