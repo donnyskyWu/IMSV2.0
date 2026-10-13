@@ -259,6 +259,15 @@ class TestMeetingMinutesCreate:
 
         assert result["data"].status == "MINUTES_RECORDED"
         assert len(result["data"].action_items) == 1
+        from app.domains.sys.models import TodoItem
+        todo = db_session.query(TodoItem).filter(
+            TodoItem.source_type == "MEET_ACTION_ITEM",
+            TodoItem.assignee_user_id == 2,
+            TodoItem.deleted == 0,
+        ).one()
+        assert todo.todo_type == "确认"
+        assert todo.status == "PENDING"
+        assert todo.source_id == result["data"].action_items[0].id
 
     @pytest.mark.asyncio
     async def test_create_title_too_long(self, db_session, meet_admin_context, sample_users_for_meet):
@@ -2179,6 +2188,9 @@ class TestMeetingOverdueJob:
         stats = await meeting_overdue_job()
 
         assert stats["marked_overdue"] >= 1
+        assert stats["notified_1d"] == 0
+        db_session.refresh(item)
+        assert item.notified_at is None
 
     @pytest.mark.asyncio
     async def test_overdue_1d_boundary_after(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
@@ -2223,6 +2235,14 @@ class TestMeetingOverdueJob:
         assert stats["notified_1d"] >= 1
         db_session.refresh(item)
         assert item.notified_at is not None
+        from app.domains.sys.models import InboxMessage
+        recipients = {
+            row.user_id
+            for row in db_session.query(InboxMessage).filter(
+                InboxMessage.title == "行动项逾期提醒",
+            ).all()
+        }
+        assert recipients == {2}
 
     @pytest.mark.asyncio
     async def test_overdue_3d_boundary_before(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
@@ -2278,13 +2298,38 @@ class TestMeetingOverdueJob:
         today = now.date()
 
         four_days_ago = today - timedelta(days=4)
+        from app.domains.sys.models import Dept, Menu, Role, RoleMenu, User, UserRole
+
+        child = Dept(
+            id=15, tenant_id=1, parent_id=1, path="/1/15/",
+            name="Child Dept", status="ENABLED", source="LOCAL",
+        )
+        db_session.add(child)
+        for user_id, dept_id, name in ((71, 1, "allsup"), (72, 2, "outsidesup"), (73, 1, "parentsup")):
+            db_session.add(User(
+                id=user_id, tenant_id=1, username=name, nickname=name,
+                main_dept_id=dept_id, status="ACTIVE", source="LOCAL",
+            ))
+        db_session.add(Menu(
+            id=7701, tenant_id=1, parent_id=0, type="BUTTON", name="监督",
+            perm_code="ims:meet:minutes:supervise", status="ENABLED",
+        ))
+        scopes = ((710, 71, "ALL"), (720, 72, "DEPT"), (730, 73, "DEPT"))
+        for role_id, user_id, scope in scopes:
+            db_session.add(Role(
+                id=role_id, tenant_id=1, role_key=f"sup{role_id}", name=f"S{role_id}",
+                source="MANUAL", status="ENABLED", data_scope=scope,
+            ))
+            db_session.add(RoleMenu(id=role_id * 10, tenant_id=1, role_id=role_id, menu_id=7701))
+            db_session.add(UserRole(id=user_id * 10 + role_id, tenant_id=1, user_id=user_id, role_id=role_id))
+        db_session.flush()
 
         minutes = MeetingMinutes(
             tenant_id=1,
             code="MM2026101310",
             title="Test Overdue Meeting 3d escalate",
             meeting_date=now - timedelta(days=6),
-            dept_id=1,
+            dept_id=15,
             recorder_user_id=1,
             attendees={"internal": [1], "external": []},
             status="MINUTES_RECORDED",
@@ -2310,6 +2355,16 @@ class TestMeetingOverdueJob:
         assert stats["escalated_3d"] >= 1
         db_session.refresh(item)
         assert item.escalated_at is not None
+        from app.domains.sys.models import InboxMessage
+        escalated = {
+            row.user_id
+            for row in db_session.query(InboxMessage).filter(
+                InboxMessage.title == "行动项逾期升级",
+            ).all()
+        }
+        assert 71 in escalated
+        assert 73 in escalated
+        assert 72 not in escalated
 
     @pytest.mark.asyncio
     async def test_overdue_idempotent(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
@@ -2395,3 +2450,123 @@ class TestMeetingOverdueJob:
         stats = await meeting_overdue_job()
 
         assert stats["skipped_resigned"] >= 1
+        assert stats["notified_1d"] == 0
+        db_session.refresh(item)
+        assert item.notified_at is None
+
+    @pytest.mark.asyncio
+    async def test_resigned_assignee_still_escalates(self, db_session, meet_admin_context, sample_users_for_meet, fixed_time):
+        """离职责任人跳过 1 天推送，但仍升级给范围内的 supervise。"""
+        from app.domains.meet.jobs import meeting_overdue_job
+        from app.domains.meet.models import MeetingActionItem, MeetingMinutes
+        from app.domains.sys.models import InboxMessage, Menu, Role, RoleMenu, User, UserRole
+
+        now = datetime(2026, 10, 13, 9, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        db_session.add(User(
+            id=81, tenant_id=1, username="scope_sup", nickname="范围内",
+            main_dept_id=1, status="ACTIVE", source="LOCAL",
+        ))
+        db_session.add(Menu(
+            id=7702, tenant_id=1, parent_id=0, type="BUTTON", name="监督2",
+            perm_code="ims:meet:minutes:supervise", status="ENABLED",
+        ))
+        db_session.add(Role(
+            id=810, tenant_id=1, role_key="sup810", name="S810",
+            source="MANUAL", status="ENABLED", data_scope="ALL",
+        ))
+        db_session.add(RoleMenu(id=8100, tenant_id=1, role_id=810, menu_id=7702))
+        db_session.add(UserRole(id=8101, tenant_id=1, user_id=81, role_id=810))
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101313",
+            title="Resigned still escalate",
+            meeting_date=now - timedelta(days=6),
+            dept_id=1,
+            recorder_user_id=1,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+        item = MeetingActionItem(
+            tenant_id=1,
+            minutes_id=minutes.id,
+            description="离职仍升级",
+            assignee_user_id=4,
+            due_date=now.date() - timedelta(days=4),
+            status="OPEN",
+        )
+        db_session.add(item)
+        db_session.flush()
+
+        stats = await meeting_overdue_job()
+
+        assert stats["skipped_resigned"] >= 1
+        assert stats["escalated_3d"] >= 1
+        db_session.refresh(item)
+        assert item.escalated_at is not None
+        recipients = {
+            row.user_id
+            for row in db_session.query(InboxMessage).filter(
+                InboxMessage.title == "行动项逾期升级",
+                InboxMessage.body.contains("离职仍升级"),
+            ).all()
+        }
+        assert 81 in recipients
+        assert 4 not in recipients
+
+    @pytest.mark.asyncio
+    async def test_48h_resigned_recorder_still_notifies_supervise(
+        self, db_session, meet_admin_context, sample_users_for_meet, fixed_time,
+    ):
+        """Q-D9: 48h 记录人离职不推记录人，仍推范围内 supervise。"""
+        from app.domains.meet.jobs import meeting_reminder_job
+        from app.domains.meet.models import MeetingMinutes
+        from app.domains.sys.models import InboxMessage, Menu, Role, RoleMenu, User, UserRole
+
+        now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=BEIJING_TZ)
+        fixed_time(now)
+        db_session.add(User(
+            id=82, tenant_id=1, username="remind_sup", nickname="提醒监督",
+            main_dept_id=1, status="ACTIVE", source="LOCAL",
+        ))
+        db_session.add(Menu(
+            id=7703, tenant_id=1, parent_id=0, type="BUTTON", name="监督3",
+            perm_code="ims:meet:minutes:supervise", status="ENABLED",
+        ))
+        db_session.add(Role(
+            id=820, tenant_id=1, role_key="sup820", name="S820",
+            source="MANUAL", status="ENABLED", data_scope="DEPT",
+        ))
+        db_session.add(RoleMenu(id=8200, tenant_id=1, role_id=820, menu_id=7703))
+        db_session.add(UserRole(id=8201, tenant_id=1, user_id=82, role_id=820))
+        minutes = MeetingMinutes(
+            tenant_id=1,
+            code="MM2026101314",
+            title="48h resigned recorder",
+            meeting_date=now - timedelta(hours=50),
+            dept_id=1,
+            recorder_user_id=4,
+            attendees={"internal": [1], "external": []},
+            status="MINUTES_RECORDED",
+            summary="<p>Content</p>",
+            version=1,
+        )
+        db_session.add(minutes)
+        db_session.flush()
+
+        stats = await meeting_reminder_job()
+
+        assert stats["skipped_resigned"] >= 1
+        assert stats["reminded_48h"] >= 1
+        recipients = {
+            row.user_id
+            for row in db_session.query(InboxMessage).filter(
+                InboxMessage.title == "会议纪要归档提醒",
+            ).all()
+        }
+        assert 82 in recipients
+        assert 4 not in recipients

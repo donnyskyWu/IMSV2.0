@@ -102,6 +102,15 @@ class ActionItemVO(BaseSchema):
     evidence_url: Optional[str] = None
     closed_at: Optional[datetime] = None
     overdue_days: Optional[int] = None
+    notified_at: Optional[datetime] = None
+    escalated_at: Optional[datetime] = None
+
+
+class OperateTraceVO(BaseSchema):
+    """操作留痕。"""
+    operation: str
+    operator_name: Optional[str] = None
+    create_time: Optional[datetime] = None
 
 
 class AppendixVO(BaseSchema):
@@ -137,6 +146,7 @@ class MeetingMinutesVO(BaseSchema):
     decisions: list[DecisionVO] = Field(default_factory=list)
     action_items: list[ActionItemVO] = Field(default_factory=list)
     appendices: list[AppendixVO] = Field(default_factory=list)
+    traces: list[OperateTraceVO] = Field(default_factory=list)
 
     action_item_count: int = 0
     action_item_closed_count: int = 0

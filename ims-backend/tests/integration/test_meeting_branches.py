@@ -174,6 +174,46 @@ class TestSuperviseRecipients:
         assert 32 not in missed
         assert 31 in missed
 
+    def test_child_dept_via_parent_and_user_dept_links(self, db_session, admin_ctx):
+        """Q-D7: 路径为空时沿 parent_id 覆盖下级；兼任部门与主部门都算。"""
+        from app.domains.sys.models import Menu, UserDept
+
+        parent = _dept(db_session, 201, "")
+        child = _dept(db_session, 202, "")
+        child.parent_id = parent.id
+        menu = Menu(
+            id=8902,
+            tenant_id=1,
+            parent_id=0,
+            type="BUTTON",
+            name="监督下级",
+            perm_code="ims:meet:minutes:supervise",
+            status="ENABLED",
+        )
+        db_session.add(menu)
+        role = _role(db_session, 901, "DEPT")
+        linked = _user(db_session, 91, None)
+        also = _user(db_session, 92, 201)
+        db_session.add_all([
+            UserDept(id=9101, tenant_id=1, user_id=linked.id, dept_id=201, is_main=False, source="LOCAL"),
+            UserDept(id=9102, tenant_id=1, user_id=also.id, dept_id=201, is_main=True, source="LOCAL"),
+            UserDept(id=9103, tenant_id=1, user_id=also.id, dept_id=202, is_main=False, source="LOCAL"),
+        ])
+        db_session.flush()
+        _bind(db_session, role.id, linked.id, menu.id)
+        _bind(db_session, role.id, also.id, menu.id)
+        db_session.flush()
+
+        minutes = SimpleNamespace(
+            tenant_id=1,
+            dept_id=202,
+            recorder_user_id=1,
+            attendees={"internal": [], "external": []},
+        )
+        found = set(_get_supervise_users_for_minutes(db_session, minutes))
+        assert linked.id in found
+        assert also.id in found
+
 
 class TestJobEdges:
     @pytest.mark.asyncio
@@ -713,7 +753,20 @@ class TestRemainingBranches:
 
         reminder = await meeting_reminder_job()
         assert reminder["skipped_resigned"] >= 1
-        assert reminder["reminded_48h"] == 0
+        assert reminder["reminded_48h"] >= 1
+        db_session.refresh(resigned)
+        db_session.refresh(locked)
+        assert resigned.remind_48h_at is not None
+        assert locked.remind_48h_at is None
+        from app.domains.sys.models import InboxMessage
+        reminded = {
+            row.user_id
+            for row in db_session.query(InboxMessage).filter(
+                InboxMessage.title == "会议纪要归档提醒",
+            ).all()
+        }
+        assert 31 in reminded
+        assert 4 not in reminded
 
         overdue = await meeting_overdue_job()
         assert overdue["escalated_3d"] >= 1

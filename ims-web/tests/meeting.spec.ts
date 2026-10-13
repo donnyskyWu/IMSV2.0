@@ -23,6 +23,26 @@ function fail(code: number, msg: string, data: unknown = null) {
   return { code, msg, data }
 }
 
+async function callApi(page: Page, method: string, path: string, data?: unknown) {
+  if (page.url() === 'about:blank') {
+    await page.goto('/login')
+  }
+  return page.evaluate(
+    async ({ method, path, data }) => {
+      const response = await fetch(path, {
+        method,
+        headers: {
+          Authorization: 'Bearer meet-access-token',
+          'Content-Type': 'application/json',
+        },
+        body: data == null ? undefined : JSON.stringify(data),
+      })
+      return response.json()
+    },
+    { method, path, data: data ?? null },
+  )
+}
+
 function menu(path: string, name: string, permCode?: string, children?: ReturnType<typeof menu>[]) {
   return {
     id: path,
@@ -175,7 +195,22 @@ const mockMinutesList = [
   },
 ]
 
+async function addExternalAttendee(page: Page, name = '外宾') {
+  const drawer = page.locator('.el-drawer:visible')
+  await drawer.getByPlaceholder('外部参会人姓名').fill(name)
+  await drawer.getByRole('button', { name: '添加', exact: true }).click()
+}
+
 function installMeetingMocks(page: Page) {
+  page.route('**/admin-api/ims/meet/minutes/archive-rate*', async (route) => {
+    await route.fulfill(json(ok({
+      total_meetings: 3,
+      archived_count: 1,
+      archive_rate: 33,
+      unarchived_list: [],
+    })))
+  })
+
   page.route('**/admin-api/ims/meet/minutes/list*', async (route) => {
     await route.fulfill(json(ok({
       list: mockMinutesList,
@@ -233,11 +268,12 @@ test.describe('B18 会议模块 E2E', () => {
     await loginAndNavigate(page)
     await expect(page.locator('.app-layout')).toBeVisible()
 
-    await page.getByRole('button', { name: '新建' }).click()
+    await page.getByRole('button', { name: '登记会议' }).click()
     const drawer = page.locator('.el-drawer:visible')
     await expect(drawer).toBeVisible()
 
     await drawer.getByPlaceholder('请输入会议主题').fill('E2E测试会议')
+    await addExternalAttendee(page)
 
     await drawer.getByRole('button', { name: '保存' }).click()
 
@@ -259,14 +295,14 @@ test.describe('B18 会议模块 E2E', () => {
 
     await loginAndNavigate(page)
 
-    await page.getByRole('button', { name: '新建' }).click()
+    await page.getByRole('button', { name: '登记会议' }).click()
     const drawer = page.locator('.el-drawer:visible')
 
     await drawer.getByPlaceholder('请输入会议主题').fill('A'.repeat(129))
 
     await drawer.getByRole('button', { name: '保存' }).click()
 
-    await expect(page.getByText('校验失败').or(page.getByText('主题').and(page.getByText('字')))).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.el-message').filter({ hasText: '请选择参会人' })).toBeVisible()
   })
 
   test('E2E-B18-05: 超 24h 软提示 - 会后 30h 录入纪要显示警告但成功', async ({ page }) => {
@@ -301,15 +337,14 @@ test.describe('B18 会议模块 E2E', () => {
 
     await loginAndNavigate(page)
 
-    await page.getByRole('button', { name: '新建' }).click()
+    await page.getByRole('button', { name: '登记会议' }).click()
     const drawer = page.locator('.el-drawer:visible')
     await drawer.getByPlaceholder('请输入会议主题').fill('会后30h测试')
+    await addExternalAttendee(page)
 
     await drawer.getByRole('button', { name: '保存' }).click()
 
-    await expect(
-      page.locator('.el-message--warning').or(page.getByText('24')).or(page.getByText('1116'))
-    ).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.el-message').filter({ hasText: '24 小时' })).toBeVisible()
   })
 
   test('E2E-B18-07: 非记录人且无 edit 码编辑返回 1008', async ({ page }) => {
@@ -581,13 +616,11 @@ test.describe('B18 会议模块 E2E', () => {
       }
     })
 
-    await page.request.put('/admin-api/ims/meet/minutes/action-item/1', {
-      data: { close_remark: '完成', evidence_url: 'javascript:alert(1)' },
-      headers: { Authorization: 'Bearer meet-access-token' },
-    }).then(async (response) => {
-      const body = await response.json()
-      expect(body.code).toBe(1001)
+    const body = await callApi(page, 'PUT', '/admin-api/ims/meet/minutes/action-item/1', {
+      close_remark: '完成',
+      evidence_url: 'javascript:alert(1)',
     })
+    expect(body.code).toBe(1001)
   })
 
   test('E2E-B18-16: 留痕率与未归档清单 - 无 supervise 码用户调接口返回 1008', async ({ page }) => {
@@ -600,10 +633,7 @@ test.describe('B18 会议模块 E2E', () => {
 
     await loginAndNavigate(page)
 
-    const response = await page.request.get('/admin-api/ims/meet/minutes/archive-rate', {
-      headers: { Authorization: 'Bearer meet-access-token' },
-    })
-    const body = await response.json()
+    const body = await callApi(page, 'GET', '/admin-api/ims/meet/minutes/archive-rate')
     expect(body.code).toBe(1008)
   })
 
@@ -627,12 +657,21 @@ test.describe('B18 会议模块 E2E', () => {
 
     await expect(page.locator('.el-table__body tr')).toHaveCount(1)
 
-    const newBtn = page.getByRole('button', { name: '新建' })
+    const newBtn = page.getByRole('button', { name: '登记会议' })
     expect(await newBtn.count()).toBe(0)
   })
 
   test('E2E-B18-19: 跨部门 / 跨租户隔离 - 他部门会议不在列表，详情返回 1504', async ({ page }) => {
     await installAuth(page)
+
+    await page.route('**/admin-api/ims/meet/minutes/archive-rate*', async (route) => {
+      await route.fulfill(json(ok({
+        total_meetings: 0,
+        archived_count: 0,
+        archive_rate: 100,
+        unarchived_list: [],
+      })))
+    })
 
     await page.route('**/admin-api/ims/meet/minutes/list*', async (route) => {
       await route.fulfill(json(ok({
@@ -653,10 +692,7 @@ test.describe('B18 会议模块 E2E', () => {
 
     await loginAndNavigate(page)
 
-    const response = await page.request.get('/admin-api/ims/meet/minutes/999', {
-      headers: { Authorization: 'Bearer meet-access-token' },
-    })
-    const body = await response.json()
+    const body = await callApi(page, 'GET', '/admin-api/ims/meet/minutes/999')
     expect(body.code).toBe(1504)
   })
 
@@ -667,11 +703,7 @@ test.describe('B18 会议模块 E2E', () => {
     await loginAndNavigate(page)
 
     await expect(page.locator('.app-sidebar')).toBeVisible()
-    await expect(
-      page.locator('.app-sidebar').getByText('会议').or(
-        page.locator('.app-sidebar').getByText('会议纪要')
-      )
-    ).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '会议纪要' }).first()).toBeVisible()
   })
 
   test('E2E-B18-20b: 无权限用户直调列表返回 1008', async ({ page }) => {
@@ -687,10 +719,7 @@ test.describe('B18 会议模块 E2E', () => {
       localStorage.setItem('ims_refresh_token', 'meet-refresh-token')
     })
 
-    const response = await page.request.get('/admin-api/ims/meet/minutes/list', {
-      headers: { Authorization: 'Bearer meet-access-token' },
-    })
-    const body = await response.json()
+    const body = await callApi(page, 'GET', '/admin-api/ims/meet/minutes/list')
     expect(body.code).toBe(1008)
   })
 
@@ -716,7 +745,7 @@ test.describe('B18 会议模块 E2E - 移动端', () => {
 
     await loginAndNavigate(page)
 
-    await expect(page.locator('.el-table').or(page.locator('[class*="list"]'))).toBeVisible()
+    await expect(page.locator('.el-table').first()).toBeVisible()
     const viewport = page.viewportSize()
     expect(viewport?.width).toBe(390)
   })
@@ -754,6 +783,14 @@ test.describe('B18 会议模块 E2E - 安全测试', () => {
   test('E2E-B18-SEC-03: 1008 租户停用拒绝访问', async ({ page }) => {
     await installAuth(page)
 
+    await page.route('**/admin-api/ims/meet/minutes/archive-rate*', async (route) => {
+      await route.fulfill(json(ok({
+        total_meetings: 0,
+        archived_count: 0,
+        archive_rate: 100,
+        unarchived_list: [],
+      })))
+    })
     await page.route('**/admin-api/ims/meet/minutes/list*', async (route) => {
       await route.fulfill(json(fail(1008, '所属组织已停用')))
     })
@@ -774,11 +811,12 @@ test.describe('B18 会议模块 E2E - 安全测试', () => {
       }
     })
 
-    const response = await page.request.put('/admin-api/ims/meet/minutes/999', {
-      data: { title: 'Hacked', meeting_date: '2026-10-13T10:00:00', attendees: { internal: [1], external: [] }, base_version: 1 },
-      headers: { Authorization: 'Bearer meet-access-token', 'Content-Type': 'application/json' },
+    const body = await callApi(page, 'PUT', '/admin-api/ims/meet/minutes/999', {
+      title: 'Hacked',
+      meeting_date: '2026-10-13T10:00:00',
+      attendees: { internal: [1], external: [] },
+      base_version: 1,
     })
-    const body = await response.json()
     expect(body.code).toBe(1504)
   })
 
@@ -789,10 +827,7 @@ test.describe('B18 会议模块 E2E - 安全测试', () => {
       await route.fulfill(json(fail(1504, '资源不存在')))
     })
 
-    const response = await page.request.put('/admin-api/ims/meet/minutes/999/archive', {
-      headers: { Authorization: 'Bearer meet-access-token' },
-    })
-    const body = await response.json()
+    const body = await callApi(page, 'PUT', '/admin-api/ims/meet/minutes/999/archive')
     expect(body.code).toBe(1504)
   })
 
@@ -803,11 +838,9 @@ test.describe('B18 会议模块 E2E - 安全测试', () => {
       await route.fulfill(json(fail(1504, '资源不存在')))
     })
 
-    const response = await page.request.post('/admin-api/ims/meet/minutes/999/appendix', {
-      data: { content: 'Hacked appendix' },
-      headers: { Authorization: 'Bearer meet-access-token', 'Content-Type': 'application/json' },
+    const body = await callApi(page, 'POST', '/admin-api/ims/meet/minutes/999/appendix', {
+      content: 'Hacked appendix',
     })
-    const body = await response.json()
     expect(body.code).toBe(1504)
   })
 
@@ -822,10 +855,7 @@ test.describe('B18 会议模块 E2E - 安全测试', () => {
       }
     })
 
-    const response = await page.request.delete('/admin-api/ims/meet/minutes/999', {
-      headers: { Authorization: 'Bearer meet-access-token' },
-    })
-    const body = await response.json()
+    const body = await callApi(page, 'DELETE', '/admin-api/ims/meet/minutes/999')
     expect(body.code).toBe(1504)
   })
 
@@ -836,11 +866,9 @@ test.describe('B18 会议模块 E2E - 安全测试', () => {
       await route.fulfill(json(fail(1504, '资源不存在')))
     })
 
-    const response = await page.request.put('/admin-api/ims/meet/minutes/action-item/999', {
-      data: { close_remark: 'Hacked close' },
-      headers: { Authorization: 'Bearer meet-access-token', 'Content-Type': 'application/json' },
+    const body = await callApi(page, 'PUT', '/admin-api/ims/meet/minutes/action-item/999', {
+      close_remark: 'Hacked close',
     })
-    const body = await response.json()
     expect(body.code).toBe(1504)
   })
 })

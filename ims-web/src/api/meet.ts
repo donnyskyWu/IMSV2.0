@@ -56,6 +56,14 @@ export interface ActionItem {
   evidence_url: string | null
   closed_at: string | null
   overdue_days: number | null
+  notified_at: string | null
+  escalated_at: string | null
+}
+
+export interface OperateTrace {
+  operation: string
+  operator_name: string | null
+  create_time: string | null
 }
 
 export interface Decision {
@@ -96,6 +104,7 @@ export interface MeetingMinutes {
   decisions: Decision[]
   action_items: ActionItem[]
   appendices: Appendix[]
+  traces?: OperateTrace[]
 }
 
 export interface MeetingMinutesListItem {

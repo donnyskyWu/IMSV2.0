@@ -102,6 +102,25 @@ def ut_b02_05(_db, _ctx, _clock):
             raise RuntimeError("migration references forbidden table")
 
 
+def ut_b03_02(db, _ctx, _clock):
+    """UT-B03-02: 冻结、离职用户密码正确仍不能登录，返回 1216。"""
+    import bcrypt
+
+    from app.services.auth import AuthService
+
+    password = "Test1234"
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    rows.user(db, "u_frozen", status="FROZEN", password_hash=hashed)
+    rows.user(db, "u_resigned", status="RESIGNED", password_hash=hashed)
+    service = AuthService()
+    with pytest.raises(BizError) as frozen:
+        _run(service.login("u_frozen", password))
+    assert frozen.value.code == 1216
+    with pytest.raises(BizError) as resigned:
+        _run(service.login("u_resigned", password))
+    assert resigned.value.code == 1216
+
+
 def ut_b03_04(db, _ctx, _clock):
     from app.services.user import USER_REF_CHECKS, UserService
 
@@ -135,15 +154,18 @@ def ut_b03_06(db, _ctx, _clock):
 
     person = rows.user(db, "freeze_user")
     auth = AuthService()
-    tokens = _run(auth._create_tokens(person, "freeze-sid"))
+    first = _run(auth._create_tokens(person, "freeze-sid-1"))
+    second = _run(auth._create_tokens(person, "freeze-sid-2"))
     _run(UserService().freeze_user(str(person.id)))
     db.refresh(person)
     assert person.status == "FROZEN"
     assert person.token_version == 1
-    assert Cache.get_json(f"{auth.SESSION_PREFIX}freeze-sid") is None
-    with pytest.raises(BizError) as caught:
-        _run(auth.verify_token(tokens["access_token"]))
-    assert caught.value.code == 1002
+    assert Cache.get_json(f"{auth.SESSION_PREFIX}freeze-sid-1") is None
+    assert Cache.get_json(f"{auth.SESSION_PREFIX}freeze-sid-2") is None
+    for token in (first["access_token"], second["access_token"]):
+        with pytest.raises(BizError) as caught:
+            _run(auth.verify_token(token))
+        assert caught.value.code == 1002
 
 
 def ut_b03_07(db, _ctx, _clock):
@@ -876,6 +898,7 @@ CASES = {
     "UT-B02-01": ut_b02_01,
     "UT-B02-02": ut_b02_02,
     "UT-B02-05": ut_b02_05,
+    "UT-B03-02": ut_b03_02,
     "UT-B03-04": ut_b03_04,
     "UT-B03-05": ut_b03_05,
     "UT-B03-06": ut_b03_06,

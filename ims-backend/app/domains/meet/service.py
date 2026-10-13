@@ -42,6 +42,7 @@ from app.domains.meet.schemas import (
     MeetingMinutesListVO,
     MeetingMinutesUpdateReq,
     MeetingMinutesVO,
+    OperateTraceVO,
     UnarchivedMinutesVO,
 )
 
@@ -194,6 +195,49 @@ class MeetingService:
 
         if user.status in ("FROZEN", "RESIGNED"):
             raise BizError(1501)
+
+    def _create_action_todo(self, item: MeetingActionItem, minutes_id: int) -> None:
+        """Q-D6 / AI-01：行动项生成确认待办，处理人=责任人。"""
+        from datetime import datetime as dt
+
+        from app.services.todo import TodoService
+
+        TodoService().create(
+            type="确认",
+            source_module="MEET",
+            source_type="MEET_ACTION_ITEM",
+            source_id=str(item.id),
+            title=f"行动项：{item.description}"[:200],
+            route=f"/ims/meet/minutes?id={minutes_id}&item={item.id}",
+            assignee_user_ids=[item.assignee_user_id],
+            due_time=dt.combine(item.due_date, dt.min.time()),
+        )
+
+    def _complete_action_todo(self, item_id: int) -> None:
+        from app.services.todo import TodoService
+
+        TodoService().complete("MEET_ACTION_ITEM", str(item_id), ctx.user_id)
+
+    def _cancel_action_todo(self, item_id: int, reason: str) -> None:
+        from app.services.todo import TodoService
+
+        TodoService().cancel("MEET_ACTION_ITEM", str(item_id), reason)
+
+    def _trace(self, operation: str, object_id: int) -> None:
+        from app.db.ids import assign_pk
+        from app.domains.sys.models import OperateLog
+
+        session = get_db_session()
+        log = OperateLog(
+            tenant_id=ctx.tenant_id,
+            module="会议",
+            operation=operation,
+            object_type="MEETING_MINUTES",
+            object_id=str(object_id),
+            result="SUCCESS",
+        )
+        assign_pk(session, log)
+        session.add(log)
 
     def _generate_code(self, meeting_date: datetime) -> str:
         """生成会议编号 MM + yyyyMMdd + 3 位流水。"""
@@ -371,6 +415,8 @@ class MeetingService:
                     evidence_url=a.evidence_url,
                     closed_at=a.closed_at,
                     overdue_days=overdue_days,
+                    notified_at=a.notified_at,
+                    escalated_at=a.escalated_at,
                 ))
 
             appendices = session.query(MeetingAppendix).filter(
@@ -386,6 +432,22 @@ class MeetingService:
                     create_time=a.create_time,
                 )
                 for a in appendices
+            ]
+
+            from app.domains.sys.models import OperateLog
+
+            logs = session.query(OperateLog).filter(
+                OperateLog.object_type == "MEETING_MINUTES",
+                OperateLog.object_id == str(minutes.id),
+                OperateLog.deleted == 0,
+            ).order_by(OperateLog.id.desc()).all()
+            vo.traces = [
+                OperateTraceVO(
+                    operation=log.operation,
+                    operator_name=log.operator_name,
+                    create_time=log.create_time,
+                )
+                for log in logs
             ]
 
         return vo
@@ -474,9 +536,11 @@ class MeetingService:
             )
             session.add(a)
             session.flush()
+            self._create_action_todo(a, minutes.id)
 
         session.flush()
 
+        self._trace("登记会议", minutes.id)
         self._save_idempotency(request.client_token, minutes.id)
 
         return {"data": self._to_vo(minutes, include_details=True), "warnings": warnings}
@@ -678,6 +742,7 @@ class MeetingService:
         for item in existing_items:
             if item.status != "CLOSED":
                 item.deleted = item.id
+                self._cancel_action_todo(item.id, "行动项已替换")
 
         for item in request.action_items:
             a = MeetingActionItem(
@@ -689,7 +754,10 @@ class MeetingService:
                 status="OPEN",
             )
             session.add(a)
+            session.flush()
+            self._create_action_todo(a, minutes.id)
 
+        self._trace("编辑纪要", minutes.id)
         session.flush()
 
         return {"data": self._to_vo(minutes, include_details=True), "warnings": warnings}
@@ -732,6 +800,7 @@ class MeetingService:
         minutes.status = "ARCHIVED"
         minutes.archived_at = now
         minutes.archived_by = ctx.user_id
+        self._trace("归档", minutes.id)
 
         session.flush()
 
@@ -769,6 +838,7 @@ class MeetingService:
             content=_escape_html(request.content),
         )
         session.add(appendix)
+        self._trace("附录说明", minutes.id)
         session.flush()
 
         return self._to_vo(minutes, include_details=True)
@@ -814,6 +884,9 @@ class MeetingService:
         ).all()
         for item in action_items:
             item.deleted = item.id
+            if item.status != "CLOSED":
+                self._cancel_action_todo(item.id, "纪要删除")
+        self._trace("删除纪要", minutes.id)
 
         appendices = session.query(MeetingAppendix).filter(
             MeetingAppendix.minutes_id == minutes_id,
@@ -867,6 +940,8 @@ class MeetingService:
         item.evidence_url = request.evidence_url
         item.closed_at = get_now()
         item.status = "CLOSED"
+        self._complete_action_todo(item.id)
+        self._trace("行动项回填", minutes.id)
 
         session.flush()
 
@@ -881,6 +956,8 @@ class MeetingService:
             evidence_url=item.evidence_url,
             closed_at=item.closed_at,
             overdue_days=None,
+            notified_at=item.notified_at,
+            escalated_at=item.escalated_at,
         )
 
     async def get_archive_rate(

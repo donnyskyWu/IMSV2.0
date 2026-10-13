@@ -22,6 +22,55 @@ from app.worker import job
 PERM_SUPERVISE = "ims:meet:minutes:supervise"
 
 
+def _dept_covers_meeting(session: Any, user_dept_id: int, minutes_dept_id: int) -> bool:
+    """DEPT 范围覆盖本部门和下级（Q-D7）。路径缺失时沿 parent_id 向上找。"""
+    from app.domains.sys.models import Dept
+
+    if user_dept_id == minutes_dept_id:
+        return True
+
+    user_dept = session.query(Dept).filter(
+        Dept.id == user_dept_id,
+        Dept.deleted == 0,
+    ).first()
+    minutes_dept = session.query(Dept).filter(
+        Dept.id == minutes_dept_id,
+        Dept.deleted == 0,
+    ).first()
+    if user_dept is None or minutes_dept is None:
+        return False
+
+    if user_dept.path and minutes_dept.path:
+        prefix = user_dept.path if user_dept.path.endswith("/") else f"{user_dept.path}/"
+        if minutes_dept.path.startswith(prefix):
+            return True
+
+    current = minutes_dept
+    seen: set[int] = set()
+    while current is not None and current.parent_id and current.id not in seen:
+        seen.add(current.id)
+        if current.parent_id == user_dept_id:
+            return True
+        current = session.query(Dept).filter(
+            Dept.id == current.parent_id,
+            Dept.deleted == 0,
+        ).first()
+    return False
+
+
+def _user_dept_ids(session: Any, user: Any) -> List[int]:
+    from app.domains.sys.models import UserDept
+
+    dept_ids: List[int] = []
+    if user.main_dept_id:
+        dept_ids.append(user.main_dept_id)
+    linked = session.query(UserDept.dept_id).filter(UserDept.user_id == user.id).all()
+    for (dept_id,) in linked:
+        if dept_id not in dept_ids:
+            dept_ids.append(dept_id)
+    return dept_ids
+
+
 def _get_supervise_users_for_minutes(session: Any, minutes: Any) -> List[int]:
     """
     获取有 supervise 权限且数据范围覆盖该会议的用户列表。
@@ -29,7 +78,7 @@ def _get_supervise_users_for_minutes(session: Any, minutes: Any) -> List[int]:
     Q-D7/Q-D9: supervise 接收人按权限码 + 数据范围，不按角色名。
     数据范围覆盖条件：ALL 或 dept_id 在用户可见部门内 或 本人相关。
     """
-    from app.domains.sys.models import Dept, Menu, Role, RoleMenu, User, UserRole
+    from app.domains.sys.models import Menu, Role, RoleMenu, User, UserRole
 
     supervise_menu = session.query(Menu).filter(
         Menu.perm_code == PERM_SUPERVISE,
@@ -89,26 +138,12 @@ def _get_supervise_users_for_minutes(session: Any, minutes: Any) -> List[int]:
             if role.data_scope == "ALL":
                 can_see = True
                 break
-            if role.data_scope == "DEPT" and user.main_dept_id:
-                if user.main_dept_id == minutes.dept_id:
-                    can_see = True
-                    break
-                user_dept = session.query(Dept).filter(
-                    Dept.id == user.main_dept_id,
-                    Dept.deleted == 0,
-                ).first()
-                minutes_dept = session.query(Dept).filter(
-                    Dept.id == minutes.dept_id,
-                    Dept.deleted == 0,
-                ).first()
-                if (
-                    user_dept
-                    and user_dept.path
-                    and minutes_dept
-                    and minutes_dept.path
-                    and minutes_dept.path.startswith(user_dept.path)
-                ):
-                    can_see = True
+            if role.data_scope == "DEPT":
+                for dept_id in _user_dept_ids(session, user):
+                    if _dept_covers_meeting(session, dept_id, minutes.dept_id):
+                        can_see = True
+                        break
+                if can_see:
                     break
             if role.data_scope == "SELF":
                 if user.id == minutes.recorder_user_id:
@@ -215,12 +250,16 @@ async def meeting_reminder_job() -> dict[str, Any]:
             User.deleted == 0,
         ).first()
 
-        if not recorder or recorder.status == "RESIGNED":
+        recorder_active = recorder is not None and recorder.status != "RESIGNED"
+        if not recorder_active:
             stats["skipped_resigned"] += 1
-            continue
 
         supervise_user_ids = _get_supervise_users_for_minutes(session, m)
         stats["reminded_48h_supervise"] += len(supervise_user_ids)
+        recipients = list(supervise_user_ids)
+        if recorder_active:
+            recipients.append(m.recorder_user_id)
+        recipients = list(dict.fromkeys(recipients))
 
         result = session.execute(
             text("""
@@ -231,10 +270,9 @@ async def meeting_reminder_job() -> dict[str, Any]:
             {"now": now, "id": m.id}
         )
 
-        if result.rowcount > 0:
-            all_recipients = [m.recorder_user_id] + supervise_user_ids
+        if result.rowcount > 0 and recipients:
             await notify_service.send(
-                user_ids=list(set(all_recipients)),
+                user_ids=recipients,
                 tenant_id=m.tenant_id,
                 title="会议纪要归档提醒",
                 content=f"会议「{m.title}」已超过 48 小时未归档，请尽快处理。",
@@ -242,7 +280,7 @@ async def meeting_reminder_job() -> dict[str, Any]:
                 biz_id=str(m.id),
             )
             stats["reminded_48h"] += 1
-            stats["messages_sent"] += len(set(all_recipients))
+            stats["messages_sent"] += len(recipients)
 
     session.commit()
 
@@ -303,38 +341,35 @@ async def meeting_overdue_job() -> dict[str, Any]:
 
         if days_overdue > 1 and item.notified_at is None:
             lock_key = f"meet:overdue:{item.id}:1d"
-            if not Cache.setnx(lock_key, "1", ttl=86400 * 7):
-                continue
+            if Cache.setnx(lock_key, "1", ttl=86400 * 7):
+                assignee = session.query(User).filter(
+                    User.id == item.assignee_user_id,
+                    User.deleted == 0,
+                ).first()
 
-            assignee = session.query(User).filter(
-                User.id == item.assignee_user_id,
-                User.deleted == 0,
-            ).first()
+                if not assignee or assignee.status == "RESIGNED":
+                    stats["skipped_resigned"] += 1
+                else:
+                    result = session.execute(
+                        text("""
+                        UPDATE ims_meeting_action_item
+                        SET notified_at = :now
+                        WHERE id = :id AND notified_at IS NULL
+                        """),
+                        {"now": now, "id": item.id}
+                    )
 
-            if not assignee or assignee.status == "RESIGNED":
-                stats["skipped_resigned"] += 1
-                continue
-
-            result = session.execute(
-                text("""
-                UPDATE ims_meeting_action_item
-                SET notified_at = :now
-                WHERE id = :id AND notified_at IS NULL
-                """),
-                {"now": now, "id": item.id}
-            )
-
-            if result.rowcount > 0:
-                await notify_service.send(
-                    user_ids=[item.assignee_user_id],
-                    tenant_id=item.tenant_id,
-                    title="行动项逾期提醒",
-                    content=f"行动项「{item.description}」已逾期 {days_overdue} 天，请尽快处理。",
-                    biz_type="MEETING_ACTION_OVERDUE_1D",
-                    biz_id=str(item.id),
-                )
-                stats["notified_1d"] += 1
-                stats["messages_sent"] += 1
+                    if result.rowcount > 0:
+                        await notify_service.send(
+                            user_ids=[item.assignee_user_id],
+                            tenant_id=item.tenant_id,
+                            title="行动项逾期提醒",
+                            content=f"行动项「{item.description}」已逾期 {days_overdue} 天，请尽快处理。",
+                            biz_type="MEETING_ACTION_OVERDUE_1D",
+                            biz_id=str(item.id),
+                        )
+                        stats["notified_1d"] += 1
+                        stats["messages_sent"] += 1
 
         if days_overdue > 3 and item.escalated_at is None:
             lock_key = f"meet:overdue:{item.id}:3d"

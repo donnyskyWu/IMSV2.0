@@ -878,7 +878,7 @@ class OrgSyncBatch(AuditBase):
 
 
 class TodoItem(AuditBase):
-    """In-app todo created by position supply and org sync (FP-D05, FP-D07)."""
+    """In-app todo created by position supply, org sync, and business modules (FP-G02)."""
 
     __tablename__ = "ims_sys_todo"
 
@@ -886,6 +886,12 @@ class TodoItem(AuditBase):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="OPEN")
+    todo_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="字典 dict_todo_type")
+    source_module: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    source_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    route: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    due_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class InboxMessage(AuditBase):

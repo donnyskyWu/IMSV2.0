@@ -49,6 +49,11 @@ class TestMigrationValidation:
 class TestUserOperations:
     """Tests for user operations - UT-B03-*."""
 
+    def test_frozen_and_resigned_cannot_login_ut_b03_02(self, db_session, test_context):
+        """UT-B03-02: Frozen and resigned users login with the right password → 1216."""
+        from tests.support.fill_uts import run
+        run('UT-B03-02', db_session=db_session, test_context=test_context)
+
     def test_user_with_reference_cannot_delete_ut_b03_04(self, db_session, test_context):
         """UT-B03-04: User with demo_order reference cannot be deleted."""
         from tests.support.fill_uts import run

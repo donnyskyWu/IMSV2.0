@@ -9,6 +9,7 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 import { fmtDateTime } from '@/utils/format'
+import DateRangePicker from '@/components/selector/DateRangePicker.vue'
 import { meetApi, type ArchiveRateData } from '@/api/meet'
 
 const authStore = useAuthStore()
@@ -65,15 +66,7 @@ onMounted(() => {
 
       <template v-else>
         <div class="filter-bar">
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
-            value-format="YYYY-MM-DD"
-            @change="fetchData"
-          />
+          <DateRangePicker v-model="dateRange" @change="fetchData" />
         </div>
 
         <div v-loading="loading" class="stats-cards">
