@@ -54,6 +54,7 @@ class UserInfo(BaseSchema):
     avatar: Optional[str] = None
     main_dept_name: Optional[str] = None
     dept_names: list[str] = []
+    role_names: list[str] = []
     position_label: Optional[str] = None
     pwd_reset_required: bool = False
 

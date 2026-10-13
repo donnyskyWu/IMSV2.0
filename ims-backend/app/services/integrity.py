@@ -116,7 +116,8 @@ class IntegrityService:
         }
 
     def _notify(self, session: Any, tenant_id: int, count: int) -> None:
-        from app.domains.sys.models import InboxMessage, Menu, Role, RoleMenu, UserRole
+        from app.domains.sys.models import Menu, Role, RoleMenu, UserRole
+        from app.services import message as message_service
 
         menus = [
             row.id
@@ -139,18 +140,20 @@ class IntegrityService:
                 Role.deleted == 0,
             ).all()
         }
-        holders = {
+        holders = list({
             row.user_id
             for row in session.query(UserRole).filter(
                 UserRole.role_id.in_(enabled or [-1]),
             ).all()
-        }
-        for user_id in holders:
-            msg = InboxMessage(
-                tenant_id=tenant_id,
-                user_id=user_id,
+        })
+        if holders:
+            message_service.notify(
+                session,
+                event_type="integrity_scan",
+                biz_key=f"integrity_scan_{tenant_id}",
+                receivers=holders,
                 title="数据完整性巡检",
-                body=f"发现 {count} 条问题",
+                content=f"发现 {count} 条问题",
+                source_module="数据完整性",
+                route="/ims/system/integrity",
             )
-            assign_pk(session, msg)
-            session.add(msg)

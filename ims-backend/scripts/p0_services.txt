@@ -14,3 +14,7 @@ app/services/user.py
 app/db/session.py
 app/services/dict.py
 app/services/role.py
+# B3 新增
+app/services/todo.py
+app/services/message.py
+app/services/workbench.py

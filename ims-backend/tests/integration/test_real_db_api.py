@@ -437,7 +437,7 @@ def test_r10_me_only_workbench_and_other_api_forbidden(tmp_path):
             me_body = me.json()
             assert me_body["code"] == 0, me_body
             nodes = _walk_menus(me_body["data"]["menus"])
-            assert [item["name"] for item in nodes] == ["工作台"]
+            assert [item["name"] for item in nodes] == ["个人工作台"]
             assert nodes[0]["type"] == "MENU"
             assert nodes[0]["path"] == "/ims/workbench"
             assert "BUTTON" not in {item["type"] for item in nodes}

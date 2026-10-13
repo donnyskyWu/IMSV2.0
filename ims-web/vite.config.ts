@@ -126,11 +126,22 @@ export default defineConfig(({ mode }) => {
           'sub-menu',
           'table',
           'table-column',
+          // 工作台首页、待办/消息中心、铃铛抽屉冷启动会用到，不预构建会整页 reloading
+          'skeleton',
+          'drawer',
+          'radio',
+          'radio-button',
+          'radio-group',
+          'tag',
+          'pagination',
+          'select',
+          'option',
+          'loading',
         ].map((name) => `element-plus/es/components/${name}/style/css`),
       ],
     },
     server: {
-      port: 3000,
+      port: parseInt(process.env.E2E_WEB_PORT || '3000', 10),
       host: '127.0.0.1',
       strictPort: true,
       // Playwright 报告写在前端目录下。排除后，Vite 日志不再出现 page reload playwright-report。
@@ -141,7 +152,7 @@ export default defineConfig(({ mode }) => {
       ...(proxy ? { proxy } : {}),
     },
     preview: {
-      port: 4173,
+      port: parseInt(process.env.E2E_PREVIEW_PORT || '4173', 10),
       host: '127.0.0.1',
       strictPort: true,
       ...(proxy ? { proxy } : {}),
