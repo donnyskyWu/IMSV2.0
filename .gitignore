@@ -96,6 +96,7 @@ ehthumbs.db
 Thumbs.db
 
 # Local development
+.tmp-scaffold*
 *.local.yaml
 *.local.yml
 local_config/

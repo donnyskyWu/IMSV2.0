@@ -139,11 +139,18 @@ function getActiveMenuPaths(): string[] {
   return paths
 }
 
-// 退出登录。记下需要真实登录，避免开发环境在浏览器后退时又自动进入示例页。
 function handleLogout() {
   authStore.clearSession()
   sessionStorage.setItem('ims_require_auth', '1')
   router.push('/login')
+}
+
+function handleUserCommand(command: string) {
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
+  if (command === 'logout') handleLogout()
 }
 </script>
 
@@ -248,7 +255,7 @@ function handleLogout() {
           </el-badge>
 
           <!-- 用户菜单 -->
-          <el-dropdown trigger="click" @command="handleLogout">
+          <el-dropdown trigger="click" @command="handleUserCommand">
             <div class="user-dropdown touch-target">
               <el-avatar :size="32">
                 {{ authStore.user?.nickname?.charAt(0) || 'U' }}
@@ -263,7 +270,7 @@ function handleLogout() {
                   统计范围：{{ authStore.dataScopeText }}
                 </el-dropdown-item>
                 <el-dropdown-item v-if="isMobile && authStore.dataScopeText" divided />
-                <el-dropdown-item>个人中心</el-dropdown-item>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>

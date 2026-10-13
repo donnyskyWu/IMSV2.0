@@ -121,8 +121,66 @@ const changePasswordAliasRoute: RouteRecordRaw = {
 
 /**
  * B1 已登记业务页。标题以 01 功能点清单为准。
- * 不登记工作台，也不登记 /system/dept 等后续菜单。
+ * 不登记工作台。系统管理页在 b2Routes。
  */
+/** B2 系统管理 9 页。个人中心无菜单，meta.menuless。 */
+const b2Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/system/user',
+    name: 'SystemUser',
+    component: () => import('@/views/system/UserManage.vue'),
+    meta: { title: '用户' },
+  },
+  {
+    path: '/ims/system/role',
+    name: 'SystemRole',
+    component: () => import('@/views/system/RoleManage.vue'),
+    meta: { title: '角色权限' },
+  },
+  {
+    path: '/ims/system/menu',
+    name: 'SystemMenu',
+    component: () => import('@/views/system/MenuManage.vue'),
+    meta: { title: '菜单' },
+  },
+  {
+    path: '/ims/system/dict',
+    name: 'SystemDict',
+    component: () => import('@/views/system/DictManage.vue'),
+    meta: { title: '字典' },
+  },
+  {
+    path: '/ims/system/param',
+    name: 'SystemParam',
+    component: () => import('@/views/system/ParamManage.vue'),
+    meta: { title: '参数' },
+  },
+  {
+    path: '/ims/system/log',
+    name: 'SystemLog',
+    component: () => import('@/views/system/LogManage.vue'),
+    meta: { title: '日志' },
+  },
+  {
+    path: '/ims/system/notify',
+    name: 'SystemNotify',
+    component: () => import('@/views/system/NotifyManage.vue'),
+    meta: { title: '通知' },
+  },
+  {
+    path: '/ims/system/tenant',
+    name: 'SystemTenant',
+    component: () => import('@/views/system/TenantManage.vue'),
+    meta: { title: '租户套餐' },
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: () => import('@/views/profile/Profile.vue'),
+    meta: { title: '个人中心', menuless: true },
+  },
+]
+
 const b1Routes: RouteRecordRaw[] = [
   {
     path: '/ims/auth/org',
@@ -164,6 +222,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b2Routes,
       ...demoRoutes,
       unknownRoute,
     ]
@@ -178,6 +237,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordRoute,
       changePasswordAliasRoute,
       ...b1Routes,
+      ...b2Routes,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',

@@ -78,6 +78,7 @@ declare module 'vue' {
     PageHeader: typeof import('./components/layout/PageHeader.vue')['default']
     Pagination: typeof import('./components/list/Pagination.vue')['default']
     PercentText: typeof import('./components/display/PercentText.vue')['default']
+    PlainTable: typeof import('./components/list/PlainTable.vue')['default']
     QueryBar: typeof import('./components/list/QueryBar.vue')['default']
     RemoteSelect: typeof import('./components/selector/RemoteSelect.vue')['default']
     RoleSelect: typeof import('./components/selector/RoleSelect.vue')['default']

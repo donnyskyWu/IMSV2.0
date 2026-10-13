@@ -174,11 +174,46 @@ class SystemLogService:
         )
 
     async def export_operate_logs(self) -> dict[str, Any]:
-        """Create operation log export task (L-04)."""
-        # TODO: Implement async export via B0a export service
-        return {"task_id": "pending"}
+        """导出操作日志。列表不带路径，导出同样不写 request_path。"""
+        from app.domains.sys.models import OperateLog
+        from app.services.system_export import create_export_task
+
+        session = get_db_session()
+        tenant_id = ctx.tenant_id or 0
+        logs = session.query(OperateLog).filter(
+            OperateLog.tenant_id == tenant_id,
+            OperateLog.deleted == 0,
+        ).all()
+        rows = [
+            {
+                "id": str(log.id),
+                "module": log.module,
+                "operation": log.operation,
+                "result": log.result,
+                "operator_name": log.operator_name or "",
+            }
+            for log in logs
+        ]
+        return create_export_task("operate-log", rows)
 
     async def export_login_logs(self) -> dict[str, Any]:
-        """Create login log export task (L-04)."""
-        # TODO: Implement async export via B0a export service
-        return {"task_id": "pending"}
+        """导出登录日志。"""
+        from app.domains.sys.models import LoginLog
+        from app.services.system_export import create_export_task
+
+        session = get_db_session()
+        tenant_id = ctx.tenant_id or 0
+        logs = session.query(LoginLog).filter(
+            LoginLog.tenant_id == tenant_id,
+            LoginLog.deleted == 0,
+        ).all()
+        rows = [
+            {
+                "id": str(log.id),
+                "username": log.username,
+                "login_method": log.login_method,
+                "result": log.result,
+            }
+            for log in logs
+        ]
+        return create_export_task("login-log", rows)

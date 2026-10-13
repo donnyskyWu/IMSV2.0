@@ -702,7 +702,8 @@ class AuthService:
         - dataScopeText in Chinese
         - Empty permissions -> empty menus with prompt
         """
-        from app.domains.sys.models import Dept, User
+        from app.core.masking import mask_mobile_display
+        from app.domains.sys.models import Dept, Role, User, UserRole
         session = get_db_session()
 
         user = session.query(User).filter(User.id == user_id).first()
@@ -735,6 +736,17 @@ class AuthService:
                 "dept_names": [],  # TODO
                 "position_label": None,  # TODO
                 "pwd_reset_required": user.pwd_reset_required or False,
+                "mobile_masked": mask_mobile_display(user.mobile_enc),
+                "role_names": [
+                    role.name
+                    for role in session.query(Role).join(
+                        UserRole, UserRole.role_id == Role.id
+                    ).filter(
+                        UserRole.user_id == user_id,
+                        Role.status == "ENABLED",
+                        Role.deleted == 0,
+                    ).all()
+                ],
             },
             "menus": menus,
             "perm_codes": perm_data.get("perm_codes", []),
@@ -1051,13 +1063,9 @@ class AuthService:
         session = get_db_session()
         user = session.query(User).filter(User.id == user_id).first()
 
-        # Add mobileMasked
-        mobile_masked = None
-        if user and user.mobile_enc:
-            # Mask: 138****1234
-            mobile = user.mobile_enc  # TODO: Decrypt first
-            if len(mobile) >= 11:
-                mobile_masked = mobile[:3] + "****" + mobile[-4:]
+        from app.core.masking import mask_mobile_display
+
+        mobile_masked = mask_mobile_display(user.mobile_enc) if user else None
 
         # Add roleNames
         role_names = []

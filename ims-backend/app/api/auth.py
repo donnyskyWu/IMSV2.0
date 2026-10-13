@@ -56,6 +56,8 @@ class UserInfo(BaseSchema):
     dept_names: list[str] = []
     position_label: Optional[str] = None
     pwd_reset_required: bool = False
+    mobile_masked: Optional[str] = None
+    role_names: list[str] = []
 
 
 class MenuItem(BaseSchema):

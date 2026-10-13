@@ -631,6 +631,24 @@ class SystemRoleService:
         session.flush()
 
     async def export_roles(self) -> dict[str, Any]:
-        """Create role export task (R-12)."""
-        # TODO: Implement async export via B0a export service
-        return {"task_id": "pending"}
+        """导出当前租户角色。"""
+        from app.domains.sys.models import Role
+        from app.services.system_export import create_export_task
+
+        session = get_db_session()
+        tenant_id = ctx.tenant_id or 0
+        roles = session.query(Role).filter(
+            Role.tenant_id == tenant_id,
+            Role.deleted == 0,
+        ).all()
+        rows = [
+            {
+                "id": str(role.id),
+                "role_key": role.role_key,
+                "name": role.name,
+                "status": role.status,
+                "source": getattr(role, "source", ""),
+            }
+            for role in roles
+        ]
+        return create_export_task("role", rows)

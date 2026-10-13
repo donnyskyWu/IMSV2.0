@@ -351,22 +351,23 @@ class UserService:
         }
 
     def _mask_mobile(self, encrypted: str) -> str:
-        """Mask mobile number (show only last 4)."""
-        # TODO: Decrypt and mask properly
-        # For now return masked placeholder
-        return "***********"
+        """解密后按 138****5678 脱敏。短号保持占位，避免露出原文。"""
+        from app.core.masking import mask_mobile_display
+
+        return mask_mobile_display(encrypted) or "***********"
 
     def _encrypt_mobile(self, mobile: str) -> str:
-        """Encrypt mobile number with AES."""
-        # TODO: Implement AES encryption
-        return mobile
+        """用派生密钥加密手机号。"""
+        from app.core.masking import encrypt_mobile
+
+        return encrypt_mobile(mobile)
 
     def _hash_mobile(self, mobile: str) -> str:
         """Create HMAC hash of mobile for matching."""
         import hashlib
         import hmac
 
-        # TODO: Use configured secret key
+        # 与登录按手机号匹配共用同一 HMAC 密钥，不能改成另一把钥匙。
         key = b"ims_mobile_hash_key"
         return hmac.new(key, mobile.encode(), hashlib.sha256).hexdigest()
 

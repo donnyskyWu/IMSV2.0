@@ -483,24 +483,42 @@ class SystemUserService:
         session.flush()
 
     async def export_users(self) -> dict[str, Any]:
-        """Create user export task (U-15)."""
-        # TODO: Implement async export via B0a export service
-        return {"task_id": "pending"}
+        """导出当前租户用户。手机号按列表同一脱敏口径。"""
+        from app.domains.sys.models import User
+        from app.services.system_export import create_export_task
+
+        session = get_db_session()
+        tenant_id = ctx.tenant_id or 0
+        users = session.query(User).filter(
+            User.tenant_id == tenant_id,
+            User.deleted == 0,
+        ).all()
+        rows = [
+            {
+                "id": str(user.id),
+                "username": user.username,
+                "nickname": user.nickname,
+                "mobile": self._mask_mobile(user.mobile_enc or ""),
+                "status": user.status,
+            }
+            for user in users
+        ]
+        return create_export_task("user", rows)
 
     def _mask_mobile(self, encrypted: str) -> str:
-        """Mask mobile number for display."""
-        # TODO: Decrypt and mask properly
-        if encrypted and len(encrypted) >= 11:
-            return encrypted[:3] + "****" + encrypted[-4:]
-        return "***********"
+        """解密后按 138****5678 脱敏。"""
+        from app.core.masking import mask_mobile_display
+
+        return mask_mobile_display(encrypted) or "***********"
 
     def _encrypt_mobile(self, mobile: str) -> str:
-        """Encrypt mobile with AES."""
-        # TODO: Implement proper AES encryption
-        return mobile
+        """用派生密钥加密手机号。"""
+        from app.core.masking import encrypt_mobile
+
+        return encrypt_mobile(mobile)
 
     def _hash_mobile(self, mobile: str) -> str:
-        """Create HMAC hash of mobile for matching."""
+        """与登录按手机号匹配共用同一 HMAC 密钥。"""
         import hashlib
         import hmac
         key = b"ims_mobile_hash_key"
