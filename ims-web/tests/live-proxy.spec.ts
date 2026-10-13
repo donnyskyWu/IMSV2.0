@@ -8,8 +8,8 @@
  * 1. GET /health 的 data.db 为 UP
  * 2. 种子账号经登录页真实登录并拿到访问令牌
  * 3. 带该令牌 GET /admin-api/ims/auth/me，code=0 且菜单非空
- * 4. 登录后 URL 离开 /login。侧栏画出已登记叶子：顶层能看到「权限管理」，
- *    至少一项可点，点击后地址变为该项在 /me 里的 path。
+ * 4. 登录后 URL 离开 /login。侧栏顶层能看到「权限管理」。
+ *    落地工作台时该目录收起，先展开再点叶子，地址变为该项在 /me 里的 path。
  * 5. test_r10 只授个人工作台：落地 /ims/workbench，侧栏只有这一项。
  * 6. 不带令牌 GET /admin-api/ims/auth/me，经 Vite 返回 HTTP 401 且 code 为 1002。
  * 7. 登录后把 access token 换成用 IMS_JWT_SECRET 签的过期令牌，刷新令牌仍是登录拿到的。
@@ -126,6 +126,15 @@ test.describe('Vite 代理联通真实后端', () => {
     const label = '岗位-角色供给规则'
     const target = collectLeafPaths(menus).find((item) => item.name === label)
     expect(target?.path, `可点项「${label}」必须对应 /me 里带 path 的叶子`).toBe('/ims/auth/position')
+    // 当前页是工作台，权限管理默认收起，叶子不在可访问树里。先展开父菜单再点。
+    const permissionGroup = sidebar.locator('.el-sub-menu').filter({
+      has: page.locator('.el-sub-menu__title', { hasText: '权限管理' }),
+    })
+    const permissionTitle = permissionGroup.locator('.el-sub-menu__title')
+    await expect(permissionTitle).toBeVisible()
+    if (!(await permissionGroup.evaluate((el) => el.classList.contains('is-opened')))) {
+      await permissionTitle.click()
+    }
     const item = sidebar.getByRole('menuitem', { name: label })
     await expect(item).toBeVisible()
     await item.click()
