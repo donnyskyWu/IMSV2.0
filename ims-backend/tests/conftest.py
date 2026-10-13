@@ -42,70 +42,73 @@ def _is_sqlite(url: str) -> bool:
     return url.startswith("sqlite")
 
 
+# Module-level SQLite engine singleton to avoid StaticPool issues
+_sqlite_engine = None
+
+
 @pytest.fixture(scope="function")
 def db_engine():
     """Create database engine for tests (MySQL or SQLite)."""
+    global _sqlite_engine
+
     db_url = os.environ.get("IMS_DB_URL", "sqlite:///:memory:")
     is_sqlite = _is_sqlite(db_url)
 
-    if is_sqlite:
-        engine = create_engine(
-            db_url,
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-            echo=False,
-        )
+    # Import all models to ensure they're registered with Base
+    from app.domains.sys import models  # noqa: F401
 
-        # Enable foreign keys for SQLite
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
+    if is_sqlite:
+        # For SQLite with StaticPool, reuse the same engine instance
+        # and just clean up data between tests
+        if _sqlite_engine is None:
+            _sqlite_engine = create_engine(
+                db_url,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+                echo=False,
+            )
+
+            # Enable foreign keys for SQLite
+            @event.listens_for(_sqlite_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
+            # Create tables only once for the SQLite engine
+            Base.metadata.create_all(bind=_sqlite_engine)
+
+        engine = _sqlite_engine
+
+        # Clean up data between tests by truncating all tables
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            tables = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            ).fetchall()
+            for (table_name,) in tables:
+                conn.execute(text(f"DELETE FROM [{table_name}]"))
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+            conn.commit()
     else:
-        # MySQL or other DB - use connection pooling
+        # MySQL or other DB - create fresh engine each time
         engine = create_engine(
             db_url,
             echo=False,
             pool_pre_ping=True,
         )
 
-    # Import all models to ensure they're registered with Base
-    from app.domains.sys import models  # noqa: F401
-
-    # Drop and recreate all tables for clean state
-    # For SQLite with StaticPool, we need to explicitly drop all objects
-    if is_sqlite:
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            # Disable foreign keys for clean drop
-            conn.execute(text("PRAGMA foreign_keys=OFF"))
-            # Get all table names
-            tables = conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-            ).fetchall()
-            for (table_name,) in tables:
-                conn.execute(text(f"DROP TABLE IF EXISTS [{table_name}]"))
-            # Get all index names (not auto-created ones)
-            indices = conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
-            ).fetchall()
-            for (index_name,) in indices:
-                conn.execute(text(f"DROP INDEX IF EXISTS [{index_name}]"))
-            conn.execute(text("PRAGMA foreign_keys=ON"))
-            conn.commit()
-    else:
+        # Drop and recreate all tables for clean state
         Base.metadata.drop_all(bind=engine)
-
-    Base.metadata.create_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
 
     yield engine
 
     # Cleanup
     if not is_sqlite:
         Base.metadata.drop_all(bind=engine)
-
-    engine.dispose()
+        engine.dispose()
 
 
 @pytest.fixture(scope="function")
