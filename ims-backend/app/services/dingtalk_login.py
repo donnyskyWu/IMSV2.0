@@ -278,7 +278,7 @@ class DingTalkLoginService:
         - 本企业在职 → 建用户、写映射、写事件
         - 不在本企业或已离职 → 1217
         - 并发首登：IntegrityError 时回滚，先重查映射
-        - username 撞名：加 _2、_3 后缀，总长度 ≤50
+        - username 撞名：加 _2、_3 后缀，总长度 ≤ ims_sys_user.username（30）
         """
         from sqlalchemy.exc import IntegrityError
 
@@ -414,8 +414,12 @@ class DingTalkLoginService:
         raise BizError(1001, msg="用户名冲突次数超限，请联系管理员")
 
     def _generate_username(self, user_id: str, suffix: str = "") -> str:
-        """Generate username from DingTalk userid with optional suffix."""
-        max_len = 50
+        """Generate username from DingTalk userid with optional suffix.
+
+        ims_sys_user.username is VARCHAR(30). The login-log username column
+        is VARCHAR(50); that wider limit does not apply here.
+        """
+        max_len = 30
         if suffix:
             base_len = max_len - len(suffix)
             return user_id[:base_len] + suffix

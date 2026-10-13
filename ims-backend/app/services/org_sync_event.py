@@ -265,7 +265,8 @@ class OrgSyncEventService:
             return
 
         name = payload.get("name", dingtalk_user_id)
-        username = (dingtalk_user_id or "")[:50]
+        # ims_sys_user.username is VARCHAR(30)，不能按登录日志的 50 截断。
+        username = (dingtalk_user_id or "")[:30]
 
         user = User(
             tenant_id=event.tenant_id,

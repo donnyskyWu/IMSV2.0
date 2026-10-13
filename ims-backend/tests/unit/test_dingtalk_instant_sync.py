@@ -174,14 +174,14 @@ class TestUsernameCollision:
     async def test_long_username_truncated_with_suffix(
         self, db_session, test_context, monkeypatch, ding_client, fixed_clock
     ):
-        """Long username is truncated to fit suffix within 50 chars."""
+        """Long username is truncated to fit suffix within the 30-char column."""
         from app.domains.sys.models import Tenant
 
         _enable(monkeypatch)
 
         rows.add(db_session, Tenant(id=1, tenant_id=1, name="测试公司", status="ENABLED"))
 
-        long_userid = "a" * 50
+        long_userid = "a" * 30
         rows.user(db_session, long_userid)
 
         ding_client(ScriptedDingTalk(
@@ -194,9 +194,9 @@ class TestUsernameCollision:
         user = await service._match(DingTalkIdentity(user_id=long_userid, mobile="", name="长名员工"))
 
         assert user is not None
-        assert len(user.username) == 50
+        assert len(user.username) == 30
         assert user.username.endswith("_2")
-        assert user.username == "a" * 48 + "_2"
+        assert user.username == "a" * 28 + "_2"
 
     def test_generate_username_with_suffix(self):
         """Test username generation helper."""
@@ -204,8 +204,9 @@ class TestUsernameCollision:
 
         assert service._generate_username("abcdef") == "abcdef"
         assert service._generate_username("abcdef", "_2") == "abcdef_2"
-        assert len(service._generate_username("a" * 60)) == 50
-        assert len(service._generate_username("a" * 60, "_10")) == 50
+        assert len(service._generate_username("a" * 60)) == 30
+        assert service._generate_username("a" * 60, "_10") == "a" * 27 + "_10"
+        assert len(service._generate_username("a" * 60, "_10")) == 30
         assert service._generate_username("a" * 60, "_10").endswith("_10")
 
     @pytest.mark.asyncio
