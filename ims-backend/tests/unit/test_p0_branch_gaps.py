@@ -69,6 +69,9 @@ class TestAuthBranches:
             "data_scopes": [],
             "dept_ids": [],
             "ip_group_ids": [],
+            "_perm_ver": service.get_user_perm_version(user.id),
+            "_tenant_id": user.tenant_id,
+            "_tenant_perm_ver": service.get_tenant_perm_version(user.tenant_id),
         }
         Cache.set_json(f"{service.PERM_CACHE_PREFIX}{user.id}", cached, ttl=60)
         assert await service._get_user_permissions(user.id) == cached

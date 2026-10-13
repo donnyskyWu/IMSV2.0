@@ -240,33 +240,30 @@ class OrgSyncEventService:
         from app.db.ids import assign_pk
         from app.domains.sys.models import User, UserMapping
 
-        if not event.subject_user_id:
-            payload = self._parse_payload(event)
-            if not payload:
-                return
-            dingtalk_user_id = payload.get("dingtalk_user_id")
-            if not dingtalk_user_id:
-                return
-        else:
+        if event.subject_user_id:
+            return
+
+        payload = self._parse_payload(event)
+        if not payload:
+            return
+        dingtalk_user_id = payload.get("dingtalk_user_id") or payload.get("userid")
+        if not dingtalk_user_id:
             return
 
         session = get_db_session()
         now = get_now()
 
         existing = session.query(UserMapping).filter(
-            UserMapping.dingtalk_user_id == event.payload,
+            UserMapping.dingtalk_user_id == dingtalk_user_id,
             UserMapping.deleted == 0,
         ).first()
         if existing:
-            logger.info("HIRE event skipped: mapping already exists for dingtalk_user_id=%s", event.payload)
+            logger.info(
+                "HIRE event skipped: mapping already exists for dingtalk_user_id=%s",
+                dingtalk_user_id,
+            )
             return
 
-        payload = self._parse_payload(event)
-        if not payload:
-            logger.warning("HIRE event has no parseable payload event_id=%s", event.event_id)
-            return
-
-        dingtalk_user_id = payload.get("dingtalk_user_id") or payload.get("userid")
         name = payload.get("name", dingtalk_user_id)
         username = (dingtalk_user_id or "")[:50]
 

@@ -592,16 +592,29 @@ class TestApplyBizEvents:
         assert user.nickname == "新同事"
         assert user.source == "DINGTALK"
 
-        raw = '{"dingtalk_user_id":"dt-hire-dup"}'
         holder = rows.user(db_session, "hire-holder")
         rows.add(db_session, UserMapping(
-            tenant_id=1, user_id=holder.id, dingtalk_user_id=raw,
+            tenant_id=1, user_id=holder.id, dingtalk_user_id="dt-hire-dup",
         ))
         dup = await self._receive(
-            service, fixed_clock, event_id="hire-dup", biz_type="HIRE", payload=raw,
+            service, fixed_clock, event_id="hire-dup", biz_type="HIRE",
+            payload='{"dingtalk_user_id":"dt-hire-dup","name":"重复"}',
         )
         assert (await service.process_event(int(dup["id"])))["status"] == "SUCCESS"
         assert db_session.query(User).filter(User.username == "dt-hire-dup").count() == 0
+
+        via_userid = await self._receive(
+            service, fixed_clock, event_id="hire-userid", biz_type="HIRE",
+            payload='{"userid":"dt-hire-userid","name":"工号同事"}',
+        )
+        assert (await service.process_event(int(via_userid["id"])))["status"] == "SUCCESS"
+        assert db_session.query(User).filter(User.username == "dt-hire-userid").count() == 1
+        again = await self._receive(
+            service, fixed_clock, event_id="hire-userid-again", biz_type="HIRE",
+            payload='{"userid":"dt-hire-userid"}',
+        )
+        assert (await service.process_event(int(again["id"])))["status"] == "SUCCESS"
+        assert db_session.query(User).filter(User.username == "dt-hire-userid").count() == 1
 
         for event_id, payload, subject in (
             ("hire-empty", "", None),

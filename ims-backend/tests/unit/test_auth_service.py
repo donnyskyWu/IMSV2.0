@@ -249,7 +249,8 @@ class TestAuthServiceDingTalk:
 class TestPermVersionInvalidation:
     """Tests for permission version-based cache invalidation (FP-D03-04)."""
 
-    def test_bump_perm_version_invalidates_cache(self, db_session, test_context):
+    @pytest.mark.asyncio
+    async def test_bump_perm_version_invalidates_cache(self, db_session, test_context):
         """UT-B1-PERM-VER-01: Bumping perm_ver invalidates cached permissions.
 
         Flow:
@@ -257,8 +258,6 @@ class TestPermVersionInvalidation:
         2. Bump user perm version (version becomes N+1)
         3. Load permissions again - should reload from DB (versions mismatch)
         """
-        import asyncio
-
         from app.core.cache import Cache
         from app.domains.sys.models import Menu, Role, RoleMenu, User, UserRole
         from app.services.auth import AuthService
@@ -316,9 +315,7 @@ class TestPermVersionInvalidation:
         service = AuthService()
         cache_key = f"{service.PERM_CACHE_PREFIX}100"
 
-        perms1 = asyncio.get_event_loop().run_until_complete(
-            service._get_user_permissions(100)
-        )
+        perms1 = await service._get_user_permissions(100)
         assert "test:perm:code" in perms1["perm_codes"]
 
         cached_before = Cache.get_json(cache_key)
@@ -329,14 +326,57 @@ class TestPermVersionInvalidation:
         new_ver = AuthService.bump_user_perm_version(100)
         assert new_ver == ver_before + 1
 
-        perms2 = asyncio.get_event_loop().run_until_complete(
-            service._get_user_permissions(100)
-        )
+        perms2 = await service._get_user_permissions(100)
 
         cached_after = Cache.get_json(cache_key)
         assert cached_after is not None
         assert cached_after["_perm_ver"] == new_ver
         assert "test:perm:code" in perms2["perm_codes"]
+
+    @pytest.mark.asyncio
+    async def test_tenant_perm_version_invalidates_cache(self, db_session, test_context):
+        """A tenant perm_ver bump reloads permissions even when the user version is unchanged."""
+        from app.core.cache import Cache
+        from app.domains.sys.models import Menu, Role, RoleMenu, User, UserRole
+        from app.services.auth import AuthService
+
+        db_session.add(User(
+            id=110, tenant_id=1, username="tenant_ver_user", nickname="T",
+            status="ACTIVE", source="LOCAL",
+        ))
+        db_session.add(Role(
+            id=110, tenant_id=1, role_key="tenant_ver_role", name="T",
+            status="ENABLED", source="LOCAL",
+        ))
+        db_session.add(Menu(
+            id=110, tenant_id=1, parent_id=0, path="/tenant-ver", name="T",
+            type="MENU", perm_code="test:tenant:ver", status="ENABLED",
+        ))
+        db_session.add(UserRole(
+            id=110, tenant_id=1, user_id=110, role_id=110, source="LOCAL",
+        ))
+        db_session.add(RoleMenu(id=110, tenant_id=1, role_id=110, menu_id=110))
+        db_session.flush()
+
+        service = AuthService()
+        cache_key = f"{service.PERM_CACHE_PREFIX}110"
+        loaded = await service._get_user_permissions(110)
+        assert "test:tenant:ver" in loaded["perm_codes"]
+        again = await service._get_user_permissions(110)
+        assert again["_tenant_perm_ver"] == loaded["_tenant_perm_ver"]
+
+        stale = Cache.get_json(cache_key)
+        stale.pop("_tenant_id")
+        Cache.set_json(cache_key, stale, ttl=1800)
+        reloaded = await service._get_user_permissions(110)
+        assert reloaded["_tenant_id"] == 1
+
+        before = AuthService.get_tenant_perm_version(1)
+        bumped = AuthService.bump_tenant_perm_version(1)
+        assert bumped == before + 1
+        after = await service._get_user_permissions(110)
+        assert after["_tenant_perm_ver"] == bumped
+        assert "test:tenant:ver" in after["perm_codes"]
 
     def test_grant_menu_bumps_perm_version(self, db_session, test_context):
         """UT-B1-PERM-VER-02: Granting menu to role bumps affected users' perm_ver."""

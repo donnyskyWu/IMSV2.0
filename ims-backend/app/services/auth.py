@@ -446,11 +446,16 @@ class AuthService:
         if cached:
             cached_ver = cached.get("_perm_ver", 0)
             current_ver = self.get_user_perm_version(user_id)
-            if cached_ver == current_ver:
+            tenant_id = cached.get("_tenant_id")
+            tenant_ok = (
+                tenant_id is not None
+                and cached.get("_tenant_perm_ver", 0) == self.get_tenant_perm_version(int(tenant_id))
+            )
+            if cached_ver == current_ver and tenant_ok:
                 return cached
 
         # Load from database
-        from app.domains.sys.models import Menu, Role, RoleMenu, UserDept, UserRole
+        from app.domains.sys.models import Menu, Role, RoleMenu, User, UserDept, UserRole
         session = get_db_session()
 
         # Get user's enabled roles
@@ -494,13 +499,18 @@ class AuthService:
         # Get user's IP group IDs (if applicable)
         ip_group_ids = []  # TODO: Load from IP group member table
 
+        user_row = session.query(User).filter(User.id == user_id, User.deleted == 0).first()
+        tenant_id = int(user_row.tenant_id) if user_row is not None else 0
         current_ver = self.get_user_perm_version(user_id)
+        tenant_ver = self.get_tenant_perm_version(tenant_id)
         result = {
             "perm_codes": list(perm_codes),
             "data_scopes": [{"scope_type": ds.scope_type, "role_id": ds.role_id} for ds in data_scopes],
             "dept_ids": dept_ids,
             "ip_group_ids": ip_group_ids,
             "_perm_ver": current_ver,
+            "_tenant_id": tenant_id,
+            "_tenant_perm_ver": tenant_ver,
         }
 
         # Cache for 30 minutes

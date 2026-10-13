@@ -260,7 +260,7 @@ test.describe('组织架构同步页', () => {
 
     const deadRow = page.locator('.el-table tbody tr').filter({ hasText: '王五' })
     await expect(deadRow).toBeVisible()
-    await expect(deadRow.getByText('DEAD')).toBeVisible()
+    await expect(deadRow.getByText('死信')).toBeVisible()
   })
 
   test('E2E-B1-ORG-06 响应式布局在移动端正确显示', async ({ page }) => {
@@ -295,14 +295,12 @@ test.describe('组织架构同步页', () => {
 
     await expect(page).toHaveURL(/\/ims\/auth\/org/)
 
-    const width = page.viewportSize()?.width ?? 1440
-    if (width <= 390) {
-      const replayBtn = page.getByRole('button', { name: '批量重放' })
-      if (await replayBtn.isVisible()) {
-        await replayBtn.click()
-        await expect(page.getByText('批量重放失败事件')).toBeVisible()
-      }
+    const replayBtn = page.getByRole('button', { name: '重放失败事件' })
+    if (!(await replayBtn.isVisible())) {
+      await page.locator('.page-header .el-dropdown').getByRole('button').click()
     }
+    await replayBtn.click()
+    await expect(page.getByRole('dialog', { name: '重放失败事件' })).toBeVisible()
   })
 
   test('警告条在钉钉不可用或对账失败时显示', async ({ page }) => {
