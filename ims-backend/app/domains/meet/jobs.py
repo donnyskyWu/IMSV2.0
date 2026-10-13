@@ -298,7 +298,7 @@ async def meeting_overdue_job() -> dict[str, Any]:
 
         days_overdue = (today - item.due_date).days
 
-        if days_overdue >= 1 and item.notified_at is None:
+        if days_overdue > 1 and item.notified_at is None:
             lock_key = f"meet:overdue:{item.id}:1d"
             if not Cache.setnx(lock_key, "1", ttl=86400 * 7):
                 continue
@@ -333,7 +333,7 @@ async def meeting_overdue_job() -> dict[str, Any]:
                 stats["notified_1d"] += 1
                 stats["messages_sent"] += 1
 
-        if days_overdue >= 3 and item.escalated_at is None:
+        if days_overdue > 3 and item.escalated_at is None:
             lock_key = f"meet:overdue:{item.id}:3d"
             if not Cache.setnx(lock_key, "1", ttl=86400 * 7):
                 continue
