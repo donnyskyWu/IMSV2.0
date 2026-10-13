@@ -97,7 +97,7 @@ class TestInstantSyncBasic:
 
         service = DingTalkLoginService()
 
-        user = service._match(DingTalkIdentity(user_id="dt-new-user", mobile="", name="新员工"))
+        user = await service._match(DingTalkIdentity(user_id="dt-new-user", mobile="", name="新员工"))
 
         assert user is not None
         assert user.username == "dt-new-user"
@@ -137,7 +137,7 @@ class TestInstantSyncBasic:
         service = DingTalkLoginService()
 
         with pytest.raises(BizError) as exc:
-            service._match(DingTalkIdentity(user_id="dt-inactive", mobile="", name="离职员工"))
+            await service._match(DingTalkIdentity(user_id="dt-inactive", mobile="", name="离职员工"))
         assert exc.value.code == 1217
 
 
@@ -164,7 +164,7 @@ class TestUsernameCollision:
 
         service = DingTalkLoginService()
 
-        user = service._match(DingTalkIdentity(user_id="dt-collision-user", mobile="", name="同名员工"))
+        user = await service._match(DingTalkIdentity(user_id="dt-collision-user", mobile="", name="同名员工"))
 
         assert user is not None
         assert user.username == "dt-collision-user_2"
@@ -191,7 +191,7 @@ class TestUsernameCollision:
 
         service = DingTalkLoginService()
 
-        user = service._match(DingTalkIdentity(user_id=long_userid, mobile="", name="长名员工"))
+        user = await service._match(DingTalkIdentity(user_id=long_userid, mobile="", name="长名员工"))
 
         assert user is not None
         assert len(user.username) == 50
@@ -232,7 +232,7 @@ class TestUsernameCollision:
         service = DingTalkLoginService()
 
         with pytest.raises(BizError) as exc:
-            service._match(DingTalkIdentity(user_id="dt-cap-user", mobile="", name="超限员工"))
+            await service._match(DingTalkIdentity(user_id="dt-cap-user", mobile="", name="超限员工"))
         assert exc.value.code == 1001
         assert "冲突次数超限" in exc.value.msg
 
@@ -265,7 +265,7 @@ class TestConcurrentLogin:
 
         service = DingTalkLoginService()
 
-        matched_user = service._match(DingTalkIdentity(user_id="dt-concurrent", mobile="", name="并发员工"))
+        matched_user = await service._match(DingTalkIdentity(user_id="dt-concurrent", mobile="", name="并发员工"))
 
         assert matched_user.id == user.id
         assert matched_user.username == "dt-concurrent-user"
@@ -307,7 +307,80 @@ class TestConcurrentLogin:
 
         monkeypatch.setattr(db_session, "begin_nested", mock_begin_nested)
 
-        user = service._match(DingTalkIdentity(user_id="dt-integrity", mobile="", name="IntegrityTest"))
+        user = await service._match(DingTalkIdentity(user_id="dt-integrity", mobile="", name="IntegrityTest"))
 
         assert call_count >= 2
         assert user is not None
+
+    @pytest.mark.asyncio
+    async def test_integrity_error_returns_concurrent_user_and_deadlock(
+        self, db_session, test_context, monkeypatch, ding_client, fixed_clock
+    ):
+        """A colliding insert that already has a mapping returns that user."""
+        from sqlalchemy.exc import IntegrityError
+
+        from app.domains.sys.models import Tenant, UserMapping
+
+        _enable(monkeypatch)
+        rows.add(db_session, Tenant(id=1, tenant_id=1, name="测试公司", status="ENABLED"))
+        existing = rows.user(db_session, "already-there", source="DINGTALK")
+        rows.add(db_session, UserMapping(
+            tenant_id=1, user_id=existing.id, dingtalk_user_id="dt-raced",
+        ))
+
+        class _Detail:
+            async def get_user_detail(self, user_id):
+                return {"active": True, "name": "并发"}
+
+        ding_client(_Detail())
+        service = DingTalkLoginService()
+        original_flush = db_session.flush
+        raised = {"done": False}
+
+        def flush_deadlock(*args, **kwargs):
+            if not raised["done"]:
+                raised["done"] = True
+                raise IntegrityError("deadlock", {}, None)
+            return original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(db_session, "flush", flush_deadlock)
+        raced = await service._instant_sync(
+            DingTalkIdentity(user_id="dt-raced", mobile="", name="并发"),
+        )
+        assert raced.id == existing.id
+
+
+class TestFetchUserDetail:
+    @pytest.mark.asyncio
+    async def test_missing_detail_api_and_errors(self, db_session, test_context, monkeypatch, ding_client):
+        from app.domains.sys.models import Tenant
+
+        _enable(monkeypatch)
+        rows.add(db_session, Tenant(id=1, tenant_id=1, name="测试公司", status="ENABLED"))
+        service = DingTalkLoginService()
+
+        class _Bare:
+            pass
+
+        ding_client(_Bare())
+        with pytest.raises(BizError) as missing:
+            await service._match(DingTalkIdentity(user_id="dt-bare", mobile="", name="无详情"))
+        assert missing.value.code == 1217
+
+        class _Timeout:
+            async def get_user_detail(self, user_id):
+                raise RuntimeError("timeout")
+
+        ding_client(_Timeout())
+        with pytest.raises(BizError) as timed:
+            await service._fetch_user_detail("dt-bare")
+        assert timed.value.code == 5003
+
+        class _Broken:
+            async def get_user_detail(self, user_id):
+                raise RuntimeError("bad payload")
+
+        ding_client(_Broken())
+        with pytest.raises(BizError) as broken:
+            await service._fetch_user_detail("dt-bare")
+        assert broken.value.code == 1006

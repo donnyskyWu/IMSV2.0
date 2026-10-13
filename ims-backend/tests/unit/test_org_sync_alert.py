@@ -471,3 +471,84 @@ class TestClockInjection:
         assert Cache.get(f"ims:alert:dead_letter:1:{hour_key_2}") == "1"
 
         reset_clock()
+
+
+def _recipient(db_session, username, perm):
+    person = rows.user(db_session, username)
+    role = rows.role(db_session, f"r-{username}", username)
+    item = rows.menu(db_session, username, perm)
+    rows.bind_menu(db_session, role.id, item.id)
+    rows.bind_role(db_session, person.id, role.id)
+    return person
+
+
+class TestAlertDelivery:
+    """Recipients exist, so notifications and metrics actually write rows."""
+
+    @pytest.mark.asyncio
+    async def test_notifications_and_todos_reach_recipients(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import InboxMessage, OrgSyncBatch, TodoItem
+
+        runner = _recipient(db_session, "alert-runner", "ims:system:org-sync:run")
+        editor = _recipient(db_session, "alert-editor", "ims:system:user:update")
+
+        await service.check_dead_letter(1, 1)
+        await service.check_delay_alert(1, 1, delay_seconds=600)
+        assert db_session.query(InboxMessage).filter(InboxMessage.user_id == runner.id).count() == 2
+
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+        await service.check_reconcile_failure(1, 1)
+        assert db_session.query(InboxMessage).count() == 3
+
+        await service.send_todo_for_pending_assign(1, "已删部门", 2)
+        await service.send_todo_for_local_orphan(1, "孤儿部门")
+        assert db_session.query(TodoItem).filter(TodoItem.assignee_user_id == editor.id).count() == 2
+
+    @pytest.mark.asyncio
+    async def test_metrics_with_and_without_events(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import OrgSyncBatch, OrgSyncEvent
+
+        empty = await service.get_sync_metrics(1)
+        assert empty["userTotal"] == 0
+        assert empty["successRate24h"] == 1.0
+        assert empty["dingtalkUnavailable"] is False
+        assert empty["reconcileFailedTwice"] is False
+
+        rows.user(db_session, "metric-active")
+        rows.user(db_session, "metric-frozen", status="FROZEN")
+        yesterday = fixed_clock - timedelta(days=1)
+        rows.add(db_session, OrgSyncEvent(
+            tenant_id=1, event_id="m-y", event_type="user_add_org",
+            event_time=yesterday, received_time=yesterday, payload="{}",
+            status="SUCCESS", processed_time=fixed_clock, delay_seconds=120,
+        ))
+        rows.add(db_session, OrgSyncEvent(
+            tenant_id=1, event_id="m-p", event_type="user_add_org",
+            event_time=fixed_clock, received_time=fixed_clock, payload="{}",
+            status="PENDING",
+        ))
+        rows.add(db_session, OrgSyncEvent(
+            tenant_id=1, event_id="m-d", event_type="user_add_org",
+            event_time=fixed_clock, received_time=fixed_clock, payload="{}",
+            status="DEAD", processed_time=fixed_clock, last_error="code 5003 timeout",
+        ))
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+
+        await service.send_todo_for_pending_assign(9, "空", 1)
+        await service.send_todo_for_local_orphan(9, "空")
+
+        metrics = await service.get_sync_metrics(1)
+        assert metrics["userTotal"] == 2
+        assert metrics["yesterdayEventCount"] == 1
+        assert metrics["pendingEventCount"] == 1
+        assert metrics["deadEventCount"] == 1
+        assert metrics["avgDelayMinutes"] == 2.0
+        assert metrics["successRate24h"] == 0.5
+        assert metrics["dingtalkUnavailable"] is True
+        assert metrics["reconcileFailedTwice"] is True

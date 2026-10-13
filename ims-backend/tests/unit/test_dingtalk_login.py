@@ -363,7 +363,7 @@ class TestDingTalkCallback:
         with pytest.raises(BizError) as stopped_err:
             await DingTalkLoginService().handle_callback("code", self._state(), "")
         assert stopped_err.value.code == 1008
-        assert stopped_err.value.msg == "所属组织已停用"
+        assert stopped_err.value.msg == "所属组织已停用，请联系管理员"
 
         other = rows.user(db_session, "dt_other", tenant_id=2)
         rows.add(db_session, UserMapping(

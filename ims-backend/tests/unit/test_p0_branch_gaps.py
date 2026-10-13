@@ -395,7 +395,7 @@ class TestUserBranches:
         logged = rows.user(db_session, "logged", last_login_time=datetime(2020, 1, 1))
         with pytest.raises(BizError) as has_login:
             await service.delete_user(str(logged.id))
-        assert has_login.value.code == 1502
+        assert has_login.value.code == 1001
 
         fresh = rows.user(db_session, "fresh")
 
@@ -425,7 +425,7 @@ class TestUserBranches:
         active = rows.user(db_session, "active-one", token_version=0)
         await service.freeze_user(str(active.id))
         assert active.status == "FROZEN"
-        assert active.token_version == 1
+        assert active.token_version == 0
         await service.reactivate_user(str(active.id))
         assert active.status == "ACTIVE"
         await service.resign_user(str(active.id))

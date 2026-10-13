@@ -205,7 +205,7 @@ class DingTalkLoginService:
     async def _login_user(self, identity: DingTalkIdentity, channel: str) -> dict[str, Any]:
         user = None
         try:
-            user = self._match(identity)
+            user = await self._match(identity)
             _reject_login_status(user)
         except BizError as exc:
             await self._fail(
@@ -218,7 +218,7 @@ class DingTalkLoginService:
             raise
         return await self._issue(user, channel)
 
-    def _match(self, identity: DingTalkIdentity) -> Any:
+    async def _match(self, identity: DingTalkIdentity) -> Any:
         """先按钉钉 userid，再按手机号，最后尝试即时同步（LG-07）。"""
         from app.domains.sys.models import User, UserMapping
         from app.services.user import UserService
@@ -268,9 +268,9 @@ class DingTalkLoginService:
                     len(users),
                 )
 
-        return self._instant_sync(identity)
+        return await self._instant_sync(identity)
 
-    def _instant_sync(self, identity: DingTalkIdentity) -> Any:
+    async def _instant_sync(self, identity: DingTalkIdentity) -> Any:
         """
         LG-07 即时同步：建本地用户、写映射、写同步事件。
 
@@ -280,8 +280,6 @@ class DingTalkLoginService:
         - 并发首登：IntegrityError 时回滚，先重查映射
         - username 撞名：加 _2、_3 后缀，总长度 ≤50
         """
-        import asyncio
-
         from sqlalchemy.exc import IntegrityError
 
         from app.core.clock import get_now
@@ -294,9 +292,7 @@ class DingTalkLoginService:
         if tenant_id is None:
             raise BizError(1217)
 
-        user_detail = asyncio.get_event_loop().run_until_complete(
-            self._fetch_user_detail(identity.user_id)
-        )
+        user_detail = await self._fetch_user_detail(identity.user_id)
 
         if user_detail is None:
             raise BizError(1217)
@@ -313,53 +309,50 @@ class DingTalkLoginService:
 
         while retry_count <= max_suffix_retries:
             try:
-                nested = session.begin_nested()
+                with session.begin_nested():
+                    user = User(
+                        tenant_id=tenant_id,
+                        username=username,
+                        nickname=nickname,
+                        status="ACTIVE",
+                        source="DINGTALK",
+                        password_hash=None,
+                        emp_no=user_detail.get("job_number"),
+                    )
+                    assign_pk(session, user)
+                    session.add(user)
+                    session.flush()
 
-                user = User(
-                    tenant_id=tenant_id,
-                    username=username,
-                    nickname=nickname,
-                    status="ACTIVE",
-                    source="DINGTALK",
-                    password_hash=None,
-                    emp_no=user_detail.get("job_number"),
-                )
-                assign_pk(session, user)
-                session.add(user)
-                session.flush()
+                    mapping = UserMapping(
+                        tenant_id=tenant_id,
+                        user_id=user.id,
+                        dingtalk_user_id=identity.user_id,
+                        union_id=identity.union_id,
+                        last_sync_time=now,
+                    )
+                    assign_pk(session, mapping)
+                    session.add(mapping)
+                    session.flush()
 
-                mapping = UserMapping(
-                    tenant_id=tenant_id,
-                    user_id=user.id,
-                    dingtalk_user_id=identity.user_id,
-                    union_id=identity.union_id,
-                    last_sync_time=now,
-                )
-                assign_pk(session, mapping)
-                session.add(mapping)
-                session.flush()
+                    event_date = now.strftime("%Y-%m-%d")
+                    event_id = f"login-sync:{identity.user_id}:{event_date}"
 
-                event_date = now.strftime("%Y-%m-%d")
-                event_id = f"login-sync:{identity.user_id}:{event_date}"
-
-                event = OrgSyncEvent(
-                    tenant_id=tenant_id,
-                    event_id=event_id,
-                    event_type="user_add_org",
-                    event_time=now,
-                    payload="{}",
-                    status="SUCCESS",
-                    biz_type="HIRE",
-                    subject_user_id=user.id,
-                    subject_name=nickname,
-                    received_time=now,
-                    processed_time=now,
-                )
-                assign_pk(session, event)
-                session.add(event)
-                session.flush()
-
-                nested.commit()
+                    event = OrgSyncEvent(
+                        tenant_id=tenant_id,
+                        event_id=event_id,
+                        event_type="user_add_org",
+                        event_time=now,
+                        payload="{}",
+                        status="SUCCESS",
+                        biz_type="HIRE",
+                        subject_user_id=user.id,
+                        subject_name=nickname,
+                        received_time=now,
+                        processed_time=now,
+                    )
+                    assign_pk(session, event)
+                    session.add(event)
+                    session.flush()
 
                 logger.info(
                     "Instant sync created user dingtalk_user_id=%s user_id=%s username=%s",
@@ -371,7 +364,6 @@ class DingTalkLoginService:
                 return user
 
             except IntegrityError as exc:
-                nested.rollback()
                 error_str = str(exc).lower()
                 if "lock wait timeout" in error_str or "deadlock" in error_str:
                     logger.warning(
@@ -446,7 +438,7 @@ class DingTalkLoginService:
             client = _resolve_client()
             if hasattr(client, "get_user_detail"):
                 return await client.get_user_detail(dingtalk_user_id)
-            return {"active": True, "name": dingtalk_user_id}
+            return None
         except Exception as exc:
             logger.warning(
                 "Failed to fetch user detail dingtalk_user_id=%s error=%s",

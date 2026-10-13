@@ -191,7 +191,7 @@ class AuthService:
             self._persist()
             raise BizError(1216)
 
-        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。文案保持「所属组织已停用」。
+        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。文案见 TENANT_UNAVAILABLE_MSG。
         try:
             reject_unavailable_tenant(user.tenant_id)
         except BizError:

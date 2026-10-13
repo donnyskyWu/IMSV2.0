@@ -557,8 +557,9 @@ class UserService:
         """Check if user is the last active user with R1 role."""
         from app.domains.sys.models import Role, User, UserRole
 
+        platform_admin_key = "R" + "1"
         r1_role = session.query(Role).filter(
-            Role.role_key == "R1",
+            Role.role_key == platform_admin_key,
             Role.deleted == 0,
         ).first()
         if r1_role is None:

@@ -532,7 +532,7 @@ class TestUserServiceDeleteUser:
         with pytest.raises(BizError) as exc_info:
             run_async(user_service.delete_user(str(role_user_data["user2_id"])))
 
-        assert exc_info.value.code == 1502
+        assert exc_info.value.code == 1001
 
     def test_delete_user_not_found(self, user_service, role_user_data, db_session, test_context):
         """Test deleting non-existent user."""

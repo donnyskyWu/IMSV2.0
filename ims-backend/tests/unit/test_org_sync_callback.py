@@ -175,8 +175,11 @@ class TestOfficialSdkVectors:
 
     def test_known_aes_key_format(self):
         """AES key format: 43 chars Base64, appending = gives 32 bytes."""
-        aes_key_43 = "abcdefghijklmnopqrstuvwxyz012345678901234"
+        raw_key = b"abcdefghijklmnopqrstuvwxyz012345"
+        aes_key_43 = base64.b64encode(raw_key).decode().rstrip("=")
+        assert len(aes_key_43) == 43
         raw = base64.b64decode(aes_key_43 + "=")
+        assert raw == raw_key
         assert len(raw) == 32
 
     def test_plaintext_structure(self):

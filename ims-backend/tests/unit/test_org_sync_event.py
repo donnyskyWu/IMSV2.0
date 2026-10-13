@@ -561,3 +561,530 @@ class TestGetEventsPage:
 
         assert result["total"] == 1
         assert result["list"][0]["status"] == "DEAD"
+
+
+class TestApplyBizEvents:
+    """Drive each biz_type, including the early-return side of each check."""
+
+    async def _receive(self, service, clock, **kwargs):
+        payload = kwargs.pop("payload", "{}")
+        return await service.receive_event(
+            tenant_id=kwargs.pop("tenant_id", 1),
+            event_id=kwargs.pop("event_id"),
+            event_type=kwargs.pop("event_type", "user_modify_org"),
+            event_time=kwargs.pop("event_time", clock),
+            payload=payload,
+            biz_type=kwargs.pop("biz_type", None),
+            subject_name=kwargs.pop("subject_name", None),
+        )
+
+    @pytest.mark.asyncio
+    async def test_hire_creates_and_skips(self, db_session, test_context, service, fixed_clock):
+        from app.domains.sys.models import OrgSyncEvent, User, UserMapping
+
+        created = await self._receive(
+            service, fixed_clock, event_id="hire-new", biz_type="HIRE",
+            payload='{"dingtalk_user_id":"dt-hire-1","name":"新同事"}',
+        )
+        result = await service.process_event(int(created["id"]))
+        assert result["status"] == "SUCCESS"
+        user = db_session.query(User).filter(User.username == "dt-hire-1").one()
+        assert user.nickname == "新同事"
+        assert user.source == "DINGTALK"
+
+        raw = '{"dingtalk_user_id":"dt-hire-dup"}'
+        holder = rows.user(db_session, "hire-holder")
+        rows.add(db_session, UserMapping(
+            tenant_id=1, user_id=holder.id, dingtalk_user_id=raw,
+        ))
+        dup = await self._receive(
+            service, fixed_clock, event_id="hire-dup", biz_type="HIRE", payload=raw,
+        )
+        assert (await service.process_event(int(dup["id"])))["status"] == "SUCCESS"
+        assert db_session.query(User).filter(User.username == "dt-hire-dup").count() == 0
+
+        for event_id, payload, subject in (
+            ("hire-empty", "", None),
+            ("hire-noid", '{"name":"无名"}', None),
+            ("hire-bound", '{"dingtalk_user_id":"dt-x"}', holder.id),
+        ):
+            received = await self._receive(
+                service, fixed_clock, event_id=event_id, biz_type="HIRE", payload=payload or "{}",
+            )
+            row = db_session.query(OrgSyncEvent).filter(OrgSyncEvent.id == int(received["id"])).one()
+            row.payload = payload
+            if subject is not None:
+                row.subject_user_id = subject
+            db_session.flush()
+            assert (await service.process_event(row.id))["status"] == "SUCCESS"
+
+    @pytest.mark.asyncio
+    async def test_resign_and_user_update(self, db_session, test_context, service, fixed_clock):
+        from app.domains.sys.models import OrgSyncEvent, UserMapping
+        from app.services.user import USER_EVENTS
+
+        person = rows.user(db_session, "resign-me")
+        rows.add(db_session, UserMapping(
+            tenant_id=1, user_id=person.id, dingtalk_user_id="dt-resign",
+        ))
+        USER_EVENTS.clear()
+        received = await self._receive(
+            service, fixed_clock, event_id="resign-1", biz_type="RESIGN",
+        )
+        row = db_session.get(OrgSyncEvent, int(received["id"]))
+        row.subject_user_id = person.id
+        db_session.flush()
+        await service.process_event(row.id)
+        db_session.refresh(person)
+        assert person.status == "RESIGNED"
+        assert any(item["user_id"] == person.id for item in USER_EVENTS)
+
+        again = await self._receive(service, fixed_clock, event_id="resign-2", biz_type="RESIGN")
+        again_row = db_session.get(OrgSyncEvent, int(again["id"]))
+        again_row.subject_user_id = person.id
+        db_session.flush()
+        await service.process_event(again_row.id)
+
+        missing = await self._receive(service, fixed_clock, event_id="resign-miss", biz_type="RESIGN")
+        missing_row = db_session.get(OrgSyncEvent, int(missing["id"]))
+        missing_row.subject_user_id = 999991
+        db_session.flush()
+        await service.process_event(missing_row.id)
+
+        bare = await self._receive(service, fixed_clock, event_id="resign-bare", biz_type="RESIGN")
+        await service.process_event(int(bare["id"]))
+
+        editor = rows.user(db_session, "edit-me", email=None)
+        updated = await self._receive(
+            service, fixed_clock, event_id="upd-1", biz_type="USER_UPDATE",
+            payload='{"name":"改名","mobile":"13800001111","email":"a@b.c","job_number":"E1"}',
+        )
+        upd = db_session.get(OrgSyncEvent, int(updated["id"]))
+        upd.subject_user_id = editor.id
+        db_session.flush()
+        await service.process_event(upd.id)
+        db_session.refresh(editor)
+        assert editor.nickname == "改名"
+        assert editor.email == "a@b.c"
+        assert editor.emp_no == "E1"
+        assert editor.mobile_hash
+
+        for event_id, subject, payload in (
+            ("upd-miss", 999992, "{}"),
+            ("upd-empty", editor.id, ""),
+            ("upd-none", None, "{}"),
+        ):
+            got = await self._receive(
+                service, fixed_clock, event_id=event_id, biz_type="USER_UPDATE", payload=payload or "{}",
+            )
+            event = db_session.get(OrgSyncEvent, int(got["id"]))
+            event.payload = payload
+            event.subject_user_id = subject
+            db_session.flush()
+            await service.process_event(event.id)
+
+    @pytest.mark.asyncio
+    async def test_transfer_and_departments(self, db_session, test_context, service, fixed_clock):
+        from app.domains.sys.models import Dept, OrgSyncEvent, User, UserDept
+
+        parent = rows.dept(db_session, "父部门", ding="ding-parent", source="DINGTALK")
+        child = rows.dept(db_session, "子部门", parent=parent, ding="ding-child", source="DINGTALK")
+        person = rows.user(db_session, "mover")
+        rows.link(db_session, person.id, parent.id, source="DINGTALK")
+
+        moved = await self._receive(
+            service, fixed_clock, event_id="xfer-1", biz_type="TRANSFER",
+            payload='{"dept_dingtalk_ids":["ding-child","ding-missing"]}',
+        )
+        event = db_session.get(OrgSyncEvent, int(moved["id"]))
+        event.subject_user_id = person.id
+        db_session.flush()
+        await service.process_event(event.id)
+        db_session.refresh(person)
+        assert person.main_dept_id == child.id
+        assert db_session.query(UserDept).filter(UserDept.user_id == person.id).count() == 1
+
+        for event_id, subject, payload in (
+            ("xfer-nodept", person.id, '{"dept_dingtalk_ids":["nope"]}'),
+            ("xfer-empty", person.id, '{"dept_dingtalk_ids":[]}'),
+            ("xfer-nopayload", person.id, ""),
+            ("xfer-miss", 999993, '{"dept_dingtalk_ids":["ding-child"]}'),
+            ("xfer-nosub", None, "{}"),
+        ):
+            got = await self._receive(
+                service, fixed_clock, event_id=event_id, biz_type="TRANSFER", payload=payload or "{}",
+            )
+            row = db_session.get(OrgSyncEvent, int(got["id"]))
+            row.payload = payload
+            row.subject_user_id = subject
+            db_session.flush()
+            await service.process_event(row.id)
+
+        created = await self._receive(
+            service, fixed_clock, event_id="dept-new", biz_type="DEPT_CREATE",
+            payload='{"dingtalk_dept_id":"ding-new","name":"新建","parent_dingtalk_id":"ding-parent"}',
+        )
+        await service.process_event(int(created["id"]))
+        created_dept = db_session.query(Dept).filter(Dept.dingtalk_dept_id == "ding-new").one()
+        assert created_dept.parent_id == parent.id
+        assert created_dept.path.endswith(f"{created_dept.id}/")
+
+        again = await self._receive(
+            service, fixed_clock, event_id="dept-again", biz_type="DEPT_CREATE",
+            payload='{"dingtalk_dept_id":"ding-new","name":"新建"}',
+        )
+        await service.process_event(int(again["id"]))
+
+        orphan = await self._receive(
+            service, fixed_clock, event_id="dept-orphan", biz_type="DEPT_CREATE",
+            payload='{"dept_id":"ding-orphan"}',
+        )
+        await service.process_event(int(orphan["id"]))
+
+        for event_id, payload in (
+            ("dept-nopayload", ""),
+            ("dept-noid", '{"name":"缺id"}'),
+        ):
+            got = await self._receive(
+                service, fixed_clock, event_id=event_id, biz_type="DEPT_CREATE", payload=payload or "{}",
+            )
+            row = db_session.get(OrgSyncEvent, int(got["id"]))
+            row.payload = payload
+            db_session.flush()
+            await service.process_event(row.id)
+
+        renamed = await self._receive(
+            service, fixed_clock, event_id="dept-ren", biz_type="DEPT_UPDATE",
+            payload='{"name":"父部门改名","parent_dingtalk_id":"ding-child"}',
+        )
+        ren = db_session.get(OrgSyncEvent, int(renamed["id"]))
+        ren.dept_id = parent.id
+        db_session.flush()
+        await service.process_event(ren.id)
+        db_session.refresh(parent)
+        assert parent.name == "父部门改名"
+        assert parent.parent_id == child.id
+
+        by_payload = await self._receive(
+            service, fixed_clock, event_id="dept-by-ding", biz_type="DEPT_UPDATE",
+            payload='{"dingtalk_dept_id":"ding-orphan","name":"孤儿改名"}',
+        )
+        await service.process_event(int(by_payload["id"]))
+
+        for event_id, dept_id, payload in (
+            ("dept-upd-miss", 999994, '{"name":"x"}'),
+            ("dept-upd-empty", parent.id, ""),
+            ("dept-upd-noid", None, '{"name":"x"}'),
+        ):
+            got = await self._receive(
+                service, fixed_clock, event_id=event_id, biz_type="DEPT_UPDATE", payload=payload or "{}",
+            )
+            row = db_session.get(OrgSyncEvent, int(got["id"]))
+            row.payload = payload
+            row.dept_id = dept_id
+            db_session.flush()
+            await service.process_event(row.id)
+
+        deleted = await self._receive(
+            service, fixed_clock, event_id="dept-del", biz_type="DEPT_DELETE", payload="{}",
+        )
+        dele = db_session.get(OrgSyncEvent, int(deleted["id"]))
+        dele.dept_id = created_dept.id
+        # Create stamps last_sync_at with the same clock, so an equal event_time is stale.
+        dele.event_time = fixed_clock + timedelta(seconds=1)
+        db_session.flush()
+        await service.process_event(dele.id)
+        db_session.refresh(created_dept)
+        assert created_dept.deleted == created_dept.id
+        assert created_dept.status == "DISABLED"
+
+        by_ding = await self._receive(
+            service, fixed_clock, event_id="dept-del-ding", biz_type="DEPT_DELETE",
+            payload='{"dept_id":"ding-orphan"}',
+        )
+        await service.process_event(int(by_ding["id"]))
+        gone = db_session.query(Dept).filter(Dept.dingtalk_dept_id == "ding-orphan").one()
+        assert gone.deleted == gone.id
+
+        for event_id, dept_id, payload in (
+            ("dept-del-gone", created_dept.id, "{}"),
+            ("dept-del-noid", None, '{"name":"x"}'),
+        ):
+            got = await self._receive(
+                service, fixed_clock, event_id=event_id, biz_type="DEPT_DELETE", payload=payload,
+            )
+            row = db_session.get(OrgSyncEvent, int(got["id"]))
+            row.dept_id = dept_id
+            row.payload = payload
+            db_session.flush()
+            await service.process_event(row.id)
+
+        unknown = await self._receive(
+            service, fixed_clock, event_id="biz-unknown", biz_type="OTHER",
+        )
+        assert (await service.process_event(int(unknown["id"])))["status"] == "SUCCESS"
+        assert db_session.query(User).filter(User.username == "mover").count() == 1
+
+
+class TestRemainingBranches:
+    """Cover the false side of checks the happy-path tests leave open."""
+
+    @pytest.mark.asyncio
+    async def test_page_filters_partial_updates_and_lookup_misses(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import Dept, OrgSyncEvent, UserMapping
+
+        bare = await service.receive_event(
+            tenant_id=1,
+            event_id="evt-no-time",
+            event_type="user_modify_org",
+            event_time=fixed_clock,
+            payload="not-json",
+            biz_type="HIRE",
+        )
+        row = db_session.get(OrgSyncEvent, int(bare["id"]))
+        row.event_time = None
+        db_session.flush()
+        assert (await service.process_event(row.id))["status"] == "SUCCESS"
+
+        listed = await service.receive_event(
+            tenant_id=1,
+            event_id="evt-list-filters",
+            event_type="user_leave_org",
+            event_time=fixed_clock,
+            payload="[1, 2]",
+            biz_type="HIRE",
+            dept_id=7,
+        )
+        listed_row = db_session.get(OrgSyncEvent, int(listed["id"]))
+        listed_row.processed_time = fixed_clock
+        db_session.flush()
+        await service.process_event(listed_row.id)
+        page = await service.get_events_page(
+            tenant_id=1,
+            dept_id=7,
+            event_types=["user_leave_org"],
+            start_time=fixed_clock - timedelta(minutes=1),
+            end_time=fixed_clock + timedelta(minutes=1),
+            sort_by="processedTime",
+            sort_order="asc",
+        )
+        assert page["total"] == 1
+
+        with pytest.raises(BizError) as span:
+            await service.get_replay_preview(
+                1, fixed_clock - timedelta(days=8), fixed_clock, ["DEAD"],
+            )
+        assert span.value.code == 1001
+        with pytest.raises(BizError):
+            await service.get_replay_preview(
+                1, fixed_clock - timedelta(hours=1), fixed_clock, [],
+            )
+
+        retrying = await service.receive_event(
+            tenant_id=1,
+            event_id="evt-replay-retrying",
+            event_type="user_add_org",
+            event_time=fixed_clock,
+            payload="{}",
+        )
+        retrying_row = db_session.get(OrgSyncEvent, int(retrying["id"]))
+        retrying_row.status = "RETRYING"
+        retrying_row.retry_count = 2
+        db_session.flush()
+        replayed = await service.replay_events(
+            tenant_id=1,
+            start_time=fixed_clock - timedelta(hours=1),
+            end_time=fixed_clock + timedelta(hours=1),
+            statuses=["RETRYING"],
+        )
+        assert replayed["count"] == 1
+        db_session.refresh(retrying_row)
+        assert retrying_row.retry_count == 2
+        assert retrying_row.status == "PENDING"
+
+        editor = rows.user(db_session, "partial-edit")
+        updated = await service.receive_event(
+            tenant_id=1,
+            event_id="upd-blank",
+            event_type="user_modify_org",
+            event_time=fixed_clock,
+            payload="{}",
+            biz_type="USER_UPDATE",
+        )
+        upd = db_session.get(OrgSyncEvent, int(updated["id"]))
+        upd.subject_user_id = editor.id
+        db_session.flush()
+        await service.process_event(upd.id)
+
+        resigned = rows.user(db_session, "already-gone", status="RESIGNED")
+        resign = await service.receive_event(
+            tenant_id=1,
+            event_id="resign-again",
+            event_type="user_leave_org",
+            event_time=fixed_clock,
+            payload="{}",
+            biz_type="RESIGN",
+        )
+        resign_row = db_session.get(OrgSyncEvent, int(resign["id"]))
+        resign_row.subject_user_id = resigned.id
+        db_session.flush()
+        await service.process_event(resign_row.id)
+
+        parent = rows.dept(db_session, "对照父", ding="ding-keep", source="DINGTALK")
+        child = rows.dept(db_session, "对照子", parent=parent, ding="ding-keep-child", source="DINGTALK")
+        mover = rows.user(db_session, "mapped-mover")
+        rows.add(db_session, UserMapping(
+            tenant_id=1, user_id=mover.id, dingtalk_user_id="dt-mapped-mover",
+        ))
+        moved = await service.receive_event(
+            tenant_id=1,
+            event_id="xfer-mapped",
+            event_type="user_modify_org",
+            event_time=fixed_clock,
+            payload='{"dept_dingtalk_ids":["ding-keep-child"]}',
+            biz_type="TRANSFER",
+        )
+        moved_row = db_session.get(OrgSyncEvent, int(moved["id"]))
+        moved_row.subject_user_id = mover.id
+        db_session.flush()
+        await service.process_event(moved_row.id)
+
+        created = await service.receive_event(
+            tenant_id=1,
+            event_id="dept-no-parent",
+            event_type="org_dept_create",
+            event_time=fixed_clock,
+            payload='{"dingtalk_dept_id":"ding-rootish","name":"无父","parent_dingtalk_id":"missing-parent"}',
+            biz_type="DEPT_CREATE",
+        )
+        await service.process_event(int(created["id"]))
+        rootish = db_session.query(Dept).filter(Dept.dingtalk_dept_id == "ding-rootish").one()
+        assert rootish.parent_id == 0
+
+        same = await service.receive_event(
+            tenant_id=1,
+            event_id="dept-same",
+            event_type="org_dept_modify",
+            event_time=fixed_clock,
+            payload='{"name":"对照子","parent_dingtalk_id":"ding-keep"}',
+            biz_type="DEPT_UPDATE",
+        )
+        same_row = db_session.get(OrgSyncEvent, int(same["id"]))
+        same_row.dept_id = child.id
+        db_session.flush()
+        await service.process_event(same_row.id)
+        db_session.refresh(child)
+        assert child.name == "对照子"
+        assert child.parent_id == parent.id
+
+        for event_id, payload in (
+            ("dept-upd-nobody", ""),
+            ("dept-upd-unknown", '{"dingtalk_dept_id":"no-dept","name":"x"}'),
+        ):
+            got = await service.receive_event(
+                tenant_id=1,
+                event_id=event_id,
+                event_type="org_dept_modify",
+                event_time=fixed_clock,
+                payload=payload or "{}",
+                biz_type="DEPT_UPDATE",
+            )
+            event = db_session.get(OrgSyncEvent, int(got["id"]))
+            event.payload = payload
+            event.dept_id = None
+            db_session.flush()
+            await service.process_event(event.id)
+
+        for event_id, payload in (
+            ("dept-del-nobody", ""),
+            ("dept-del-unknown", '{"dingtalk_dept_id":"no-dept"}'),
+        ):
+            got = await service.receive_event(
+                tenant_id=1,
+                event_id=event_id,
+                event_type="org_dept_remove",
+                event_time=fixed_clock,
+                payload=payload or "{}",
+                biz_type="DEPT_DELETE",
+            )
+            event = db_session.get(OrgSyncEvent, int(got["id"]))
+            event.payload = payload
+            event.dept_id = None
+            db_session.flush()
+            await service.process_event(event.id)
+
+    @pytest.mark.asyncio
+    async def test_process_failure_becomes_retrying_then_dead(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import OrgSyncEvent
+
+        received = await service.receive_event(
+            tenant_id=1,
+            event_id="evt-boom",
+            event_type="user_add_org",
+            event_time=None,
+            payload="{}",
+        )
+        event_id = int(received["id"])
+
+        async def boom(_event):
+            raise RuntimeError("boom")
+
+        service._apply_event = boom
+        with pytest.raises(RuntimeError):
+            await service.process_event(event_id)
+        row = db_session.get(OrgSyncEvent, event_id)
+        assert row.status == "RETRYING"
+
+        row.retry_count = MAX_RETRIES - 1
+        db_session.flush()
+        with pytest.raises(RuntimeError):
+            await service.process_event(event_id)
+        db_session.refresh(row)
+        assert row.status == "DEAD"
+
+    @pytest.mark.asyncio
+    async def test_retry_missing_and_apply_failure(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import OrgSyncEvent
+
+        with pytest.raises(BizError) as missing:
+            await service.retry_event(999999)
+        assert missing.value.code == 1504
+
+        received = await service.receive_event(
+            tenant_id=1,
+            event_id="evt-retry-blank-time",
+            event_type="user_add_org",
+            event_time=fixed_clock,
+            payload="{}",
+        )
+        row = db_session.get(OrgSyncEvent, int(received["id"]))
+        row.status = "RETRYING"
+        row.event_time = None
+        db_session.flush()
+        result = await service.retry_event(row.id)
+        assert result["status"] == "SUCCESS"
+
+        failed = await service.receive_event(
+            tenant_id=1,
+            event_id="evt-retry-boom",
+            event_type="user_add_org",
+            event_time=fixed_clock,
+            payload="{}",
+        )
+        failed_row = db_session.get(OrgSyncEvent, int(failed["id"]))
+        failed_row.status = "RETRYING"
+        failed_row.retry_count = MAX_RETRIES - 1
+        db_session.flush()
+
+        async def boom(_event):
+            raise RuntimeError("retry-boom")
+
+        service._apply_event = boom
+        with pytest.raises(RuntimeError):
+            await service.retry_event(failed_row.id)

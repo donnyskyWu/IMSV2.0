@@ -289,6 +289,7 @@ class TestPermVersionInvalidation:
             parent_id=0,
             path="/test",
             name="Test Menu",
+            type="MENU",
             perm_code="test:perm:code",
             status="ENABLED",
         )
@@ -359,6 +360,7 @@ class TestPermVersionInvalidation:
             parent_id=0,
             path="/grant-test",
             name="Grant Test Menu",
+            type="MENU",
             perm_code="grant:test:perm",
             status="ENABLED",
         )
@@ -403,6 +405,7 @@ class TestPermVersionInvalidation:
             parent_id=0,
             path="/revoke-test",
             name="Revoke Test Menu",
+            type="MENU",
             perm_code="revoke:test:perm",
             status="ENABLED",
         )
