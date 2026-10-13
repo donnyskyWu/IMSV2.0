@@ -11,7 +11,7 @@ Implements:
 - User detail (org sync view)
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -29,62 +29,62 @@ router = APIRouter(prefix="/org", tags=["Organization Sync"])
 class SyncMetricsResponse(BaseSchema):
     """Sync metrics response."""
 
-    userTotal: int
-    yesterdayEventCount: int
-    pendingEventCount: int
-    deadEventCount: int
-    avgDelayMinutes: float
-    p95DelayMinutes: float
-    successRate24h: float
-    dingtalkUnavailable: bool
-    reconcileFailedTwice: bool
+    user_total: int
+    yesterday_event_count: int
+    pending_event_count: int
+    dead_event_count: int
+    avg_delay_minutes: float
+    p95_delay_minutes: float
+    success_rate_24h: float
+    dingtalk_unavailable: bool
+    reconcile_failed_twice: bool
 
 
 class DiffSummaryResponse(BaseSchema):
     """Diff summary response."""
 
-    overrideCount: int
-    pendingAssignCount: int
-    localOrphanCount: int
-    sameNameCount: int
-    unboundCount: int
+    override_count: int
+    pending_assign_count: int
+    local_orphan_count: int
+    same_name_count: int
+    unbound_count: int
 
 
 class EventListItem(BaseSchema):
     """Event list item."""
 
     id: str
-    eventType: Optional[str] = None
-    eventId: str
-    subjectName: Optional[str] = None
-    empNo: Optional[str] = None
-    beforeDeptNames: Optional[str] = None
-    afterDeptNames: Optional[str] = None
+    event_type: Optional[str] = None
+    event_id: str
+    subject_name: Optional[str] = None
+    emp_no: Optional[str] = None
+    before_dept_names: Optional[str] = None
+    after_dept_names: Optional[str] = None
     status: str
-    retryCount: int
-    eventTime: Optional[str] = None
-    processedTime: Optional[str] = None
+    retry_count: int
+    event_time: Optional[str] = None
+    processed_time: Optional[str] = None
 
 
 class EventDetailResponse(BaseSchema):
     """Event detail response."""
 
     id: str
-    eventId: str
-    eventType: Optional[str] = None
-    bizType: Optional[str] = None
-    subjectUserId: Optional[str] = None
-    subjectName: Optional[str] = None
-    deptId: Optional[str] = None
-    beforeDeptNames: Optional[str] = None
-    afterDeptNames: Optional[str] = None
+    event_id: str
+    event_type: Optional[str] = None
+    biz_type: Optional[str] = None
+    subject_user_id: Optional[str] = None
+    subject_name: Optional[str] = None
+    dept_id: Optional[str] = None
+    before_dept_names: Optional[str] = None
+    after_dept_names: Optional[str] = None
     status: str
-    retryCount: int
-    lastError: Optional[str] = None
-    eventTime: Optional[str] = None
-    receivedTime: Optional[str] = None
-    processedTime: Optional[str] = None
-    delaySeconds: Optional[int] = None
+    retry_count: int
+    last_error: Optional[str] = None
+    event_time: Optional[str] = None
+    received_time: Optional[str] = None
+    processed_time: Optional[str] = None
+    delay_seconds: Optional[int] = None
     payload: Optional[str] = None
     attempts: list = []
 
@@ -98,8 +98,8 @@ class ReplayPreviewResponse(BaseSchema):
 class ReplayRequest(BaseSchema):
     """Replay request."""
 
-    startTime: str
-    endTime: str
+    start_time: str
+    end_time: str
     statuses: list[str]
 
 
@@ -107,19 +107,19 @@ class ReconcileBatchItem(BaseSchema):
     """Reconcile batch item."""
 
     id: str
-    triggerType: Optional[str] = None
+    trigger_type: Optional[str] = None
     status: str
-    startedAt: Optional[str] = None
-    completedAt: Optional[str] = None
-    diffCount: int = 0
-    fixedCount: int = 0
-    failReason: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    diff_count: int = 0
+    fixed_count: int = 0
+    fail_reason: Optional[str] = None
 
 
 class ReconcileResponse(BaseSchema):
     """Reconcile response."""
 
-    batchId: str
+    batch_id: str
     status: str
 
 
@@ -128,19 +128,19 @@ class UserDetailResponse(BaseSchema):
 
     id: str
     nickname: str
-    empNo: Optional[str] = None
+    emp_no: Optional[str] = None
     username: str
     status: str
-    mainDeptName: Optional[str] = None
-    deptNames: list[str] = []
-    positionLabel: Optional[str] = None
-    dingtalkBound: bool
-    lastSyncTime: Optional[str] = None
+    main_dept_name: Optional[str] = None
+    dept_names: list[str] = []
+    position_label: Optional[str] = None
+    dingtalk_bound: bool
+    last_sync_time: Optional[str] = None
     source: str
     roles: list = []
-    dataScopeText: Optional[str] = None
-    menuCount: int = 0
-    recentEvents: list = []
+    data_scope_text: Optional[str] = None
+    menu_count: int = 0
+    recent_events: list = []
 
 
 @router.get(
@@ -167,9 +167,8 @@ async def get_sync_metrics() -> CommonResult[SyncMetricsResponse]:
 )
 async def get_diff_summary() -> CommonResult[DiffSummaryResponse]:
     """Get diff summary counts."""
-    from app.domains.sys.models import ChangeLog, Dept, User, UserMapping
-
     from app.db.session import get_db_session
+    from app.domains.sys.models import ChangeLog, Dept, User, UserMapping
 
     session = get_db_session()
     tenant_id = ctx.tenant_id
@@ -212,7 +211,7 @@ async def get_diff_summary() -> CommonResult[DiffSummaryResponse]:
         session.query(Dept)
         .filter(
             Dept.tenant_id == tenant_id,
-            Dept.local_orphan == True,
+            Dept.local_orphan.is_(True),
             Dept.deleted == 0,
         )
         .count()
@@ -251,15 +250,15 @@ async def get_diff_summary() -> CommonResult[DiffSummaryResponse]:
 )
 async def get_events(
     keyword: Optional[str] = Query(None, max_length=50),
-    deptId: Optional[str] = Query(None),
-    eventTypes: Optional[str] = Query(None),
+    dept_id: Optional[str] = Query(None, alias="deptId"),
+    event_types: Optional[str] = Query(None, alias="eventTypes"),
     statuses: Optional[str] = Query(None),
-    startTime: Optional[str] = Query(None),
-    endTime: Optional[str] = Query(None),
-    sortBy: str = Query("eventTime"),
-    sortOrder: str = Query("desc"),
-    pageNo: int = Query(1, ge=1),
-    pageSize: int = Query(10, ge=1, le=100),
+    start_time: Optional[str] = Query(None, alias="startTime"),
+    end_time: Optional[str] = Query(None, alias="endTime"),
+    sort_by: str = Query("eventTime", alias="sortBy"),
+    sort_order: str = Query("desc", alias="sortOrder"),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
 ) -> CommonResult:
     """Get paginated event list."""
     from app.core.clock import parse_datetime
@@ -267,39 +266,29 @@ async def get_events(
 
     tenant_id = ctx.tenant_id
 
-    start = None
-    end = None
-
-    if startTime:
-        start = parse_datetime(startTime)
-    else:
-        start = get_now() - timedelta(days=7)
-
-    if endTime:
-        end = parse_datetime(endTime)
-    else:
-        end = get_now()
+    start = parse_datetime(start_time) if start_time else get_now() - timedelta(days=7)
+    end = parse_datetime(end_time) if end_time else get_now()
 
     if (end - start).days > 90:
         raise BizError(1001, msg="时间范围不能超过90天")
 
-    event_type_list = eventTypes.split(",") if eventTypes else None
+    event_type_list = event_types.split(",") if event_types else None
     status_list = statuses.split(",") if statuses else None
-    dept_id_int = int(deptId) if deptId else None
+    dept_id_int = int(dept_id) if dept_id else None
 
     service = OrgSyncEventService()
     result = await service.get_events_page(
         tenant_id=tenant_id,
-        page_no=pageNo,
-        page_size=pageSize,
+        page_no=page_no,
+        page_size=page_size,
         keyword=keyword,
         dept_id=dept_id_int,
         event_types=event_type_list,
         statuses=status_list,
         start_time=start,
         end_time=end,
-        sort_by=sortBy,
-        sort_order=sortOrder,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
     return CommonResult.success(data=result)
@@ -349,8 +338,8 @@ async def retry_event(id: str) -> CommonResult:
     dependencies=[Depends(require_permission("ims:system:org-sync:run"))],
 )
 async def get_replay_preview(
-    startTime: str = Query(...),
-    endTime: str = Query(...),
+    start_time: str = Query(..., alias="startTime"),
+    end_time: str = Query(..., alias="endTime"),
     statuses: str = Query(...),
 ) -> CommonResult[ReplayPreviewResponse]:
     """Preview replay count."""
@@ -359,8 +348,8 @@ async def get_replay_preview(
 
     tenant_id = ctx.tenant_id
 
-    start = parse_datetime(startTime)
-    end = parse_datetime(endTime)
+    start = parse_datetime(start_time)
+    end = parse_datetime(end_time)
     status_list = statuses.split(",")
 
     service = OrgSyncEventService()
@@ -410,17 +399,16 @@ async def replay_events(request: ReplayRequest) -> CommonResult:
     dependencies=[Depends(require_permission("ims:system:org-sync:query"))],
 )
 async def get_reconcile_batches(
-    startTime: Optional[str] = Query(None),
-    endTime: Optional[str] = Query(None),
-    triggerTypes: Optional[str] = Query(None),
+    start_time: Optional[str] = Query(None, alias="startTime"),
+    end_time: Optional[str] = Query(None, alias="endTime"),
+    trigger_types: Optional[str] = Query(None, alias="triggerTypes"),
     statuses: Optional[str] = Query(None),
-    pageNo: int = Query(1, ge=1),
-    pageSize: int = Query(10, ge=1, le=100),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
 ) -> CommonResult:
     """Get paginated reconcile batch list."""
-    from app.domains.sys.models import OrgSyncBatch
-
     from app.db.session import get_db_session
+    from app.domains.sys.models import OrgSyncBatch
 
     session = get_db_session()
     tenant_id = ctx.tenant_id
@@ -434,13 +422,13 @@ async def get_reconcile_batches(
         status_list = statuses.split(",")
         query = query.filter(OrgSyncBatch.status.in_(status_list))
 
-    if triggerTypes:
-        trigger_list = triggerTypes.split(",")
+    if trigger_types:
+        trigger_list = trigger_types.split(",")
         query = query.filter(OrgSyncBatch.trigger_type.in_(trigger_list))
 
     total = query.count()
-    offset = (pageNo - 1) * pageSize
-    batches = query.order_by(OrgSyncBatch.id.desc()).offset(offset).limit(pageSize).all()
+    offset = (page_no - 1) * page_size
+    batches = query.order_by(OrgSyncBatch.id.desc()).offset(offset).limit(page_size).all()
 
     items = [
         {
@@ -460,8 +448,8 @@ async def get_reconcile_batches(
         data={
             "total": total,
             "list": items,
-            "pageNo": pageNo,
-            "pageSize": pageSize,
+            "pageNo": page_no,
+            "pageSize": page_size,
         }
     )
 
@@ -474,9 +462,8 @@ async def get_reconcile_batches(
 )
 async def get_reconcile_batch_detail(id: str) -> CommonResult:
     """Get reconcile batch detail."""
-    from app.domains.sys.models import OrgSyncBatch
-
     from app.db.session import get_db_session
+    from app.domains.sys.models import OrgSyncBatch
 
     session = get_db_session()
     tenant_id = ctx.tenant_id
@@ -521,13 +508,12 @@ async def get_reconcile_batch_detail(id: str) -> CommonResult:
 async def get_reconcile_batch_items(
     id: str,
     result: Optional[str] = Query(None),
-    pageNo: int = Query(1, ge=1),
-    pageSize: int = Query(10, ge=1, le=100),
+    page_no: int = Query(1, alias="pageNo", ge=1),
+    page_size: int = Query(10, alias="pageSize", ge=1, le=100),
 ) -> CommonResult:
     """Get reconcile batch items."""
-    from app.domains.sys.models import OrgSyncBatchItem
-
     from app.db.session import get_db_session
+    from app.domains.sys.models import OrgSyncBatchItem
 
     session = get_db_session()
     tenant_id = ctx.tenant_id
@@ -542,8 +528,8 @@ async def get_reconcile_batch_items(
         query = query.filter(OrgSyncBatchItem.result == result)
 
     total = query.count()
-    offset = (pageNo - 1) * pageSize
-    items = query.order_by(OrgSyncBatchItem.id).offset(offset).limit(pageSize).all()
+    offset = (page_no - 1) * page_size
+    items = query.order_by(OrgSyncBatchItem.id).offset(offset).limit(page_size).all()
 
     return CommonResult.success(
         data={
@@ -563,8 +549,8 @@ async def get_reconcile_batch_items(
                 }
                 for item in items
             ],
-            "pageNo": pageNo,
-            "pageSize": pageSize,
+            "pageNo": page_no,
+            "pageSize": page_size,
         }
     )
 
@@ -577,9 +563,9 @@ async def get_reconcile_batch_items(
 )
 async def get_user_detail(id: str) -> CommonResult[UserDetailResponse]:
     """Get user detail for org sync view."""
+    from app.db.session import get_db_session
     from app.domains.sys.models import (
         Dept,
-        Menu,
         OrgSyncEvent,
         Role,
         RoleMenu,
@@ -588,8 +574,6 @@ async def get_user_detail(id: str) -> CommonResult[UserDetailResponse]:
         UserMapping,
         UserRole,
     )
-
-    from app.db.session import get_db_session
 
     session = get_db_session()
     tenant_id = ctx.tenant_id
