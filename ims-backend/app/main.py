@@ -185,6 +185,7 @@ def register_routes(app: FastAPI) -> None:
     from app.api.auth import router as auth_router
     from app.api.health import router as health_router
     from app.api.system import router as system_router
+    from app.api.train import router as train_router
 
     # Health check (anonymous)
     app.include_router(health_router)
@@ -194,6 +195,9 @@ def register_routes(app: FastAPI) -> None:
 
     # System routes (/admin-api/ims/system)
     app.include_router(system_router, prefix="/admin-api/ims/system", tags=["系统管理"])
+
+    # Training routes (/admin-api/ims/train) - B21 培训管理
+    app.include_router(train_router, prefix="/admin-api/ims/train", tags=["培训管理"])
 
     # Demo routes - test environment only (FP-B08-08)
     if settings.env == "test":
