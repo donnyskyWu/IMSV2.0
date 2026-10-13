@@ -11,6 +11,8 @@ Implements:
 - FP-D06-01: Current user info with menus/permissions
 """
 
+import math
+import re
 import secrets
 from datetime import datetime, timedelta
 from typing import Any, Optional
@@ -20,7 +22,7 @@ import bcrypt
 import jwt
 
 from app.core.cache import Cache
-from app.core.clock import get_now, parse_datetime
+from app.core.clock import BEIJING_TZ, get_now, parse_datetime
 from app.core.config import get_settings
 from app.core.context import DataScope, ctx
 from app.core.errors import BizError
@@ -30,6 +32,9 @@ settings = get_settings()
 
 # 租户停用 / 过期时登录和刷新都用这一句，避免两处文案或条件不一致。
 TENANT_UNAVAILABLE_MSG = "所属组织已停用"
+
+# 8～32 位，同时含字母和数字，允许特殊字符，不允许空白（工作包 Q7）。
+_PASSWORD_RULE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$")
 
 
 def reject_unavailable_tenant(tenant_id: int) -> None:
@@ -146,29 +151,15 @@ class AuthService:
 
     async def login(self, username: str, password: str) -> dict[str, Any]:
         """
-        Local username/password login.
+        账号密码登录（FP-D01-01、FP-B1-LG-02/03）。
 
-        Rules per FP-D01-01:
-        - User not exist or wrong password -> 1214
-        - 5 consecutive failures -> lock 15 minutes -> 1215
-        - FROZEN/RESIGNED -> 1216
-        - Tenant disabled/expired -> 1008
+        不存在和密码错误都是 1214。连续第 5 次失败返回 1215，并带 remainMinutes。
+        冻结、离职在密码正确之后才返回 1216。租户停用或过期仍走 reject_unavailable_tenant（1008）。
+        失败先提交锁定次数和登录日志，再把错误抛回；请求回滚不能把这次失败清掉。
         """
-        # Check lock status first (even for non-existent users)
         lock_key = f"{self.LOGIN_FAIL_PREFIX}{username}"
-        fail_data = Cache.get_json(lock_key)
+        self._reject_if_locked(lock_key, username)
 
-        if fail_data:
-            lock_until = fail_data.get("lock_until")
-            if lock_until:
-                now = get_now()
-                from datetime import datetime
-                lock_time = datetime.fromisoformat(lock_until)
-                if now < lock_time:
-                    remaining = int((lock_time - now).total_seconds() / 60) + 1
-                    raise BizError(1215, n=remaining)
-
-        # Find user
         from app.domains.sys.models import User
         session = get_db_session()
 
@@ -177,29 +168,43 @@ class AuthService:
             User.deleted == 0,
         ).first()
 
-        # Track failure for non-existent users too (prevent enumeration)
-        if user is None:
-            await self._record_login_failure(username)
+        # 没有密码（钉钉同步用户）和密码错误一样，不暴露账号是否存在。
+        if user is None or not _password_matches(user.password_hash, password):
+            fail_data = await self._record_login_failure(username)
+            self._apply_fail_count(user, fail_data)
+            self._persist()
+            if fail_data.get("lock_until"):
+                self._raise_locked(str(fail_data["lock_until"]))
             raise BizError(1214)
 
-        # Verify password
-        if not user.password_hash or not bcrypt.checkpw(
-            password.encode(), user.password_hash.encode()
-        ):
-            await self._record_login_failure(username)
-            raise BizError(1214)
-
-        # Check user status (after password check to not leak status)
+        # 密码已经对上，才告诉调用方账号不能登录。
         if user.status in ("FROZEN", "RESIGNED"):
+            await self._write_login_log(
+                user_id=user.id,
+                username=username,
+                method="PASSWORD",
+                result="DISABLED",
+                tenant_id=user.tenant_id,
+            )
+            self._persist()
             raise BizError(1216)
 
-        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。
-        reject_unavailable_tenant(user.tenant_id)
+        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。文案保持「所属组织已停用」。
+        try:
+            reject_unavailable_tenant(user.tenant_id)
+        except BizError:
+            await self._write_login_log(
+                user_id=user.id,
+                username=username,
+                method="PASSWORD",
+                result="DISABLED",
+                tenant_id=user.tenant_id,
+            )
+            self._persist()
+            raise
 
-        # Clear failure count
         Cache.delete(lock_key)
 
-        # Update login info
         now = get_now()
         user.last_login_time = now
         user.last_login_ip = ctx.current.client_ip if ctx.current_or_none else ""
@@ -207,46 +212,77 @@ class AuthService:
         user.lock_until = None
         session.flush()
 
-        # Create session and tokens
         session_id = str(uuid4())
         tokens = await self._create_tokens(user, session_id)
 
-        # Write login log
         await self._write_login_log(
             user_id=user.id,
             username=username,
             method="PASSWORD",
             result="SUCCESS",
+            tenant_id=user.tenant_id,
         )
 
         return {
             "access_token": tokens["access_token"],
             "refresh_token": tokens["refresh_token"],
             "expires_in": settings.jwt.access_token_ttl,
-            "pwd_reset_required": user.pwd_reset_required or False,
+            "pwd_reset_required": bool(user.pwd_reset_required),
         }
 
-    async def _record_login_failure(self, username: str) -> None:
-        """Record login failure and potentially lock account."""
+    def _reject_if_locked(self, lock_key: str, username: str) -> None:
+        """锁定期内直接 1215。过期则清掉计数，下一次失败从 1 开始。"""
+        fail_data = Cache.get_json(lock_key)
+        if not fail_data:
+            return
+        lock_until = fail_data.get("lock_until")
+        if not lock_until:
+            return
+        lock_time = parse_datetime(str(lock_until))
+        if get_now() < lock_time:
+            # 锁定期内的尝试也记一笔，不再累加次数。
+            self._write_login_log_sync(username=username, method="PASSWORD", result="LOCKED")
+            self._persist()
+            self._raise_locked(str(lock_until))
+        Cache.delete(lock_key)
+
+    def _raise_locked(self, lock_until: str) -> None:
+        minutes = _remain_minutes(parse_datetime(lock_until), get_now())
+        raise BizError(1215, n=minutes, data={"remainMinutes": minutes})
+
+    def _apply_fail_count(self, user: Any, fail_data: dict[str, Any]) -> None:
+        """把缓存里的失败次数写回用户行。用户不存在时只留缓存。"""
+        if user is None:
+            return
+        user.login_fail_count = int(fail_data.get("count", 0))
+        lock_until = fail_data.get("lock_until")
+        user.lock_until = _as_naive(parse_datetime(str(lock_until))) if lock_until else None
+        get_db_session().flush()
+
+    async def _record_login_failure(self, username: str) -> dict[str, Any]:
+        """失败次数 +1。到达阈值时写入锁定截止时间，并记登录日志。"""
         lock_key = f"{self.LOGIN_FAIL_PREFIX}{username}"
         fail_data = Cache.get_json(lock_key) or {"count": 0}
 
         fail_data["count"] = fail_data.get("count", 0) + 1
 
         if fail_data["count"] >= settings.lock.max_fail_count:
-            # Lock the account
             lock_until = get_now() + timedelta(minutes=settings.lock.lock_minutes)
             fail_data["lock_until"] = lock_until.isoformat()
-
-            # Write login log
             await self._write_login_log(
                 username=username,
                 method="PASSWORD",
                 result="LOCKED",
             )
+        else:
+            await self._write_login_log(
+                username=username,
+                method="PASSWORD",
+                result="BAD_CREDENTIAL",
+            )
 
-        # Store with 15 min TTL
         Cache.set_json(lock_key, fail_data, ttl=settings.lock.lock_minutes * 60)
+        return fail_data
 
     async def _create_tokens(self, user: Any, session_id: str) -> dict[str, str]:
         """Create access and refresh tokens."""
@@ -371,6 +407,15 @@ class AuthService:
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
             raise BizError(1002)
 
+        # 须改密标记以库里的当前值为准。用户行不存在时不在这里改 1002，
+        # 绝对 7 天和会话吊销仍按上面的会话键判断（#18）。
+        from app.domains.sys.models import User
+        account = get_db_session().query(User).filter(
+            User.id == user_id,
+            User.deleted == 0,
+        ).first()
+        pwd_reset_required = bool(account.pwd_reset_required) if account is not None else False
+
         # Get user permissions
         perm_data = await self._get_user_permissions(user_id)
 
@@ -378,6 +423,7 @@ class AuthService:
             "user_id": user_id,
             "tenant_id": tenant_id,
             "session_id": session_id,
+            "pwd_reset_required": pwd_reset_required,
             "perm_codes": perm_data.get("perm_codes", []),
             "data_scopes": perm_data.get("data_scopes", []),
             "dept_ids": perm_data.get("dept_ids", []),
@@ -757,16 +803,38 @@ class AuthService:
         # 目录节点带上库里的 path（例如权限管理 /ims/auth），与嵌套树一致。
         return _nest_menu_tree(menus)
 
+    async def change_own_password(
+        self,
+        user_id: int,
+        old_password: str,
+        new_password: str,
+        keep_session_id: str,
+    ) -> None:
+        """校验原密码和新密码规则后落库（FP-B1-PW-01）。"""
+        from app.domains.sys.models import User
+
+        session = get_db_session()
+        user = session.query(User).filter(User.id == user_id, User.deleted == 0).first()
+        if user is None:
+            raise BizError(1002)
+        if not _password_matches(user.password_hash, old_password):
+            raise BizError(1214)
+        _validate_new_password(old_password, new_password)
+        await self.change_password(user_id, new_password, keep_session_id)
+
     async def change_password(
         self, user_id: int, new_password: str, keep_session_id: str
     ) -> None:
-        """Change password and invalidate every session except the current one."""
+        """写入新密码，清掉须改密标记，并作废其他会话。当前会话保留。"""
         from app.domains.sys.models import User
         session = get_db_session()
         user = session.query(User).filter(User.id == user_id, User.deleted == 0).first()
         if user is None:
             raise BizError(1002)
-        user.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        # cost=10，与种子账号一致，改密不必比登录慢一个数量级。
+        user.password_hash = bcrypt.hashpw(
+            new_password.encode(), bcrypt.gensalt(rounds=10)
+        ).decode()
         user.token_version = (user.token_version or 0) + 1
         user.pwd_reset_required = False
         sessions_key = f"{self.USER_SESSIONS_PREFIX}{user_id}"
@@ -813,10 +881,55 @@ class AuthService:
         username: str = "",
         method: str = "PASSWORD",
         result: str = "SUCCESS",
+        tenant_id: Optional[int] = None,
     ) -> None:
-        """Write login log entry."""
-        # TODO: Implement login log writing
-        pass
+        """写入登录日志。渠道用已有 login_method，失败原因用 result。"""
+        self._write_login_log_sync(
+            user_id=user_id,
+            username=username,
+            method=method,
+            result=result,
+            tenant_id=tenant_id,
+        )
+
+    def _write_login_log_sync(
+        self,
+        user_id: Optional[int] = None,
+        username: str = "",
+        method: str = "PASSWORD",
+        result: str = "SUCCESS",
+        tenant_id: Optional[int] = None,
+    ) -> None:
+        """同步写登录日志，供锁定期内的同步分支调用。不新增列。"""
+        from app.domains.sys.models import LoginLog
+
+        current = ctx.current_or_none
+        if tenant_id is not None:
+            resolved_tenant = tenant_id
+        elif current is not None and current.tenant_id:
+            resolved_tenant = current.tenant_id
+        else:
+            resolved_tenant = 1
+        ip = ""
+        agent = ""
+        if current is not None:
+            ip = current.client_ip or ""
+            agent = (current.user_agent or "")[:500]
+        log = LoginLog(
+            tenant_id=resolved_tenant,
+            username=username or "",
+            user_id=user_id,
+            login_method=method,
+            result=result,
+            ip=ip,
+            user_agent=agent,
+        )
+        get_db_session().add(log)
+        get_db_session().flush()
+
+    def _persist(self) -> None:
+        """失败登录先提交。请求若再抛错，依赖层回滚的是提交之后的空事务。"""
+        get_db_session().commit()
 
     async def get_dingtalk_redirect_url(self, redirect: str) -> str:
         """Get DingTalk SSO redirect URL."""
@@ -859,3 +972,36 @@ class AuthService:
         # TODO: Call DingTalk adapter
 
         raise BizError(1217)  # Placeholder - no match found
+
+
+def _password_matches(password_hash: Optional[str], password: str) -> bool:
+    """空哈希或坏哈希都当作密码不匹配，避免抛出库异常。"""
+    if not password_hash:
+        return False
+    try:
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
+    except ValueError:
+        return False
+
+
+def _validate_new_password(old_password: str, new_password: str) -> None:
+    """新密码规则。文案与前端改密页一致，错误码用 1001。"""
+    if re.search(r"\s", new_password):
+        raise BizError(1001, msg="密码不能包含空格")
+    if _PASSWORD_RULE.fullmatch(new_password) is None:
+        raise BizError(1001, msg="密码需 8～32 位，且同时包含字母和数字")
+    if new_password == old_password:
+        raise BizError(1001, msg="新密码不能与当前密码相同")
+
+
+def _remain_minutes(lock_time: datetime, now: datetime) -> int:
+    """剩余分钟向上取整。刚锁定 15 分钟时返回 15，不足 1 分钟时返回 1。"""
+    seconds = (lock_time - now).total_seconds()
+    return max(1, math.ceil(seconds / 60))
+
+
+def _as_naive(value: datetime) -> datetime:
+    """库存 DATETIME 不带时区，写入先换成北京时间的朴素时间。"""
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(BEIJING_TZ).replace(tzinfo=None)

@@ -20,10 +20,17 @@ Rules per FP-D03-02:
 
 from typing import Callable, Optional
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 
 from app.core.context import RequestContext, ctx
 from app.core.errors import BizError
+
+# 强制改密期间允许的接口（FP-D01-02、FP-B1-PW-01）。
+PWD_RESET_ALLOWED_PATHS = {
+    "/admin-api/ims/auth/password/change",
+    "/admin-api/ims/auth/logout",
+    "/admin-api/ims/auth/me",
+}
 
 
 async def get_token_from_header(
@@ -52,7 +59,8 @@ async def get_current_user_optional(
     try:
         user_info = await auth_service.verify_token(token)
 
-        # Update context with user info
+        # 保留中间件写好的追踪号、IP 和 UA，再补上令牌里的用户。
+        current = ctx.current_or_none
         context = RequestContext(
             trace_id=ctx.trace_id,
             user_id=user_info["user_id"],
@@ -61,7 +69,10 @@ async def get_current_user_optional(
             data_scopes=user_info.get("data_scopes", []),
             dept_ids=user_info.get("dept_ids", []),
             ip_group_ids=user_info.get("ip_group_ids", []),
-            client_ip=ctx.current.client_ip if ctx.current_or_none else "",
+            client_ip=current.client_ip if current else "",
+            user_agent=current.user_agent if current else "",
+            session_id=str(user_info.get("session_id", "")),
+            pwd_reset_required=bool(user_info.get("pwd_reset_required")),
         )
         ctx.set(context)
 
@@ -100,6 +111,16 @@ async def require_login(
     # Could add tenant status check here
 
     return user_id
+
+
+async def enforce_password_reset(request: Request) -> None:
+    """须改密的用户只能改密、退出、查看自己的信息，其余接口返回 1008。"""
+    current = ctx.current_or_none
+    if current is None or not current.pwd_reset_required:
+        return
+    path = request.url.path.rstrip("/") or "/"
+    if path not in PWD_RESET_ALLOWED_PATHS:
+        raise BizError(1008)
 
 
 def require_permission(perm_code: str) -> Callable:
