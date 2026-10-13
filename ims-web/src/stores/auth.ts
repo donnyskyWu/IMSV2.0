@@ -215,11 +215,19 @@ export const useAuthStore = defineStore('auth', () => {
         'ims:demo:order:create',
         'ims:demo:order:update',
         'ims:demo:order:delete',
+        'ims:workbench:query',
       ],
       dataScopeText: '全部',
     }
     const narrow = sessionStorage.getItem('ims_menu_profile') === 'narrow'
     menus.value = [
+      {
+        id: '0',
+        name: '个人工作台',
+        icon: 'HomeFilled',
+        path: '/ims/workbench',
+        permCode: 'ims:workbench:query',
+      },
       {
         id: '1',
         name: '示例',
@@ -251,6 +259,7 @@ export const useAuthStore = defineStore('auth', () => {
       'ims:demo:order:create',
       'ims:demo:order:update',
       'ims:demo:order:delete',
+      'ims:workbench:query',
     ]
   }
 
