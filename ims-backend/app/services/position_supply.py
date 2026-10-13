@@ -60,6 +60,7 @@ class PositionSupplyService:
             UserRole.user_id == user_id,
             UserRole.tenant_id == tenant_id,
         ).all()
+        roles_removed = False
         for link in current_links:
             if link.source != "DINGTALK_AUTO" or link.manual_removed:
                 continue
@@ -67,12 +68,18 @@ class PositionSupplyService:
             if linked is None or linked.position_code == position_code:
                 continue
             session.delete(link)
+            roles_removed = True
         session.flush()
+        
+        if roles_removed:
+            from app.services.auth import AuthService
+            AuthService.bump_user_perm_version(user_id)
 
         existing = session.query(UserRole).filter(
             UserRole.user_id == user_id,
             UserRole.role_id == role.id,
         ).first()
+        role_changed = False
         if existing is None:
             link = UserRole(
                 tenant_id=tenant_id,
@@ -83,9 +90,14 @@ class PositionSupplyService:
             )
             assign_pk(session, link)
             session.add(link)
+            role_changed = True
         elif existing.manual_removed:
             pass
         session.flush()
+        
+        if role_changed:
+            from app.services.auth import AuthService
+            AuthService.bump_user_perm_version(user_id)
 
         log = ChangeLog(
             tenant_id=tenant_id,

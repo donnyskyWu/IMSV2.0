@@ -11,7 +11,7 @@ import EmptyState from '@/components/list/EmptyState.vue'
 import DetailDrawer from '@/components/form/DetailDrawer.vue'
 import { toast } from '@/utils/toast'
 import { useResponsive } from '@/utils/responsive'
-import { fmtDateTime } from '@/utils/format'
+import { fmtTime } from '@/utils/format'
 import { orgSyncApi } from '@/api/orgSync'
 import type { SyncMetrics, SyncEvent, DiffSummary } from '@/api/orgSync'
 import type { EmptyType } from '@/types'
@@ -403,12 +403,12 @@ watch(eventPageSize, () => {
               <el-table-column prop="retryCount" label="重试" width="80" align="center" />
               <el-table-column prop="eventTime" label="事件时间" width="160">
                 <template #default="{ row }">
-                  {{ row.eventTime ? fmtDateTime(row.eventTime) : '-' }}
+                  {{ row.eventTime ? fmtTime(row.eventTime) : '-' }}
                 </template>
               </el-table-column>
               <el-table-column prop="processedTime" label="处理时间" width="160">
                 <template #default="{ row }">
-                  {{ row.processedTime ? fmtDateTime(row.processedTime) : '-' }}
+                  {{ row.processedTime ? fmtTime(row.processedTime) : '-' }}
                 </template>
               </el-table-column>
               <el-table-column label="操作" :width="isMobile ? 72 : 140" fixed="right">
@@ -508,7 +508,7 @@ watch(eventPageSize, () => {
                 {{ attempt.result === 'SUCCESS' ? '成功' : '失败' }}
               </span>
             </div>
-            <div class="timeline-time">{{ fmtDateTime(attempt.start_time) }}</div>
+            <div class="timeline-time">{{ fmtTime(attempt.start_time) }}</div>
             <div v-if="attempt.error_msg" class="timeline-error">{{ attempt.error_msg }}</div>
           </div>
           <div v-if="!detailEvent.attempts?.length" class="empty-timeline">暂无处理记录</div>

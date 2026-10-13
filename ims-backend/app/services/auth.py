@@ -433,12 +433,21 @@ class AuthService:
         }
 
     async def _get_user_permissions(self, user_id: int) -> dict[str, Any]:
-        """Get user's permission codes and data scopes."""
-        # Try cache first
+        """Get user's permission codes and data scopes.
+        
+        Uses version-based cache invalidation (FP-D03-04):
+        - Cache stores perm_ver at write time
+        - On read, compare cached version vs current Redis version
+        - If mismatch (or no cached version), reload from DB
+        """
         cache_key = f"{self.PERM_CACHE_PREFIX}{user_id}"
         cached = Cache.get_json(cache_key)
+        
         if cached:
-            return cached
+            cached_ver = cached.get("_perm_ver", 0)
+            current_ver = self.get_user_perm_version(user_id)
+            if cached_ver == current_ver:
+                return cached
 
         # Load from database
         from app.domains.sys.models import Menu, Role, RoleMenu, UserDept, UserRole
@@ -485,11 +494,13 @@ class AuthService:
         # Get user's IP group IDs (if applicable)
         ip_group_ids = []  # TODO: Load from IP group member table
 
+        current_ver = self.get_user_perm_version(user_id)
         result = {
             "perm_codes": list(perm_codes),
             "data_scopes": [{"scope_type": ds.scope_type, "role_id": ds.role_id} for ds in data_scopes],
             "dept_ids": dept_ids,
             "ip_group_ids": ip_group_ids,
+            "_perm_ver": current_ver,
         }
 
         # Cache for 30 minutes

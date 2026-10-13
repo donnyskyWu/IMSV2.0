@@ -91,9 +91,14 @@ def revoke_menu(role_id: int, menu_id: int) -> None:
 
 
 def _drop_cache(session: Any, role_id: int) -> None:
+    """Bump perm version for all users with this role (FP-D03-04).
+    
+    Uses version-based invalidation instead of Cache.delete.
+    When permissions are read, the version is compared and cache is
+    reloaded if mismatched.
+    """
     from app.domains.sys.models import UserRole
     from app.services.auth import AuthService
 
-    prefix = AuthService.PERM_CACHE_PREFIX
     for link in session.query(UserRole).filter(UserRole.role_id == role_id).all():
-        Cache.delete(f"{prefix}{link.user_id}")
+        AuthService.bump_user_perm_version(link.user_id)
