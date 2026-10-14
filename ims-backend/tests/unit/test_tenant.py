@@ -131,7 +131,7 @@ class TestTenantExpiration:
             assert response.status_code == 200
             body = response.json()
             assert body["code"] == 1008, body
-            assert body["msg"] == "所属组织已停用"
+            assert body["msg"] == "所属组织已停用，请联系管理员"
 
         with TestClient(app) as client:
             # 未过期、仍启用时可以登录，证明拦的是后来的停用 / 过期，不是用户本身。

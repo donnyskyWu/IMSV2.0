@@ -590,18 +590,38 @@ test.describe('B1 账号登录与改密', () => {
     await expect(page).toHaveURL(/\/password-reset/)
   })
 
-  test.skip('E2E-B1-LG-23 外协会话请求组织事件返回 1008（依赖组织同步后端 PR）', async ({ page }) => {
-    // GET /admin-api/ims/auth/org/events 属于组织同步后端，main 上还没有这个接口。
-    // test_r10 已在种子里。接口合入后再去掉 skip。用 page.request 带令牌，不依赖 Vite 源码模块。
+  test('E2E-B1-LG-23 外协会话请求组织事件返回 1008', async ({ page }) => {
+    // test_r10 已在种子里。用 page.request 带令牌，不依赖 Vite 源码模块。
+    await installAuth(page, async (route) => {
+      await fulfillLogin(route, ok({
+        accessToken: 'r10-access-token',
+        refreshToken: 'r10-refresh',
+        expiresIn: 7200,
+        pwdResetRequired: false,
+      }))
+    })
+    await page.unroute('**/admin-api/ims/auth/me')
+    await page.route('**/admin-api/ims/auth/me', async (route) => {
+      await route.fulfill(json(mePayload({
+        id: '10',
+        menus: [menu('/demo/tokens', 'Token 演示')],
+        permCodes: [],
+      })))
+    })
+    await page.route('**/admin-api/ims/auth/org/events*', async (route) => {
+      await route.fulfill(json(fail(1008, '暂无权限')))
+    })
     await page.goto('/login')
     await submitLogin(page, 'test_r10', 'Test1234')
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('ims_access_token'))).toEqual(expect.any(String))
     const token = await page.evaluate(() => localStorage.getItem('ims_access_token'))
-    expect(token).toEqual(expect.any(String))
     expect(token).not.toBe('')
-    const response = await page.request.get('/admin-api/ims/auth/org/events', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    const body = (await response.json()) as { code?: number }
+    const body = await page.evaluate(async (accessToken) => {
+      const response = await fetch('/admin-api/ims/auth/org/events', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      return response.json() as Promise<{ code?: number }>
+    }, token)
     expect(body.code).toBe(1008)
   })
 })

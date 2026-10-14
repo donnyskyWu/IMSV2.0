@@ -31,7 +31,7 @@ from app.db.session import get_db_session
 settings = get_settings()
 
 # 租户停用 / 过期时登录和刷新都用这一句，避免两处文案或条件不一致。
-TENANT_UNAVAILABLE_MSG = "所属组织已停用"
+TENANT_UNAVAILABLE_MSG = "所属组织已停用，请联系管理员"
 
 # 8～32 位，同时含字母和数字，允许特殊字符，不允许空白（工作包 Q7）。
 _PASSWORD_RULE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$")
@@ -145,6 +145,8 @@ class AuthService:
     TOKEN_BLACKLIST_PREFIX = "ims:token_blacklist:"
     SSO_STATE_PREFIX = "ims:sso_state:"
     PERM_CACHE_PREFIX = "ims:perm:"
+    PERM_VER_USER_PREFIX = "ims:perm_ver:u:"
+    PERM_VER_TENANT_PREFIX = "ims:perm_ver:t:"
 
     # Session limits
     MAX_SESSIONS = 3
@@ -189,7 +191,7 @@ class AuthService:
             self._persist()
             raise BizError(1216)
 
-        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。文案保持「所属组织已停用」。
+        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。文案见 TENANT_UNAVAILABLE_MSG。
         try:
             reject_unavailable_tenant(user.tenant_id)
         except BizError:
@@ -431,15 +433,29 @@ class AuthService:
         }
 
     async def _get_user_permissions(self, user_id: int) -> dict[str, Any]:
-        """Get user's permission codes and data scopes."""
-        # Try cache first
+        """Get user's permission codes and data scopes.
+
+        Uses version-based cache invalidation (FP-D03-04):
+        - Cache stores perm_ver at write time
+        - On read, compare cached version vs current Redis version
+        - If mismatch (or no cached version), reload from DB
+        """
         cache_key = f"{self.PERM_CACHE_PREFIX}{user_id}"
         cached = Cache.get_json(cache_key)
+
         if cached:
-            return cached
+            cached_ver = cached.get("_perm_ver", 0)
+            current_ver = self.get_user_perm_version(user_id)
+            tenant_id = cached.get("_tenant_id")
+            tenant_ok = (
+                tenant_id is not None
+                and cached.get("_tenant_perm_ver", 0) == self.get_tenant_perm_version(int(tenant_id))
+            )
+            if cached_ver == current_ver and tenant_ok:
+                return cached
 
         # Load from database
-        from app.domains.sys.models import Menu, Role, RoleMenu, UserDept, UserRole
+        from app.domains.sys.models import Menu, Role, RoleMenu, User, UserDept, UserRole
         session = get_db_session()
 
         # Get user's enabled roles
@@ -483,11 +499,18 @@ class AuthService:
         # Get user's IP group IDs (if applicable)
         ip_group_ids = []  # TODO: Load from IP group member table
 
+        user_row = session.query(User).filter(User.id == user_id, User.deleted == 0).first()
+        tenant_id = int(user_row.tenant_id) if user_row is not None else 0
+        current_ver = self.get_user_perm_version(user_id)
+        tenant_ver = self.get_tenant_perm_version(tenant_id)
         result = {
             "perm_codes": list(perm_codes),
             "data_scopes": [{"scope_type": ds.scope_type, "role_id": ds.role_id} for ds in data_scopes],
             "dept_ids": dept_ids,
             "ip_group_ids": ip_group_ids,
+            "_perm_ver": current_ver,
+            "_tenant_id": tenant_id,
+            "_tenant_perm_ver": tenant_ver,
         }
 
         # Cache for 30 minutes
@@ -867,7 +890,7 @@ class AuthService:
             # 其它会话的旧刷新令牌一并失效，当前这次登录的刷新令牌保留。
             self._forget_refresh_index(Cache.get_json(session_key))
             Cache.delete(session_key)
-            Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
+            Cache.set(f"{self.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=settings.jwt.access_token_ttl)
             Cache.srem(sessions_key, sid)
         session.flush()
 
@@ -896,6 +919,32 @@ class AuthService:
             ))
             session.flush()
         return user.id
+
+    @classmethod
+    def bump_user_perm_version(cls, user_id: int) -> int:
+        """Increment user permission version in Redis. Returns new version."""
+        key = f"{cls.PERM_VER_USER_PREFIX}{user_id}"
+        return Cache.incr(key)
+
+    @classmethod
+    def get_user_perm_version(cls, user_id: int) -> int:
+        """Get user permission version from Redis. Returns 0 if not set."""
+        key = f"{cls.PERM_VER_USER_PREFIX}{user_id}"
+        val = Cache.get(key)
+        return int(val) if val else 0
+
+    @classmethod
+    def bump_tenant_perm_version(cls, tenant_id: int) -> int:
+        """Increment tenant permission version in Redis. Returns new version."""
+        key = f"{cls.PERM_VER_TENANT_PREFIX}{tenant_id}"
+        return Cache.incr(key)
+
+    @classmethod
+    def get_tenant_perm_version(cls, tenant_id: int) -> int:
+        """Get tenant permission version from Redis. Returns 0 if not set."""
+        key = f"{cls.PERM_VER_TENANT_PREFIX}{tenant_id}"
+        val = Cache.get(key)
+        return int(val) if val else 0
 
     async def _write_login_log(
         self,

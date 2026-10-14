@@ -1,4 +1,4 @@
-# app/services/dingtalk_login.py - 钉钉登录（FP-B1-LG-01/04/05/06/09）
+# app/services/dingtalk_login.py - 钉钉登录（FP-B1-LG-01/04/05/06/09 + LG-07）
 """扫码与 H5 免登。
 
 与账号密码登录共用租户停用校验和冻结/离职判断。
@@ -7,9 +7,10 @@
 登录日志复用 ims_sys_login_log.login_method / result，不新增列：
 login_method 取 DINGTALK_QR 或 DINGTALK_H5，失败时 result 写入错误码。
 
-阻塞（本 PR 不做）：
-FP-B1-LG-07 新员工首登即时同步要建本地用户、写同步事件并触发岗位供给。
-未映射且手机号不能唯一命中时直接 1217，不创建用户。
+FP-B1-LG-07 新员工首登即时同步：
+- 映射和手机号都未命中时，调用钉钉接口获取人员详情
+- 本企业在职 → 建本地用户、写映射、写同步事件、触发岗位供给、签发令牌
+- 不在本企业或已离职且 IMS 无映射 → 1217
 """
 
 import json
@@ -204,7 +205,7 @@ class DingTalkLoginService:
     async def _login_user(self, identity: DingTalkIdentity, channel: str) -> dict[str, Any]:
         user = None
         try:
-            user = self._match(identity)
+            user = await self._match(identity)
             _reject_login_status(user)
         except BizError as exc:
             await self._fail(
@@ -217,8 +218,8 @@ class DingTalkLoginService:
             raise
         return await self._issue(user, channel)
 
-    def _match(self, identity: DingTalkIdentity) -> Any:
-        """先按钉钉 userid，再按手机号。多个或没有都是 1217，不建用户。"""
+    async def _match(self, identity: DingTalkIdentity) -> Any:
+        """先按钉钉 userid，再按手机号，最后尝试即时同步（LG-07）。"""
         from app.domains.sys.models import User, UserMapping
         from app.services.user import UserService
 
@@ -234,43 +235,223 @@ class DingTalkLoginService:
             ).first()
             if user is None:
                 raise BizError(1217)
-            # 映射行和用户不在同一租户，按资源不可用处理，不签发。
             if int(user.tenant_id) != int(mapping.tenant_id):
                 raise BizError(1504)
             return user
 
         mobile = (identity.mobile or "").strip()
-        if not mobile:
-            raise BizError(1217)
-        mobile_hash = UserService()._hash_mobile(mobile)
-        users = session.query(User).filter(
-            User.mobile_hash == mobile_hash,
-            User.deleted == 0,
-        ).all()
-        if len(users) != 1:
-            if len(users) > 1:
+        if mobile:
+            mobile_hash = UserService()._hash_mobile(mobile)
+            users = session.query(User).filter(
+                User.mobile_hash == mobile_hash,
+                User.deleted == 0,
+            ).all()
+            if len(users) == 1:
+                user = users[0]
+                bound = session.query(UserMapping).filter(
+                    UserMapping.user_id == user.id,
+                    UserMapping.deleted == 0,
+                ).first()
+                if bound is None:
+                    session.add(UserMapping(
+                        tenant_id=user.tenant_id,
+                        user_id=user.id,
+                        dingtalk_user_id=identity.user_id,
+                        union_id=identity.union_id,
+                    ))
+                    session.flush()
+                    return user
+            elif len(users) > 1:
                 logger.warning(
                     "钉钉手机号命中多个本地用户 dingtalk_user_id=%s count=%s",
                     identity.user_id,
                     len(users),
                 )
+
+        return await self._instant_sync(identity)
+
+    async def _instant_sync(self, identity: DingTalkIdentity) -> Any:
+        """
+        LG-07 即时同步：建本地用户、写映射、写同步事件。
+
+        Rules:
+        - 本企业在职 → 建用户、写映射、写事件
+        - 不在本企业或已离职 → 1217
+        - 并发首登：IntegrityError 时回滚，先重查映射
+        - username 撞名：加 _2、_3 后缀，总长度 ≤ ims_sys_user.username（30）
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        from app.core.clock import get_now
+        from app.db.ids import assign_pk
+        from app.domains.sys.models import OrgSyncEvent, User, UserMapping
+
+        session = get_db_session()
+
+        tenant_id = self._get_default_tenant_id()
+        if tenant_id is None:
             raise BizError(1217)
 
-        user = users[0]
-        bound = session.query(UserMapping).filter(
-            UserMapping.user_id == user.id,
-            UserMapping.deleted == 0,
-        ).first()
-        if bound is not None:
+        user_detail = await self._fetch_user_detail(identity.user_id)
+
+        if user_detail is None:
             raise BizError(1217)
-        session.add(UserMapping(
-            tenant_id=user.tenant_id,
-            user_id=user.id,
-            dingtalk_user_id=identity.user_id,
-            union_id=identity.union_id,
-        ))
-        session.flush()
-        return user
+
+        if not user_detail.get("active", False):
+            raise BizError(1217)
+
+        now = get_now()
+        username = self._generate_username(identity.user_id)
+        nickname = user_detail.get("name") or identity.name or identity.user_id
+
+        retry_count = 0
+        max_suffix_retries = 19
+
+        while retry_count <= max_suffix_retries:
+            try:
+                with session.begin_nested():
+                    user = User(
+                        tenant_id=tenant_id,
+                        username=username,
+                        nickname=nickname,
+                        status="ACTIVE",
+                        source="DINGTALK",
+                        password_hash=None,
+                        emp_no=user_detail.get("job_number"),
+                    )
+                    assign_pk(session, user)
+                    session.add(user)
+                    session.flush()
+
+                    mapping = UserMapping(
+                        tenant_id=tenant_id,
+                        user_id=user.id,
+                        dingtalk_user_id=identity.user_id,
+                        union_id=identity.union_id,
+                        last_sync_time=now,
+                    )
+                    assign_pk(session, mapping)
+                    session.add(mapping)
+                    session.flush()
+
+                    event_date = now.strftime("%Y-%m-%d")
+                    event_id = f"login-sync:{identity.user_id}:{event_date}"
+
+                    event = OrgSyncEvent(
+                        tenant_id=tenant_id,
+                        event_id=event_id,
+                        event_type="user_add_org",
+                        event_time=now,
+                        payload="{}",
+                        status="SUCCESS",
+                        biz_type="HIRE",
+                        subject_user_id=user.id,
+                        subject_name=nickname,
+                        received_time=now,
+                        processed_time=now,
+                    )
+                    assign_pk(session, event)
+                    session.add(event)
+                    session.flush()
+
+                logger.info(
+                    "Instant sync created user dingtalk_user_id=%s user_id=%s username=%s",
+                    identity.user_id,
+                    user.id,
+                    username,
+                )
+
+                return user
+
+            except IntegrityError as exc:
+                error_str = str(exc).lower()
+                if "lock wait timeout" in error_str or "deadlock" in error_str:
+                    logger.warning(
+                        "Lock-wait timeout during instant sync (concurrent collision) dingtalk_user_id=%s error=%s",
+                        identity.user_id,
+                        str(exc)[:200],
+                    )
+                else:
+                    logger.info(
+                        "IntegrityError during instant sync, checking for concurrent login dingtalk_user_id=%s error=%s",
+                        identity.user_id,
+                        str(exc)[:100],
+                    )
+
+                existing_mapping = session.query(UserMapping).filter(
+                    UserMapping.dingtalk_user_id == identity.user_id,
+                    UserMapping.deleted == 0,
+                ).first()
+
+                if existing_mapping is not None:
+                    existing_user = session.query(User).filter(
+                        User.id == existing_mapping.user_id,
+                        User.deleted == 0,
+                    ).first()
+                    if existing_user is not None:
+                        logger.info(
+                            "Found existing user from concurrent login user_id=%s",
+                            existing_user.id,
+                        )
+                        return existing_user
+
+                retry_count += 1
+                if retry_count > max_suffix_retries:
+                    logger.error(
+                        "Username suffix retries exhausted dingtalk_user_id=%s max_suffix=%s",
+                        identity.user_id,
+                        max_suffix_retries + 1,
+                    )
+                    raise BizError(1001, msg="用户名冲突次数超限，请联系管理员") from None
+                suffix = f"_{retry_count + 1}"
+                username = self._generate_username(identity.user_id, suffix)
+                logger.info(
+                    "Retrying with new username=%s retry=%s",
+                    username,
+                    retry_count,
+                )
+
+        raise BizError(1001, msg="用户名冲突次数超限，请联系管理员")
+
+    def _generate_username(self, user_id: str, suffix: str = "") -> str:
+        """Generate username from DingTalk userid with optional suffix.
+
+        ims_sys_user.username is VARCHAR(30). The login-log username column
+        is VARCHAR(50); that wider limit does not apply here.
+        """
+        max_len = 30
+        if suffix:
+            base_len = max_len - len(suffix)
+            return user_id[:base_len] + suffix
+        return user_id[:max_len]
+
+    def _get_default_tenant_id(self) -> int | None:
+        """Get default tenant ID for instant sync."""
+        from app.domains.sys.models import Tenant
+
+        session = get_db_session()
+        tenant = session.query(Tenant).filter(
+            Tenant.deleted == 0,
+            Tenant.status == "ENABLED",
+        ).first()
+        return tenant.id if tenant else None
+
+    async def _fetch_user_detail(self, dingtalk_user_id: str) -> dict | None:
+        """Fetch user detail from DingTalk API."""
+        try:
+            client = _resolve_client()
+            if hasattr(client, "get_user_detail"):
+                return await client.get_user_detail(dingtalk_user_id)
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Failed to fetch user detail dingtalk_user_id=%s error=%s",
+                dingtalk_user_id,
+                str(exc),
+            )
+            if "5003" in str(exc) or "timeout" in str(exc).lower():
+                raise BizError(5003) from exc
+            raise BizError(1006) from exc
 
     async def _issue(self, user: Any, channel: str) -> dict[str, Any]:
         """签发令牌。不清理账号密码的失败计数。"""
@@ -362,10 +543,13 @@ def _resolve_client() -> Any:
     if _client_override is not None:
         return _client_override
     config = load_dingtalk_config()
+    settings = get_settings()
     return HttpxDingTalkLoginClient(
         app_key=config["client_id"],
         app_secret=config["secret"],
         mode=config["mode"] or "mock",
+        base_url=settings.dingtalk.base_url,
+        api_base_url=settings.dingtalk.api_base_url,
     )
 
 

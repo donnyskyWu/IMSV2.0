@@ -95,6 +95,10 @@ class DingTalkSettings(BaseSettings):
     agent_id: str = Field(default="")
     mode: str = Field(default="mock", description="real or mock")
     corp_id: str = Field(default="")
+    base_url: str = Field(default="https://oapi.dingtalk.com", description="oapi endpoint")
+    api_base_url: str = Field(default="https://api.dingtalk.com", description="api endpoint")
+    callback_token: str = Field(default="", description="Callback signature token")
+    callback_aes_key: str = Field(default="", description="Callback AES key (43 char Base64)")
 
     model_config = SettingsConfigDict(env_prefix="IMS_DINGTALK_")
 

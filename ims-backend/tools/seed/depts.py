@@ -15,12 +15,12 @@ E2E_DEPT_NAMES = ["信息部", "行政部", "运营中心", "市场一部", "市
 def seed_depts(env: str, dry_run: bool = False) -> int:
     """
     Seed root and system departments.
-    
+
     Rules per FP-B08-01:
     - Root department with parent_id=0
     - System department "待分配" under root, source=SYSTEM
     - Cannot be deleted, renamed, moved, or disabled
-    
+
     Returns:
         Number of records upserted
     """

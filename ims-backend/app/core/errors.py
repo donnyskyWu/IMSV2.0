@@ -212,6 +212,9 @@ error_codes.register(1271, "LIVE", "直播服务异常", FrontStrategy.TOAST)
 error_codes.register(1272, "LIVE", "直播服务超时", FrontStrategy.TOAST)
 error_codes.register(1273, "LIVE", "直播服务业务错误", FrontStrategy.TOAST)
 
+# SYS domain extension (1281-1290) - Org sync errors
+error_codes.register(1286, "SYS", "事件状态已变化，请刷新后重试", FrontStrategy.TOAST)
+
 
 class BizError(Exception):
     """Business logic exception."""

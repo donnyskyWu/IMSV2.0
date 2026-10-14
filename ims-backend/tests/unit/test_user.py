@@ -7,11 +7,16 @@ Covers:
 - UT-B03-02: Frozen/resigned cannot login
 - UT-B03-03-08: User department relationships
 - UT-B03-13-14: DingTalk mapping uniqueness
+- UT-B1-USER-DELETE: Logged-in user deletion blocked with 1001
 """
 
+from datetime import datetime
+
+import pytest
 
 from app.core.errors import BizError
 from app.domains.sys.models import User, UserDept
+from tests.support import rows
 
 
 class TestUserStatus:
@@ -233,3 +238,251 @@ class TestUserTokenVersion:
 
         db_session.refresh(user)
         assert user.token_version == 1
+
+
+class TestUserDeletion:
+    """Tests for user deletion rules (FP-B1-LG-07, FP-B03-01)."""
+
+    @pytest.mark.asyncio
+    async def test_delete_logged_in_user_raises_1001(self, db_session, admin_context):
+        """UT-B1-USER-DELETE-01: Deleting a logged-in user raises BizError 1001."""
+        from app.services.user import UserService
+
+        user = rows.user(
+            db_session,
+            "logged_in_user",
+            last_login_time=datetime(2026, 10, 13, 9, 0, 0),
+        )
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_user(str(user.id))
+
+        assert exc.value.code == 1001
+        assert "已登录过的用户不能删除" in exc.value.msg
+        assert "冻结或离职" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_delete_never_logged_in_user_succeeds(self, db_session, admin_context):
+        """UT-B1-USER-DELETE-02: Only never-logged-in users can be deleted."""
+        from app.services.user import UserService
+
+        user = rows.user(db_session, "never_logged_in_user")
+        assert user.last_login_time is None
+        user_id = user.id
+
+        service = UserService()
+        await service.delete_user(str(user_id))
+
+        db_session.expire_all()
+        deleted_user = db_session.query(User).filter(User.id == user_id).first()
+        assert deleted_user.deleted == user_id
+
+    @pytest.mark.asyncio
+    async def test_delete_resigned_user_raises_1502(self, db_session, admin_context):
+        """UT-B1-USER-DELETE-03: Deleting a RESIGNED user raises BizError 1502."""
+        from app.services.user import UserService
+
+        user = rows.user(db_session, "resigned_user", status="RESIGNED")
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_user(str(user.id))
+
+        assert exc.value.code == 1502
+
+
+class TestLastR1Protection:
+    """Tests for last active R1 cannot be removed (FP-B03-01)."""
+
+    @pytest.mark.asyncio
+    async def test_freeze_last_r1_raises_1001(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-01: Last active R1 cannot be frozen."""
+        from app.domains.sys.models import UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user = rows.user(db_session, "only_admin")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.freeze_user(str(user.id))
+        assert exc.value.code == 1001
+        assert "最后一个在职管理员" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_resign_last_r1_raises_1001(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-02: Last active R1 cannot resign."""
+        from app.domains.sys.models import UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user = rows.user(db_session, "only_admin_resign")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.resign_user(str(user.id))
+        assert exc.value.code == 1001
+        assert "最后一个在职管理员" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_delete_last_r1_raises_1001(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-03: Last active R1 cannot be deleted."""
+        from app.domains.sys.models import UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user = rows.user(db_session, "only_admin_delete")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+
+        with pytest.raises(BizError) as exc:
+            await service.delete_user(str(user.id))
+        assert exc.value.code == 1001
+        assert "最后一个在职管理员" in exc.value.msg
+
+    @pytest.mark.asyncio
+    async def test_freeze_r1_with_other_active_r1_succeeds(self, db_session, admin_context):
+        """UT-B1-R1-PROTECT-04: R1 can be frozen if another active R1 exists."""
+        from app.domains.sys.models import UserRole
+        from app.services.user import UserService
+
+        r1_role = rows.role(db_session, "R1", "管理员")
+        user1 = rows.user(db_session, "admin_1")
+        user2 = rows.user(db_session, "admin_2")
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user1.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+        rows.add(db_session, UserRole(
+            tenant_id=1,
+            user_id=user2.id,
+            role_id=r1_role.id,
+            source="MANUAL",
+        ))
+
+        service = UserService()
+        await service.freeze_user(str(user1.id))
+
+        db_session.refresh(user1)
+        assert user1.status == "FROZEN"
+
+
+class TestFrozenEmployee1216:
+    """Tests for frozen employee returns 1216 (FP-B1-LG-06)."""
+
+    @pytest.mark.asyncio
+    async def test_frozen_user_login_returns_1216(self, db_session, test_context):
+        """UT-B1-LG-06-FROZEN: Frozen user login returns 1216.
+
+        Must truly hit 1216, not 1214 from a bad password hash.
+        Uses a valid bcrypt hash for 'correct_password'.
+        """
+        import bcrypt
+
+        from app.services.auth import AuthService
+
+        correct_password = "correct_password"
+        valid_hash = bcrypt.hashpw(correct_password.encode(), bcrypt.gensalt(rounds=10)).decode()
+
+        rows.user(
+            db_session,
+            "frozen_employee",
+            status="FROZEN",
+            password_hash=valid_hash,
+        )
+
+        service = AuthService()
+        with pytest.raises(BizError) as exc:
+            await service.login("frozen_employee", correct_password)
+        assert exc.value.code == 1216, "Frozen user with correct password must get 1216"
+
+    @pytest.mark.asyncio
+    async def test_resigned_user_login_returns_1216(self, db_session, test_context):
+        """UT-B1-LG-06-RESIGNED: Resigned user login returns 1216.
+
+        Must truly hit 1216, not 1214 from a bad password hash.
+        Uses a valid bcrypt hash for 'correct_password'.
+        """
+        import bcrypt
+
+        from app.services.auth import AuthService
+
+        correct_password = "correct_password"
+        valid_hash = bcrypt.hashpw(correct_password.encode(), bcrypt.gensalt(rounds=10)).decode()
+
+        rows.user(
+            db_session,
+            "resigned_employee",
+            status="RESIGNED",
+            password_hash=valid_hash,
+        )
+
+        service = AuthService()
+        with pytest.raises(BizError) as exc:
+            await service.login("resigned_employee", correct_password)
+        assert exc.value.code == 1216, "Resigned user with correct password must get 1216"
+
+
+class TestDropSessionsBlacklistTTL:
+    """Tests for _drop_sessions blacklist TTL >= access-token TTL (FP-B1-ORG-04.5)."""
+
+    def test_blacklist_ttl_at_least_access_token_ttl(self, db_session, test_context):
+        """UT-B1-BLACKLIST-TTL-01: Blacklist TTL >= access-token TTL."""
+        from unittest.mock import patch
+
+        from app.core.cache import Cache
+        from app.core.config import get_settings
+        from app.services.auth import AuthService
+        from app.services.user import UserService
+
+        settings = get_settings()
+        access_token_ttl = settings.jwt.access_token_ttl
+
+        user = rows.user(db_session, "blacklist_test_user")
+        auth_service = AuthService()
+
+        session_id = "test_session_for_blacklist"
+        Cache.sadd(f"{auth_service.USER_SESSIONS_PREFIX}{user.id}", session_id)
+        Cache.set(f"{auth_service.SESSION_PREFIX}{session_id}", "{}")
+
+        captured_ttl = None
+        original_set = Cache.set
+
+        def capture_ttl(key: str, value: str, *, ttl: int = None, **kwargs):
+            nonlocal captured_ttl
+            if auth_service.TOKEN_BLACKLIST_PREFIX in key:
+                captured_ttl = ttl
+            return original_set(key, value, ttl=ttl, **kwargs)
+
+        with patch.object(Cache, 'set', side_effect=capture_ttl):
+            UserService()._drop_sessions(user.id)
+
+        assert captured_ttl is not None, "Blacklist set was not called"
+        assert captured_ttl >= access_token_ttl, (
+            f"Blacklist TTL ({captured_ttl}s) must be >= access-token TTL ({access_token_ttl}s)"
+        )

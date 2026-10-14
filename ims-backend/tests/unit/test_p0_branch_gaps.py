@@ -69,6 +69,9 @@ class TestAuthBranches:
             "data_scopes": [],
             "dept_ids": [],
             "ip_group_ids": [],
+            "_perm_ver": service.get_user_perm_version(user.id),
+            "_tenant_id": user.tenant_id,
+            "_tenant_perm_ver": service.get_tenant_perm_version(user.tenant_id),
         }
         Cache.set_json(f"{service.PERM_CACHE_PREFIX}{user.id}", cached, ttl=60)
         assert await service._get_user_permissions(user.id) == cached
@@ -395,7 +398,7 @@ class TestUserBranches:
         logged = rows.user(db_session, "logged", last_login_time=datetime(2020, 1, 1))
         with pytest.raises(BizError) as has_login:
             await service.delete_user(str(logged.id))
-        assert has_login.value.code == 1502
+        assert has_login.value.code == 1001
 
         fresh = rows.user(db_session, "fresh")
 
@@ -425,7 +428,7 @@ class TestUserBranches:
         active = rows.user(db_session, "active-one", token_version=0)
         await service.freeze_user(str(active.id))
         assert active.status == "FROZEN"
-        assert active.token_version == 1
+        assert active.token_version == 0
         await service.reactivate_user(str(active.id))
         assert active.status == "ACTIVE"
         await service.resign_user(str(active.id))

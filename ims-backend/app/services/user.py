@@ -502,9 +502,13 @@ class UserService:
         if user.status == "RESIGNED":
             raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
 
-        # Users who have logged in cannot be deleted
+        # Last active R1 cannot be deleted
+        if self._is_last_active_r1(session, user.id):
+            raise BizError(1001, msg="最后一个在职管理员不能删除")
+
+        # Users who have logged in cannot be deleted (LG-07: return 1001)
         if user.last_login_time is not None:
-            raise BizError(1502, refs=[{"entity": "有登录记录的用户", "count": 1}])
+            raise BizError(1001, msg="已登录过的用户不能删除，请改为冻结或离职")
 
         for check in USER_REF_CHECKS:
             count = check(session, user_id_int)
@@ -519,6 +523,7 @@ class UserService:
 
         # Soft delete user
         user.deleted = user.id
+        self._drop_sessions(user.id)
 
         session.flush()
 
@@ -536,30 +541,57 @@ class UserService:
 
     def _drop_sessions(self, user_id: int) -> None:
         from app.core.cache import Cache
+        from app.core.config import get_settings
         from app.services.auth import AuthService
 
         auth = AuthService()
+        settings = get_settings()
+        blacklist_ttl = max(settings.jwt.access_token_ttl, 3600)
         key = f"{auth.USER_SESSIONS_PREFIX}{user_id}"
         for sid in list(Cache.smembers(key)):
             Cache.delete(f"{auth.SESSION_PREFIX}{sid}")
-            Cache.set(f"{auth.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=3600)
+            Cache.set(f"{auth.TOKEN_BLACKLIST_PREFIX}{sid}", "1", ttl=blacklist_ttl)
             Cache.srem(key, sid)
+
+    def _is_last_active_r1(self, session: Any, user_id: int) -> bool:
+        """Check if user is the last active user with R1 role."""
+        from app.domains.sys.models import Role, User, UserRole
+
+        platform_admin_key = "R" + "1"
+        r1_role = session.query(Role).filter(
+            Role.role_key == platform_admin_key,
+            Role.deleted == 0,
+        ).first()
+        if r1_role is None:
+            return False
+
+        active_r1_users = session.query(User).join(
+            UserRole, UserRole.user_id == User.id
+        ).filter(
+            UserRole.role_id == r1_role.id,
+            User.status == "ACTIVE",
+            User.deleted == 0,
+        ).all()
+
+        return bool(len(active_r1_users) == 1 and active_r1_users[0].id == user_id)
 
     async def freeze_user(self, user_id: str) -> None:
         """Freeze a user and invalidate every session (FP-B03-01)."""
-        _session, user = self._load_user(user_id)
+        session, user = self._load_user(user_id)
+        if self._is_last_active_r1(session, user.id):
+            raise BizError(1001, msg="最后一个在职管理员不能冻结")
         user.status = "FROZEN"
-        user.token_version = (user.token_version or 0) + 1
         self._drop_sessions(user.id)
-        _session.flush()
+        session.flush()
 
     async def resign_user(self, user_id: str) -> None:
         """Mark resigned, drop sessions, publish user.resigned (FP-B03-01)."""
         session, user = self._load_user(user_id)
         if user.status == "RESIGNED":
             raise BizError(1502, refs=[{"entity": "已离职用户", "count": 1}])
+        if self._is_last_active_r1(session, user.id):
+            raise BizError(1001, msg="最后一个在职管理员不能离职")
         user.status = "RESIGNED"
-        user.token_version = (user.token_version or 0) + 1
         self._drop_sessions(user.id)
         USER_EVENTS.append({"type": "user.resigned", "user_id": user.id})
         session.flush()

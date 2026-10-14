@@ -10,11 +10,11 @@ from tools.seed.timeutil import seed_now
 def seed_tenant(env: str, dry_run: bool = False) -> int:
     """
     Seed platform tenant.
-    
+
     Rules per FP-B04-04:
     - tenant_id=1 is platform tenant
     - Has all menus, not limited by package
-    
+
     Returns:
         Number of records upserted
     """

@@ -139,7 +139,7 @@ def ut_b03_06(db, _ctx, _clock):
     _run(UserService().freeze_user(str(person.id)))
     db.refresh(person)
     assert person.status == "FROZEN"
-    assert person.token_version == 1
+    assert (person.token_version or 0) == 0
     assert Cache.get_json(f"{auth.SESSION_PREFIX}freeze-sid") is None
     with pytest.raises(BizError) as caught:
         _run(auth.verify_token(tokens["access_token"]))

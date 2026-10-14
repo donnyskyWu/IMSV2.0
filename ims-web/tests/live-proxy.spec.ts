@@ -539,3 +539,47 @@ function signExpiredAccessToken(accessToken: string, secret: string): string {
 function base64Url(value: string): string {
   return Buffer.from(value).toString('base64url')
 }
+
+test.describe('E2E-B1 组织同步与用户删除', () => {
+  test('E2E-B1-ORG-EVENTS 有权用户可查询组织事件列表', async ({ page }) => {
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.clear()
+      sessionStorage.clear()
+    })
+    await page.goto('/login')
+    await page.getByPlaceholder('用户名').fill(username)
+    await page.getByPlaceholder('密码').fill(password)
+    await page.getByRole('button', { name: '登录' }).click()
+    await page.waitForURL((url) => url.pathname !== '/login')
+
+    const token = await page.evaluate(() => localStorage.getItem('ims_access_token'))
+    expect(token).toBeTruthy()
+
+    const events = await callApi(page, 'GET', '/admin-api/ims/auth/org/events?pageNo=1&pageSize=10', token || '')
+    expect(events.status).toBe(200)
+    expect(events.body.code).toBe(0)
+    expect(events.body.data).toBeDefined()
+  })
+
+  test('E2E-B1-ORG-METRICS 可查询同步指标', async ({ page }) => {
+    await page.goto('/login')
+    await page.evaluate(() => {
+      localStorage.clear()
+      sessionStorage.clear()
+    })
+    await page.goto('/login')
+    await page.getByPlaceholder('用户名').fill(username)
+    await page.getByPlaceholder('密码').fill(password)
+    await page.getByRole('button', { name: '登录' }).click()
+    await page.waitForURL((url) => url.pathname !== '/login')
+
+    const token = await page.evaluate(() => localStorage.getItem('ims_access_token'))
+    expect(token).toBeTruthy()
+
+    const metrics = await callApi(page, 'GET', '/admin-api/ims/auth/org/sync-metrics', token || '')
+    expect(metrics.status).toBe(200)
+    expect(metrics.body.code).toBe(0)
+    expect(metrics.body.data).toBeDefined()
+  })
+})

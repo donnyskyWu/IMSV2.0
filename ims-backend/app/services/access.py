@@ -3,7 +3,6 @@
 
 from typing import Any
 
-from app.core.cache import Cache
 from app.core.context import ctx
 from app.core.errors import BizError
 from app.db.ids import assign_pk
@@ -91,9 +90,23 @@ def revoke_menu(role_id: int, menu_id: int) -> None:
 
 
 def _drop_cache(session: Any, role_id: int) -> None:
-    from app.domains.sys.models import UserRole
+    """Invalidate permission cache for every user with this role (FP-D03-04).
+
+    Bump ``ims:perm_ver:u:{uid}`` and the role's ``ims:perm_ver:t:{tid}`` so a
+    later read reloads when either version does not match, and delete
+    ``ims:perm:{uid}`` so the stale set is not served before that comparison.
+    """
+    from app.core.cache import Cache
+    from app.domains.sys.models import Role, UserRole
     from app.services.auth import AuthService
 
-    prefix = AuthService.PERM_CACHE_PREFIX
+    tenant_ids: set[int] = set()
     for link in session.query(UserRole).filter(UserRole.role_id == role_id).all():
-        Cache.delete(f"{prefix}{link.user_id}")
+        AuthService.bump_user_perm_version(link.user_id)
+        Cache.delete(f"{AuthService.PERM_CACHE_PREFIX}{link.user_id}")
+        tenant_ids.add(int(link.tenant_id))
+    role = session.query(Role).filter(Role.id == role_id).first()
+    if role is not None:
+        tenant_ids.add(int(role.tenant_id))
+    for tenant_id in tenant_ids:
+        AuthService.bump_tenant_perm_version(tenant_id)

@@ -65,7 +65,6 @@ omit = [
     "app/integrations/dingtalk/*",  # FP-D02, FP-D07: DingTalk SSO and org sync - external API
     "app/integrations/football_live/*",  # FP-H04-01: Football live data - external API
     "app/integrations/train_ai/*",  # FP-H04-01: AI training integration - external API
-    "app/services/org_sync.py",  # FP-D07-04: DingTalk org reconciliation - requires DingTalk API
 ]
 
 [tool.coverage.report]

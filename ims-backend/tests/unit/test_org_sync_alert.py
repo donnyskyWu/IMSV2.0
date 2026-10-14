@@ -1,0 +1,585 @@
+# tests/unit/test_org_sync_alert.py - OrgSyncAlertService tests
+"""
+Unit tests for organization sync alert service.
+
+Tests:
+- Dead letter alerts (hourly merge)
+- Delay alerts (hourly throttle)
+- Reconcile failure P1 alerts (2 consecutive failures)
+- Sync metrics calculation
+"""
+
+from datetime import datetime, timedelta
+
+import pytest
+
+from app.core.cache import Cache
+from app.core.clock import reset_clock, set_clock
+from app.services.org_sync_alert import OrgSyncAlertService
+from tests.support import rows
+
+
+@pytest.fixture
+def service():
+    """Create OrgSyncAlertService instance."""
+    return OrgSyncAlertService()
+
+
+@pytest.fixture
+def fixed_clock():
+    """Set up fixed clock for tests."""
+    now = datetime(2026, 10, 13, 10, 0, 0)
+    set_clock(lambda: now)
+    yield now
+    reset_clock()
+
+
+class TestDeadLetterAlert:
+    """Test dead letter alert with hourly merge."""
+
+    @pytest.mark.asyncio
+    async def test_dead_letter_alert_merges_by_hour(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Dead letter alerts are merged within the same hour."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        event1 = OrgSyncEvent(
+            tenant_id=1,
+            event_id="dead-1",
+            event_type="user_add_org",
+            event_time=fixed_clock - timedelta(hours=1),
+            received_time=fixed_clock,
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event1)
+
+        await service.check_dead_letter(tenant_id=1, event_id=event1.id)
+
+        hour_key = fixed_clock.strftime("%Y%m%d%H")
+        cache_key = f"ims:alert:dead_letter:1:{hour_key}"
+        assert Cache.get(cache_key) == "1"
+
+        event2 = OrgSyncEvent(
+            tenant_id=1,
+            event_id="dead-2",
+            event_type="user_add_org",
+            event_time=fixed_clock - timedelta(hours=1),
+            received_time=fixed_clock,
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event2)
+
+        await service.check_dead_letter(tenant_id=1, event_id=event2.id)
+        assert Cache.get(cache_key) == "2"
+
+    @pytest.mark.asyncio
+    async def test_dead_letter_alert_after_hour(
+        self, db_session, test_context, service
+    ):
+        """Dead letter alert fires again after hour passes."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        now = datetime(2026, 10, 13, 10, 0, 0)
+        set_clock(lambda: now)
+
+        event = OrgSyncEvent(
+            tenant_id=1,
+            event_id="dead-hourly",
+            event_type="user_add_org",
+            event_time=now - timedelta(hours=1),
+            received_time=now,
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event)
+
+        await service.check_dead_letter(tenant_id=1, event_id=event.id)
+
+        hour_key_1 = now.strftime("%Y%m%d%H")
+        assert Cache.get(f"ims:alert:dead_letter:1:{hour_key_1}") == "1"
+
+        later = now + timedelta(hours=1, minutes=1)
+        set_clock(lambda: later)
+
+        event2 = OrgSyncEvent(
+            tenant_id=1,
+            event_id="dead-hourly-2",
+            event_type="user_add_org",
+            event_time=later - timedelta(hours=1),
+            received_time=later,
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event2)
+
+        await service.check_dead_letter(tenant_id=1, event_id=event2.id)
+
+        hour_key_2 = later.strftime("%Y%m%d%H")
+        assert Cache.get(f"ims:alert:dead_letter:1:{hour_key_2}") == "1"
+
+        reset_clock()
+
+
+class TestDelayAlert:
+    """Test delay alert with hourly throttle."""
+
+    @pytest.mark.asyncio
+    async def test_delay_alert_fires_above_threshold(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Delay alert fires when delay > threshold."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        event = OrgSyncEvent(
+            tenant_id=1,
+            event_id="delay-1",
+            event_type="user_add_org",
+            event_time=fixed_clock - timedelta(minutes=10),
+            received_time=fixed_clock - timedelta(minutes=9),
+            processed_time=fixed_clock,
+            payload="{}",
+            status="SUCCESS",
+            delay_seconds=600,
+        )
+        rows.add(db_session, event)
+
+        await service.check_delay_alert(tenant_id=1, event_id=event.id, delay_seconds=600)
+
+        hour_key = fixed_clock.strftime("%Y%m%d%H")
+        cache_key = f"ims:alert:delay:1:{hour_key}"
+        assert Cache.get(cache_key) == "1"
+
+    @pytest.mark.asyncio
+    async def test_delay_alert_throttled_hourly(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Delay alert is throttled to once per hour."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        event1 = OrgSyncEvent(
+            tenant_id=1,
+            event_id="delay-throttle-1",
+            event_type="user_add_org",
+            event_time=fixed_clock - timedelta(minutes=10),
+            received_time=fixed_clock - timedelta(minutes=9),
+            processed_time=fixed_clock,
+            payload="{}",
+            status="SUCCESS",
+            delay_seconds=600,
+        )
+        rows.add(db_session, event1)
+
+        await service.check_delay_alert(tenant_id=1, event_id=event1.id, delay_seconds=600)
+
+        event2 = OrgSyncEvent(
+            tenant_id=1,
+            event_id="delay-throttle-2",
+            event_type="user_add_org",
+            event_time=fixed_clock - timedelta(minutes=10),
+            received_time=fixed_clock - timedelta(minutes=9),
+            processed_time=fixed_clock,
+            payload="{}",
+            status="SUCCESS",
+            delay_seconds=700,
+        )
+        rows.add(db_session, event2)
+
+        await service.check_delay_alert(tenant_id=1, event_id=event2.id, delay_seconds=700)
+
+        hour_key = fixed_clock.strftime("%Y%m%d%H")
+        cache_key = f"ims:alert:delay:1:{hour_key}"
+        assert Cache.get(cache_key) == "1"
+
+    @pytest.mark.asyncio
+    async def test_delay_alert_below_threshold_not_fired(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Delay alert does not fire when delay < threshold."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        event = OrgSyncEvent(
+            tenant_id=1,
+            event_id="delay-low",
+            event_type="user_add_org",
+            event_time=fixed_clock - timedelta(seconds=30),
+            received_time=fixed_clock - timedelta(seconds=29),
+            processed_time=fixed_clock,
+            payload="{}",
+            status="SUCCESS",
+            delay_seconds=30,
+        )
+        rows.add(db_session, event)
+
+        await service.check_delay_alert(tenant_id=1, event_id=event.id, delay_seconds=30)
+
+        hour_key = fixed_clock.strftime("%Y%m%d%H")
+        cache_key = f"ims:alert:delay:1:{hour_key}"
+        assert Cache.get(cache_key) is None
+
+
+class TestReconcileFailureAlert:
+    """Test reconcile failure P1 alert on 2 consecutive failures."""
+
+    @pytest.mark.asyncio
+    async def test_p1_on_two_consecutive_failures(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """P1 alert triggered on 2 consecutive reconcile failures."""
+        from app.domains.sys.models import OrgSyncBatch as Batch
+
+        batch1 = Batch(
+            tenant_id=1,
+            trigger_type="SCHEDULED",
+            status="FAILED",
+            started_at=fixed_clock - timedelta(hours=2),
+            completed_at=fixed_clock - timedelta(hours=2, minutes=-5),
+            fail_reason="Network error",
+        )
+        rows.add(db_session, batch1)
+
+        batch2 = Batch(
+            tenant_id=1,
+            trigger_type="SCHEDULED",
+            status="FAILED",
+            started_at=fixed_clock - timedelta(hours=1),
+            completed_at=fixed_clock - timedelta(hours=1, minutes=-5),
+            fail_reason="Timeout",
+        )
+        rows.add(db_session, batch2)
+
+        await service.check_reconcile_failure(tenant_id=1, batch_id=batch2.id)
+
+    @pytest.mark.asyncio
+    async def test_no_p1_on_single_failure(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """No P1 alert on single reconcile failure."""
+        from app.domains.sys.models import OrgSyncBatch as Batch
+
+        batch = Batch(
+            tenant_id=1,
+            trigger_type="SCHEDULED",
+            status="FAILED",
+            started_at=fixed_clock - timedelta(hours=1),
+            completed_at=fixed_clock - timedelta(hours=1, minutes=-5),
+            fail_reason="Network error",
+        )
+        rows.add(db_session, batch)
+
+        await service.check_reconcile_failure(tenant_id=1, batch_id=batch.id)
+
+    @pytest.mark.asyncio
+    async def test_no_p1_after_success(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """No P1 alert when latest reconcile is successful."""
+        from app.domains.sys.models import OrgSyncBatch as Batch
+
+        batch1 = Batch(
+            tenant_id=1,
+            trigger_type="SCHEDULED",
+            status="FAILED",
+            started_at=fixed_clock - timedelta(hours=2),
+            completed_at=fixed_clock - timedelta(hours=2, minutes=-5),
+            fail_reason="Error",
+        )
+        rows.add(db_session, batch1)
+
+        batch2 = Batch(
+            tenant_id=1,
+            trigger_type="SCHEDULED",
+            status="SUCCESS",
+            started_at=fixed_clock - timedelta(hours=1),
+            completed_at=fixed_clock - timedelta(hours=1, minutes=-5),
+        )
+        rows.add(db_session, batch2)
+
+        await service.check_reconcile_failure(tenant_id=1, batch_id=batch2.id)
+
+
+class TestSyncMetrics:
+    """Test sync metrics calculation."""
+
+    @pytest.mark.asyncio
+    async def test_get_sync_metrics_basic(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Get sync metrics returns expected structure."""
+        for i in range(10):
+            rows.user(db_session, f"metrics_user_{i}")
+
+        result = await service.get_sync_metrics(tenant_id=1)
+
+        assert "userTotal" in result
+        assert "yesterdayEventCount" in result
+        assert "pendingEventCount" in result
+        assert "deadEventCount" in result
+        assert "avgDelayMinutes" in result
+        assert "p95DelayMinutes" in result
+        assert "successRate24h" in result
+        assert result["userTotal"] == 10
+
+    @pytest.mark.asyncio
+    async def test_get_sync_metrics_with_events(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Get sync metrics with events returns accurate counts."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        yesterday_start = (fixed_clock - timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        yesterday_mid = yesterday_start + timedelta(hours=12)
+
+        event_pending = OrgSyncEvent(
+            tenant_id=1,
+            event_id="metrics-pending",
+            event_type="user_add_org",
+            event_time=yesterday_mid,
+            received_time=yesterday_mid,
+            payload="{}",
+            status="PENDING",
+            retry_count=0,
+        )
+        rows.add(db_session, event_pending)
+
+        event_dead = OrgSyncEvent(
+            tenant_id=1,
+            event_id="metrics-dead",
+            event_type="user_add_org",
+            event_time=yesterday_mid,
+            received_time=yesterday_mid,
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event_dead)
+
+        event_success = OrgSyncEvent(
+            tenant_id=1,
+            event_id="metrics-success",
+            event_type="user_add_org",
+            event_time=yesterday_mid,
+            received_time=yesterday_mid,
+            processed_time=yesterday_mid + timedelta(seconds=30),
+            payload="{}",
+            status="SUCCESS",
+            delay_seconds=30,
+        )
+        rows.add(db_session, event_success)
+
+        result = await service.get_sync_metrics(tenant_id=1)
+
+        assert result["pendingEventCount"] == 1
+        assert result["deadEventCount"] == 1
+        assert result["yesterdayEventCount"] == 3
+
+    @pytest.mark.asyncio
+    async def test_success_rate_calculation(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        """Success rate is calculated correctly."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        now_minus_12h = fixed_clock - timedelta(hours=12)
+
+        for i in range(8):
+            event = OrgSyncEvent(
+                tenant_id=1,
+                event_id=f"rate-success-{i}",
+                event_type="user_add_org",
+                event_time=now_minus_12h,
+                received_time=now_minus_12h,
+                processed_time=now_minus_12h + timedelta(seconds=30),
+                payload="{}",
+                status="SUCCESS",
+            )
+            rows.add(db_session, event)
+
+        for i in range(2):
+            event = OrgSyncEvent(
+                tenant_id=1,
+                event_id=f"rate-dead-{i}",
+                event_type="user_add_org",
+                event_time=now_minus_12h,
+                received_time=now_minus_12h,
+                processed_time=now_minus_12h + timedelta(seconds=30),
+                payload="{}",
+                status="DEAD",
+                retry_count=4,
+            )
+            rows.add(db_session, event)
+
+        result = await service.get_sync_metrics(tenant_id=1)
+
+        assert result["successRate24h"] == 0.8
+
+
+class TestClockInjection:
+    """Test clock injection for time-dependent logic."""
+
+    @pytest.mark.asyncio
+    async def test_set_clock_affects_cache_keys(self, db_session, test_context, service):
+        """Setting clock affects cache key generation."""
+        from app.domains.sys.models import OrgSyncEvent
+
+        base_time = datetime(2026, 10, 13, 10, 0, 0)
+        set_clock(lambda: base_time)
+
+        event = OrgSyncEvent(
+            tenant_id=1,
+            event_id="clock-test",
+            event_type="user_add_org",
+            event_time=base_time - timedelta(hours=2),
+            received_time=base_time - timedelta(hours=2),
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event)
+
+        await service.check_dead_letter(tenant_id=1, event_id=event.id)
+
+        hour_key_1 = base_time.strftime("%Y%m%d%H")
+        assert Cache.get(f"ims:alert:dead_letter:1:{hour_key_1}") == "1"
+
+        later = base_time + timedelta(hours=2)
+        set_clock(lambda: later)
+
+        event2 = OrgSyncEvent(
+            tenant_id=1,
+            event_id="clock-test-2",
+            event_type="user_add_org",
+            event_time=later - timedelta(hours=2),
+            received_time=later - timedelta(hours=2),
+            payload="{}",
+            status="DEAD",
+            retry_count=4,
+        )
+        rows.add(db_session, event2)
+
+        await service.check_dead_letter(tenant_id=1, event_id=event2.id)
+
+        hour_key_2 = later.strftime("%Y%m%d%H")
+        assert Cache.get(f"ims:alert:dead_letter:1:{hour_key_2}") == "1"
+
+        reset_clock()
+
+
+def _recipient(db_session, username, perm):
+    person = rows.user(db_session, username)
+    role = rows.role(db_session, f"r-{username}", username)
+    item = rows.menu(db_session, username, perm)
+    rows.bind_menu(db_session, role.id, item.id)
+    rows.bind_role(db_session, person.id, role.id)
+    return person
+
+
+class TestAlertDelivery:
+    """Recipients exist, so notifications and metrics actually write rows."""
+
+    @pytest.mark.asyncio
+    async def test_notifications_and_todos_reach_recipients(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import InboxMessage, OrgSyncBatch, TodoItem
+
+        runner = _recipient(db_session, "alert-runner", "ims:system:org-sync:run")
+        editor = _recipient(db_session, "alert-editor", "ims:system:user:update")
+
+        await service.check_dead_letter(1, 1)
+        await service.check_delay_alert(1, 1, delay_seconds=600)
+        assert db_session.query(InboxMessage).filter(InboxMessage.user_id == runner.id).count() == 2
+
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+        await service.check_reconcile_failure(1, 1)
+        assert db_session.query(InboxMessage).count() == 3
+
+        await service.send_todo_for_pending_assign(1, "已删部门", 2)
+        await service.send_todo_for_local_orphan(1, "孤儿部门")
+        assert db_session.query(TodoItem).filter(TodoItem.assignee_user_id == editor.id).count() == 2
+
+    @pytest.mark.asyncio
+    async def test_metrics_with_and_without_events(
+        self, db_session, test_context, service, fixed_clock
+    ):
+        from app.domains.sys.models import OrgSyncBatch, OrgSyncEvent
+
+        empty = await service.get_sync_metrics(1)
+        assert empty["userTotal"] == 0
+        assert empty["successRate24h"] == 1.0
+        assert empty["dingtalkUnavailable"] is False
+        assert empty["reconcileFailedTwice"] is False
+
+        rows.user(db_session, "metric-active")
+        rows.user(db_session, "metric-frozen", status="FROZEN")
+        yesterday = fixed_clock - timedelta(days=1)
+        rows.add(db_session, OrgSyncEvent(
+            tenant_id=1, event_id="m-y", event_type="user_add_org",
+            event_time=yesterday, received_time=yesterday, payload="{}",
+            status="SUCCESS", processed_time=fixed_clock, delay_seconds=120,
+        ))
+        rows.add(db_session, OrgSyncEvent(
+            tenant_id=1, event_id="m-p", event_type="user_add_org",
+            event_time=fixed_clock, received_time=fixed_clock, payload="{}",
+            status="PENDING",
+        ))
+        rows.add(db_session, OrgSyncEvent(
+            tenant_id=1, event_id="m-d", event_type="user_add_org",
+            event_time=fixed_clock, received_time=fixed_clock, payload="{}",
+            status="DEAD", processed_time=fixed_clock, last_error="code 5003 timeout",
+        ))
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+        rows.add(db_session, OrgSyncBatch(tenant_id=1, status="FAILED"))
+
+        await service.send_todo_for_pending_assign(9, "空", 1)
+        await service.send_todo_for_local_orphan(9, "空")
+
+        metrics = await service.get_sync_metrics(1)
+        assert metrics["userTotal"] == 2
+        assert metrics["yesterdayEventCount"] == 1
+        assert metrics["pendingEventCount"] == 1
+        assert metrics["deadEventCount"] == 1
+        assert metrics["avgDelayMinutes"] == 2.0
+        assert metrics["successRate24h"] == 0.5
+        assert metrics["dingtalkUnavailable"] is True
+        assert metrics["reconcileFailedTwice"] is True
+
+    def test_sync_metrics_http_keeps_success_rate_24h_key(self, db_session, client):
+        """接口返回 successRate24h。别名收成 successRate24H 时响应校验失败，对外是 5007。"""
+        import bcrypt
+
+        password_hash = bcrypt.hashpw(b"Test1234", bcrypt.gensalt(rounds=4)).decode()
+        person = rows.user(db_session, "metrics_admin", password_hash=password_hash)
+        role = rows.role(db_session, "metrics-r", "指标角色")
+        item = rows.menu(db_session, "组织同步查询", "ims:system:org-sync:query")
+        rows.bind_menu(db_session, role.id, item.id)
+        rows.bind_role(db_session, person.id, role.id)
+
+        login = client.post(
+            "/admin-api/ims/auth/login",
+            json={"username": "metrics_admin", "password": "Test1234"},
+        )
+        assert login.status_code == 200
+        login_body = login.json()
+        assert login_body["code"] == 0, login_body
+        token = login_body["data"]["accessToken"]
+
+        response = client.get(
+            "/admin-api/ims/auth/org/sync-metrics",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 0, body
+        assert body["data"]["successRate24h"] == 1.0
+        assert "successRate24H" not in body["data"]
+        assert body["data"]["userTotal"] == 1

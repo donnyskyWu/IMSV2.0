@@ -7,6 +7,9 @@
  */
 import { defineConfig, devices } from '@playwright/test'
 
+const webPort = process.env.E2E_WEB_PORT || '3000'
+const previewPort = process.env.E2E_PREVIEW_PORT || '4173'
+
 export default defineConfig({
   testDir: './tests',
   // 真后端联通在 playwright.live.config.ts 里单独跑，避免没起 API 时把组件用例打红
@@ -17,7 +20,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html'], ['list']],
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: `http://127.0.0.1:${webPort}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -65,7 +68,7 @@ export default defineConfig({
         viewport: { width: 390, height: 844 },
         hasTouch: true,
         isMobile: true,
-        baseURL: 'http://127.0.0.1:4173',
+        baseURL: `http://127.0.0.1:${previewPort}`,
       },
       testMatch: /mobile\.spec\.ts|b1-prod-smoke\.spec\.ts/,
       grep: /VC-M-34|B1-PROD-01/,
@@ -77,13 +80,13 @@ export default defineConfig({
     {
       // 组件用例自己 mock 网络。关掉代理，避免没起后端时 502 变成 console.error
       command: 'VITE_API_PROXY_TARGET=off npm run dev',
-      url: 'http://127.0.0.1:3000',
+      url: `http://127.0.0.1:${webPort}`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },
     {
       command: 'VITE_API_PROXY_TARGET=off npm run build && VITE_API_PROXY_TARGET=off npm run preview',
-      url: 'http://127.0.0.1:4173',
+      url: `http://127.0.0.1:${previewPort}`,
       reuseExistingServer: !process.env.CI,
       timeout: 300_000,
     },

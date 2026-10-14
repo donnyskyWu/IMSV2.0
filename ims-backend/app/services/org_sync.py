@@ -238,7 +238,6 @@ class OrgSyncService:
 
             if user.status != "RESIGNED":
                 user.status = "RESIGNED"
-                user.token_version = (user.token_version or 0) + 1
                 UserService()._drop_sessions(user.id)
                 USER_EVENTS.append({"type": "user.resigned", "user_id": user.id})
             session.flush()
