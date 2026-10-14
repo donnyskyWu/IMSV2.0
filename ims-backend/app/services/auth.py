@@ -31,7 +31,7 @@ from app.db.session import get_db_session
 settings = get_settings()
 
 # 租户停用 / 过期时登录和刷新都用这一句，避免两处文案或条件不一致。
-TENANT_UNAVAILABLE_MSG = "所属组织已停用"
+TENANT_UNAVAILABLE_MSG = "所属组织已停用，请联系管理员"
 
 # 8～32 位，同时含字母和数字，允许特殊字符，不允许空白（工作包 Q7）。
 _PASSWORD_RULE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{8,32}$")
@@ -58,6 +58,34 @@ def _tenant_expire_reached(expire_time: Optional[datetime]) -> bool:
     if expire_time is None:
         return False
     return get_now().replace(tzinfo=None) >= expire_time.replace(tzinfo=None)
+
+
+def _cache_int(key: str) -> int:
+    """Redis 没有这个键时按 0。旧会话没有版本字段时也按 0，避免把已有登录踢掉。"""
+    raw = Cache.get(key)
+    if raw is None or raw == "":
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def current_perm_versions(user_id: int, tenant_id: int) -> tuple[int, int]:
+    """用户键和租户键。不入库，也不写进 JWT。"""
+    return (
+        _cache_int(f"ims:perm_ver:u:{user_id}"),
+        _cache_int(f"ims:perm_ver:t:{tenant_id}"),
+    )
+
+
+def assert_perm_version(session_data: dict[str, Any], user_id: int, tenant_id: int) -> None:
+    """会话里的版本和 Redis 不一致 → 1008。缺字段与缺键都是 0，两边都没有时放行。"""
+    live_u, live_t = current_perm_versions(user_id, tenant_id)
+    stored_u = int(session_data.get("perm_ver_u") or 0)
+    stored_t = int(session_data.get("perm_ver_t") or 0)
+    if stored_u != live_u or stored_t != live_t:
+        raise BizError(1008)
 
 
 def session_remaining_seconds(session_data: dict[str, Any]) -> int:
@@ -189,7 +217,7 @@ class AuthService:
             self._persist()
             raise BizError(1216)
 
-        # 与刷新共用：停用或过期租户不能登录（FP-B04-04）。文案保持「所属组织已停用」。
+        # 与刷新、在线请求共用：停用或过期租户不能登录（FP-B04-04）。文案用完整句。
         try:
             reject_unavailable_tenant(user.tenant_id)
         except BizError:
@@ -308,13 +336,16 @@ class AuthService:
         # 绝对 7 天：到期时间在登录时写定，后面轮换只换令牌，不改这个时刻。
         deadline = now + timedelta(seconds=settings.jwt.refresh_token_ttl)
 
-        # Store session in Redis
+        # 登录时记下权限版本。之后 Redis 递增，在线请求对不上就 1008。
+        ver_u, ver_t = current_perm_versions(user.id, user.tenant_id)
         session_data = {
             "user_id": user.id,
             "tenant_id": user.tenant_id,
             "refresh_token": refresh_token,
             "created_at": now.isoformat(),
             "expires_at": deadline.isoformat(),
+            "perm_ver_u": ver_u,
+            "perm_ver_t": ver_t,
         }
         Cache.set_json(
             f"{self.SESSION_PREFIX}{session_id}",
@@ -407,14 +438,16 @@ class AuthService:
         if Cache.get(f"{self.TOKEN_BLACKLIST_PREFIX}{session_id}"):
             raise BizError(1002)
 
-        # 须改密标记以库里的当前值为准。用户行不存在时不在这里改 1002，
-        # 绝对 7 天和会话吊销仍按上面的会话键判断（#18）。
+        # 会话过期和黑名单已经在上面返回 1002。这里再看人、租户和权限版本。
         from app.domains.sys.models import User
-        account = get_db_session().query(User).filter(
-            User.id == user_id,
-            User.deleted == 0,
-        ).first()
-        pwd_reset_required = bool(account.pwd_reset_required) if account is not None else False
+        account = get_db_session().query(User).filter(User.id == user_id).first()
+        if account is None or int(account.deleted or 0) != 0:
+            raise BizError(1002)
+        if account.status in ("FROZEN", "RESIGNED"):
+            raise BizError(1216)
+        reject_unavailable_tenant(account.tenant_id)
+        assert_perm_version(session_data, user_id, tenant_id)
+        pwd_reset_required = bool(account.pwd_reset_required)
 
         # Get user permissions
         perm_data = await self._get_user_permissions(user_id)

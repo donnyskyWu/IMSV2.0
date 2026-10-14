@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'cursor/**'
+    paths:
+      - 'ims-web/**'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
 

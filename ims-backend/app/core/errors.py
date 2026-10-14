@@ -196,6 +196,13 @@ error_codes.register(1217, "SYS", "未找到与钉钉账号对应的用户，请
 error_codes.register(1218, "SYS", "部门不能移动到自身或下级部门之下", FrontStrategy.TOAST)
 error_codes.register(1219, "SYS", "同一上级部门下已有同名部门", FrontStrategy.TOAST)
 error_codes.register(1220, "SYS", "系统部门或钉钉部门不允许此操作", FrontStrategy.TOAST)
+error_codes.register(1222, "MASTER", "公众号容量不能小于已注册数", FrontStrategy.TOAST)
+
+# CERT domain (1032-1035)，沿用全局规范，不新增号。
+error_codes.register(1032, "CERT", "已存在有效档案，如为新证请走换证流程", FrontStrategy.TOAST)
+error_codes.register(1033, "CERT", "档案待审或审核状态非法", FrontStrategy.TOAST)
+error_codes.register(1034, "CERT", "访问级别不足", FrontStrategy.TOAST)
+error_codes.register(1035, "CERT", "高频访问拦截", FrontStrategy.TOAST)
 
 # FLOW domain (1131-1140)
 error_codes.register(1139, "FLOW", "无权撤销此流程", FrontStrategy.TOAST)

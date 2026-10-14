@@ -55,6 +55,8 @@ def db_engine():
     is_sqlite = _is_sqlite(db_url)
 
     # Import all models to ensure they're registered with Base
+    import app.domains.corp.models  # noqa: F401
+    import app.domains.shared.models  # noqa: F401
     from app.domains.sys import models  # noqa: F401
 
     if is_sqlite:
@@ -104,7 +106,7 @@ def db_engine():
             pool_pre_ping=True,
         )
 
-        # Drop and recreate all tables for clean state
+        # MySQL 每次换新库表。SQLite 在上面只建一次。
         Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
 

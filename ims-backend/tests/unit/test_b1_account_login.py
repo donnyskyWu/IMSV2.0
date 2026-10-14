@@ -261,6 +261,7 @@ class TestPasswordChange:
 
     @pytest.mark.asyncio
     async def test_verify_without_user_row_stays_valid(self, db_session, test_context):
+        from app.core.errors import BizError
         from app.services.auth import AuthService
 
         service = AuthService()
@@ -270,9 +271,10 @@ class TestPasswordChange:
             tenant_id = 1
 
         tokens = await service._create_tokens(Missing(), "missing-user-sid")
-        info = await service.verify_token(tokens["access_token"])
-        assert info["pwd_reset_required"] is False
-        assert info["user_id"] == 424242
+        # B5 在线闸门：用户行不存在视为会话失效，不再继续组装权限。
+        with pytest.raises(BizError) as missing:
+            await service.verify_token(tokens["access_token"])
+        assert missing.value.code == 1002
 
 
 class TestPasswordResetGate:

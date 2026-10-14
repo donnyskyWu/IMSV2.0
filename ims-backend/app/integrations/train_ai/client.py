@@ -188,6 +188,34 @@ class TrainAIClient(BaseAdapter[list[GeneratedQuestion]]):
             raise BizError(1101, msg="资料未发布或不存在")
         return await self.generate_questions("material", question_count=question_count)
 
+    def recognize_image(self, image: bytes) -> dict:
+        """证件 OCR。日志只记场景，不记图片字节和证件号。"""
+        from app.core.errors import BizError
+        from app.integrations.base import assert_http_url
+
+        self.call_records.append({"scene": "CERT_OCR", "bytes": 0})
+        if not assert_http_url(self.base_url):
+            raise BizError(1109, msg="培训AI未配置或未启用")
+        if self.mode == "timeout":
+            raise BizError(1107, msg="生成超时，请稍后再试")
+        if self.mode == "fail":
+            raise BizError(1106, msg="调用失败，请稍后再试")
+        if image.startswith(b"%PDF") and self.mode == "real":
+            return {"recognized": False}
+        if self.mode == "mock":
+            if not image:
+                return {"recognized": False}
+            return {
+                "recognized": True,
+                "name": "张三",
+                "certNo": "110101199003078515",
+                "issueDate": "2020-01-01",
+                "expireDate": "2030-01-01",
+            }
+        if not self.is_configured:
+            raise BizError(1109, msg="培训AI未配置或未启用")
+        raise BizError(1106, msg="调用失败，请稍后再试")
+
 
 SECRET_MASK = "******"
 TASK_ROWS: list[object] = []

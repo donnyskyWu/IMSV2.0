@@ -8,11 +8,10 @@ export { default as RoleSelect } from './RoleSelect.vue'
 export { default as DictSelect } from './DictSelect.vue'
 export { default as DateRangePicker } from './DateRangePicker.vue'
 
-// 以下为业务选择器，使用模拟数据
-// 在第 2 步接入真实 API 后替换
-
-// RealNameSelect - 实名用户选择 (模拟)
-export { default as RealNameSelect } from './UserSelect.vue'
+// 公司资源选择器。只选启用或在职记录，不能手输 id。
+export { default as RealNameSelect } from './RealNameSelect.vue'
+export { default as CompanySelect } from './CompanySelect.vue'
+export { default as SimCardSelect } from './SimCardSelect.vue'
 
 // AccountSelect - 账号选择 (模拟)
 export { default as AccountSelect } from './UserSelect.vue'

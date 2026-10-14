@@ -123,6 +123,34 @@ const changePasswordAliasRoute: RouteRecordRaw = {
  * B1 已登记业务页。标题以 01 功能点清单为准。
  * 不登记工作台，也不登记 /system/dept 等后续菜单。
  */
+/** B5 公司资源。四个叶子挂在公司资产 / 资源管理下。 */
+const b5Routes: RouteRecordRaw[] = [
+  {
+    path: '/ims/corp/resource/company',
+    name: 'CorpCompany',
+    component: () => import('@/views/corp/CompanyList.vue'),
+    meta: { title: '公司管理', perm: 'ims:corp:company:query' },
+  },
+  {
+    path: '/ims/corp/resource/realname',
+    name: 'CorpRealname',
+    component: () => import('@/views/corp/RealnameList.vue'),
+    meta: { title: '实名人管理', perm: 'ims:corp:realname:query' },
+  },
+  {
+    path: '/ims/corp/resource/sim-card',
+    name: 'CorpSimCard',
+    component: () => import('@/views/corp/SimCardList.vue'),
+    meta: { title: '手机卡管理', perm: 'ims:corp:sim:query' },
+  },
+  {
+    path: '/ims/corp/resource/certificate',
+    name: 'CorpCertificate',
+    component: () => import('@/views/corp/CertificatePage.vue'),
+    meta: { title: '证件管理', perm: 'ims:cert:archive:query' },
+  },
+]
+
 const b1Routes: RouteRecordRaw[] = [
   {
     path: '/ims/auth/org',
@@ -190,6 +218,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordAliasRoute,
       ...b1Routes,
       ...b3Routes,
+      ...b5Routes,
       ...demoRoutes,
       unknownRoute,
     ]
@@ -205,6 +234,7 @@ const routes: RouteRecordRaw[] = demoEnabled
       changePasswordAliasRoute,
       ...b1Routes,
       ...b3Routes,
+      ...b5Routes,
       {
         path: '/demo/:pathMatch(.*)*',
         redirect: '/',
